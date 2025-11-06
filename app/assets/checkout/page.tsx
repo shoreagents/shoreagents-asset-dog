@@ -1,0 +1,1023 @@
+"use client"
+
+import { useState, useRef, useEffect, useMemo } from "react"
+import { XIcon, Package, CheckCircle2, Users, History, QrCode } from "lucide-react"
+import { usePermissions } from '@/hooks/use-permissions'
+import { Spinner } from '@/components/ui/shadcn-io/spinner'
+import { QRScannerDialog } from '@/components/qr-scanner-dialog'
+import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { toast } from 'sonner'
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Field, FieldLabel, FieldContent } from "@/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
+
+interface Asset {
+  id: string
+  assetTagId: string
+  description: string
+  status?: string
+  department?: string
+  site?: string
+  location?: string
+  category?: {
+    id: string
+    name: string
+  } | null
+  subCategory?: {
+    id: string
+    name: string
+  } | null
+  employeeUser?: {
+    id: string
+    name: string
+    email: string
+  }
+}
+
+interface EmployeeUser {
+  id: string
+  name: string
+  email: string
+  department: string | null
+}
+
+interface CheckoutAsset extends Asset {
+  newDepartment?: string
+  newSite?: string
+  newLocation?: string
+}
+
+// Helper function to get status badge with colors (only for Available status on checkout page)
+const getStatusBadge = (status: string | null) => {
+  if (!status) return null
+  const statusLC = status.toLowerCase()
+  
+  // Only show green badge for Available status, others use default outline
+  if (statusLC === 'active' || statusLC === 'available') {
+    return <Badge variant="default" className="bg-green-500">{status}</Badge>
+  }
+  
+  // For any other status (shouldn't happen for checkout, but just in case)
+  return <Badge variant="outline">{status}</Badge>
+}
+
+export default function CheckoutPage() {
+  const queryClient = useQueryClient()
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const canViewAssets = hasPermission('canViewAssets')
+  const canCheckout = hasPermission('canCheckout')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const suggestionRef = useRef<HTMLDivElement>(null)
+  const [assetIdInput, setAssetIdInput] = useState("")
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+  const [selectedAssets, setSelectedAssets] = useState<CheckoutAsset[]>([])
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("")
+  const [checkoutDate, setCheckoutDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  )
+  const [expectedReturnDate, setExpectedReturnDate] = useState<string>("")
+  const [qrDialogOpen, setQrDialogOpen] = useState(false)
+  const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
+  const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
+
+  // Fetch employees (excluding those with checked out assets)
+  const { data: employees = [], isLoading: isLoadingEmployees } = useQuery<EmployeeUser[]>({
+    queryKey: ["employees", "checkout"],
+    queryFn: async () => {
+      const response = await fetch("/api/employees?excludeWithCheckedOutAssets=true")
+      if (!response.ok) {
+        throw new Error('Failed to fetch employees')
+      }
+      const data = await response.json()
+      return (data.employees || []) as EmployeeUser[]
+    },
+    enabled: canViewAssets,
+    retry: 2,
+    retryDelay: 1000,
+  })
+
+  // Fetch asset suggestions based on input (only Available assets)
+  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
+    queryKey: ["asset-suggestions", assetIdInput, selectedAssets.length, showSuggestions],
+    queryFn: async () => {
+      // Fetch all assets with large page size to get all available assets
+      const searchTerm = assetIdInput.trim() || ''
+      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10000`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch assets')
+        }
+        const data = await response.json()
+        const assets = data.assets as Asset[]
+        
+        // Filter out assets already in selected list and only show Available assets
+        const selectedIds = selectedAssets.map(a => a.id.toLowerCase())
+      const filtered = assets
+          .filter(a => {
+            const notSelected = !selectedIds.includes(a.id.toLowerCase())
+            const isAvailable = !a.status || a.status === "Available"
+            return notSelected && isAvailable
+          })
+        .slice(0, 10) // Limit suggestions to 10 for UI
+      
+      return filtered
+    },
+    enabled: showSuggestions && canViewAssets && canCheckout,
+    staleTime: 300,
+  })
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        inputRef.current &&
+        !inputRef.current.contains(event.target as Node) &&
+        suggestionRef.current &&
+        !suggestionRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
+  // Asset lookup by ID
+  const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
+    try {
+      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}`)
+      const data = await response.json()
+      const assets = data.assets as Asset[]
+      
+      // Find exact match by assetTagId (case-insensitive)
+      const asset = assets.find(
+        (a) => a.assetTagId.toLowerCase() === assetTagId.toLowerCase()
+      )
+      
+      return asset || null
+    } catch (error) {
+      console.error('Error looking up asset:', error)
+      return null
+    }
+  }
+
+  // Add asset to checkout list
+  const handleAddAsset = async (asset?: Asset) => {
+    const assetToAdd = asset || await lookupAsset(assetIdInput.trim())
+    
+    if (!assetToAdd) {
+      if (!asset) {
+        toast.error(`Asset with ID "${assetIdInput}" not found`)
+      }
+      return
+    }
+
+    // Check if asset is available
+    if (assetToAdd.status && assetToAdd.status !== "Available") {
+      toast.error(`Asset "${assetToAdd.assetTagId}" is not available. Current status: ${assetToAdd.status}`)
+      setAssetIdInput("")
+      setShowSuggestions(false)
+      return
+    }
+
+    // Check if asset is already in the list
+    if (selectedAssets.some(a => a.id === assetToAdd.id)) {
+      toast.error('Asset is already in the checkout list')
+      setAssetIdInput("")
+      setShowSuggestions(false)
+      return
+    }
+
+    setSelectedAssets((prev) => [
+      ...prev,
+      {
+        ...assetToAdd,
+        newDepartment: assetToAdd.department || "",
+        newSite: assetToAdd.site || "",
+        newLocation: assetToAdd.location || "",
+      },
+    ])
+    setAssetIdInput("")
+    setShowSuggestions(false)
+    setSelectedSuggestionIndex(-1)
+    toast.success('Asset added to checkout list')
+  }
+
+  // Handle suggestion selection
+  const handleSelectSuggestion = (asset: Asset) => {
+    handleAddAsset(asset)
+  }
+
+  // Handle keyboard navigation in suggestions
+  const handleSuggestionKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions || assetSuggestions.length === 0) {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (assetIdInput.trim()) {
+          handleAddAsset()
+        }
+      }
+      return
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        setSelectedSuggestionIndex((prev) =>
+          prev < assetSuggestions.length - 1 ? prev + 1 : prev
+        )
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : -1))
+        break
+      case 'Enter':
+        e.preventDefault()
+        if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < assetSuggestions.length) {
+          handleSelectSuggestion(assetSuggestions[selectedSuggestionIndex])
+        } else if (assetIdInput.trim()) {
+          handleAddAsset()
+        }
+        break
+      case 'Escape':
+        e.preventDefault()
+        setShowSuggestions(false)
+        setSelectedSuggestionIndex(-1)
+        break
+    }
+  }
+
+  // Remove asset from checkout list
+  const handleRemoveAsset = (assetId: string) => {
+    setSelectedAssets((prev) => prev.filter((a) => a.id !== assetId))
+    toast.success('Asset removed from checkout list')
+  }
+
+  // Track form changes to show floating buttons - only show when assets are selected
+  const isFormDirty = useMemo(() => {
+    // Only show floating buttons when assets are actually selected
+    return selectedAssets.length > 0
+  }, [selectedAssets])
+
+  // Clear form function
+  const clearForm = () => {
+    setSelectedAssets([])
+    setAssetIdInput("")
+    setSelectedEmployeeId("")
+    setExpectedReturnDate("")
+    setCheckoutDate(new Date().toISOString().split('T')[0])
+  }
+
+  // Handle QR code scan result
+  const handleQRScan = async (decodedText: string) => {
+    // Lookup asset by the scanned QR code (which should be the assetTagId)
+    const asset = await lookupAsset(decodedText)
+    if (asset) {
+      await handleAddAsset(asset)
+    } else {
+      toast.error(`Asset with ID "${decodedText}" not found`)
+    }
+  }
+
+  // Update asset info in checkout list
+  const handleUpdateAssetInfo = (assetId: string, field: string, value: string) => {
+    setSelectedAssets((prev) =>
+      prev.map((asset) =>
+        asset.id === assetId ? { ...asset, [field]: value } : asset
+      )
+    )
+  }
+
+  // Checkout mutation
+  const checkoutMutation = useMutation({
+    mutationFn: async (data: {
+      assetIds: string[]
+      employeeUserId: string
+      checkoutDate: string
+      expectedReturnDate?: string
+      updates: Record<string, { department?: string; site?: string; location?: string }>
+    }) => {
+      const response = await fetch('/api/assets/checkout', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to checkout assets')
+      }
+
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets"] })
+      queryClient.invalidateQueries({ queryKey: ["checkout-stats"] })
+      toast.success('Assets checked out successfully')
+      clearForm()
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to checkout assets')
+    },
+  })
+
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (selectedAssets.length === 0) {
+      toast.error('Please add at least one asset to checkout')
+      return
+    }
+
+    if (!selectedEmployeeId) {
+      toast.error('Please select an employee')
+      return
+    }
+
+    if (!checkoutDate) {
+      toast.error('Please select a checkout date')
+      return
+    }
+
+    const updates: Record<string, { department?: string; site?: string; location?: string }> = {}
+    selectedAssets.forEach((asset) => {
+      updates[asset.id] = {
+        ...(asset.newDepartment && asset.newDepartment !== asset.department
+          ? { department: asset.newDepartment }
+          : {}),
+        ...(asset.newSite && asset.newSite !== asset.site
+          ? { site: asset.newSite }
+          : {}),
+        ...(asset.newLocation && asset.newLocation !== asset.location
+          ? { location: asset.newLocation }
+          : {}),
+      }
+    })
+
+    checkoutMutation.mutate({
+      assetIds: selectedAssets.map((a) => a.id),
+      employeeUserId: selectedEmployeeId,
+      checkoutDate,
+      expectedReturnDate: expectedReturnDate || undefined,
+      updates,
+    })
+  }
+
+  // Handle input change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAssetIdInput(e.target.value)
+    setShowSuggestions(true)
+    setSelectedSuggestionIndex(-1)
+  }
+
+  // Fetch all available assets for statistics
+  const { data: allAssets = [], isLoading: isLoadingAssets } = useQuery<Asset[]>({
+    queryKey: ["assets", "checkout-stats"],
+    queryFn: async () => {
+      const response = await fetch('/api/assets?search=&pageSize=10000')
+      const data = await response.json()
+      return data.assets as Asset[]
+    },
+    enabled: canViewAssets,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Calculate summary statistics
+  const totalAvailableAssets = allAssets.filter(a => !a.status || a.status === "Available").length
+  const selectedAssetsCount = selectedAssets.length
+  const availableEmployeesCount = employees.length
+
+  // Fetch checkout statistics
+  const { data: checkoutStats, isLoading: isLoadingCheckoutStats, error: checkoutStatsError } = useQuery<{
+    recentCheckouts: Array<{
+      id: string
+      checkoutDate: string
+      expectedReturnDate?: string | null
+      createdAt: string
+      asset: {
+        id: string
+        assetTagId: string
+        description: string
+      }
+      employeeUser: {
+        id: string
+        name: string
+        email: string
+      }
+    }>
+  }>({
+    queryKey: ["checkout-stats"],
+    queryFn: async () => {
+      const response = await fetch("/api/assets/checkout/stats")
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to fetch checkout statistics')
+      }
+      const data = await response.json()
+      return data
+    },
+    enabled: canViewAssets,
+    retry: (failureCount, error) => {
+      // Only retry on network errors or 500s, not on 4xx errors
+      if (error instanceof Error && error.message.includes('Failed to fetch')) {
+        return failureCount < 2
+      }
+      return false
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 3000),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+  })
+
+  // Calculate time ago
+  const getTimeAgo = (dateString: string): string => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+    
+    if (diffInSeconds < 60) {
+      return 'just now'
+    }
+    
+    const diffInMinutes = Math.floor(diffInSeconds / 60)
+    if (diffInMinutes < 60) {
+      return `${diffInMinutes} ${diffInMinutes === 1 ? 'minute' : 'minutes'} ago`
+    }
+    
+    const diffInHours = Math.floor(diffInMinutes / 60)
+    if (diffInHours < 24) {
+      return `${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'} ago`
+    }
+    
+    const diffInDays = Math.floor(diffInHours / 24)
+    if (diffInDays < 30) {
+      return `${diffInDays} ${diffInDays === 1 ? 'day' : 'days'} ago`
+    }
+    
+    const diffInMonths = Math.floor(diffInDays / 30)
+    if (diffInMonths < 12) {
+      return `${diffInMonths} ${diffInMonths === 1 ? 'month' : 'months'} ago`
+    }
+    
+    const diffInYears = Math.floor(diffInMonths / 12)
+    return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`
+  }
+
+  const recentCheckouts = checkoutStats?.recentCheckouts || []
+
+  return (
+    <div className={isFormDirty ? "pb-16" : ""}>
+      <div>
+        <h1 className="text-3xl font-bold">Check Out Asset</h1>
+        <p className="text-muted-foreground">
+          Record an asset checkout transaction
+        </p>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-6">
+        {/* Total Available Assets */}
+        <Card className="flex flex-col py-0 gap-2">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-green-100 text-green-500">
+                <Package className="h-4 w-4" />
+              </div>
+              <CardTitle className="text-sm font-medium">Available Assets</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col grow justify-center p-4 pt-0">
+            {permissionsLoading || isLoadingAssets ? (
+              <>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{totalAvailableAssets}</div>
+                <p className="text-xs text-muted-foreground">
+                  Assets ready for checkout
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Selected Assets */}
+        <Card className="flex flex-col py-0 gap-2">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-100 text-blue-500">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <CardTitle className="text-sm font-medium">Selected for Checkout</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col grow justify-center p-4 pt-0">
+            {permissionsLoading ? (
+              <>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{selectedAssetsCount}</div>
+                <p className="text-xs text-muted-foreground">
+                  Assets in checkout list
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Available Employees */}
+        <Card className="flex flex-col py-0 gap-2">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-100 text-amber-500">
+                <Users className="h-4 w-4" />
+              </div>
+              <CardTitle className="text-sm font-medium">Available Employees</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col grow justify-center p-4 pt-0">
+            {permissionsLoading || isLoadingEmployees ? (
+              <>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-4 w-32" />
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{availableEmployeesCount}</div>
+                <p className="text-xs text-muted-foreground">
+                  Employees without checkouts
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent History - Always visible to show access denied message if needed */}
+        <Card className="flex flex-col py-0 gap-2 col-span-1 md:col-span-2 lg:col-span-3">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-purple-100 text-purple-500">
+                <History className="h-4 w-4" />
+              </div>
+              <CardTitle className="text-sm font-medium">Recent History</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            {permissionsLoading || isLoadingCheckoutStats ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex flex-col items-center gap-3">
+                  <Spinner variant="default" size={24} className="text-muted-foreground" />
+                  <p className="text-muted-foreground text-sm">Loading...</p>
+                </div>
+              </div>
+            ) : !canViewAssets ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <History className="h-8 w-8 text-muted-foreground opacity-50 mb-2" />
+                <p className="text-sm font-medium">Access Denied</p>
+                <p className="text-xs text-muted-foreground">
+                  You do not have permission to view assets.
+                </p>
+              </div>
+            ) : checkoutStatsError ? (
+              <p className="text-sm text-destructive text-center py-4">
+                Failed to load history. Please try again.
+              </p>
+            ) : recentCheckouts.length > 0 ? (
+              <ScrollArea className="h-52">
+                <div className="relative w-full">
+                  <Table className="w-full caption-bottom text-sm">
+                    <TableHeader className="sticky top-0 z-10 bg-card">
+                    <TableRow>
+                        <TableHead className="h-8 text-xs bg-card">Asset ID</TableHead>
+                        <TableHead className="h-8 text-xs bg-card">Description</TableHead>
+                        <TableHead className="h-8 text-xs bg-card">Employee</TableHead>
+                        <TableHead className="h-8 text-xs bg-card">Checkout Date</TableHead>
+                        <TableHead className="h-8 text-xs bg-card">Expected Return</TableHead>
+                        <TableHead className="h-8 text-xs text-right bg-card">Time Ago</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recentCheckouts.map((checkout) => (
+                      <TableRow key={checkout.id} className="h-10">
+                        <TableCell className="py-1.5">
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => {
+                              setSelectedAssetTagForQR(checkout.asset.assetTagId)
+                              setQrDisplayDialogOpen(true)
+                            }}
+                          >
+                            {checkout.asset.assetTagId}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-1.5 text-xs max-w-[200px] truncate">
+                          {checkout.asset.description}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-xs text-muted-foreground">
+                          {checkout.employeeUser?.name || '-'}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-xs text-muted-foreground">
+                          {new Date(checkout.checkoutDate).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-xs text-muted-foreground">
+                          {checkout.expectedReturnDate 
+                            ? new Date(checkout.expectedReturnDate).toLocaleDateString() 
+                            : '-'}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-xs text-muted-foreground text-right">
+                          {getTimeAgo(checkout.createdAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  </Table>
+              </div>
+              <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No recent checkouts
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6 mt-6">
+        {/* Asset Selection Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Asset Selection</CardTitle>
+            <CardDescription className="text-xs">
+              Type asset ID and press Enter, or select an asset from the suggestions to add to the checkout list
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2 pb-4 space-y-4">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                placeholder="Enter asset ID (e.g., AT-001) or select from suggestions"
+                value={assetIdInput}
+                onChange={handleInputChange}
+                onKeyDown={handleSuggestionKeyDown}
+                onFocus={() => setShowSuggestions(true)}
+                className="w-full"
+                autoComplete="off"
+                disabled={!canViewAssets || !canCheckout}
+              />
+              
+              {/* Suggestions dropdown */}
+              {showSuggestions && (
+                <div
+                  ref={suggestionRef}
+                  className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto"
+                >
+                  {isLoadingSuggestions ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="flex flex-col items-center gap-2">
+                        <Spinner variant="default" size={20} className="text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">Loading assets...</p>
+                      </div>
+                    </div>
+                  ) : assetSuggestions.length > 0 ? (
+                    assetSuggestions.map((asset, index) => (
+                      <div
+                        key={asset.id}
+                        onClick={() => handleSelectSuggestion(asset)}
+                        onMouseEnter={() => setSelectedSuggestionIndex(index)}
+                        className={cn(
+                          "px-4 py-3 cursor-pointer transition-colors",
+                          "hover:bg-accent",
+                          selectedSuggestionIndex === index && "bg-accent"
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium">{asset.assetTagId}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {asset.category?.name || 'No Category'}
+                              {asset.subCategory?.name && ` - ${asset.subCategory.name}`}
+                            </div>
+                          </div>
+                          <Badge variant="outline">{asset.status || 'Available'}</Badge>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No assets found. Start typing to search...
+                    </div>
+                  )}
+                </div>
+              )}
+              </div>
+              {canViewAssets && canCheckout && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setQrDialogOpen(true)}
+                  title="QR Code"
+                >
+                  <QrCode className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+
+            {selectedAssets.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">
+                  Selected Assets ({selectedAssets.length})
+                </p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {selectedAssets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="flex items-center justify-between gap-2 p-3 border rounded-md bg-muted/50"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">{asset.assetTagId}</Badge>
+                          <span className="text-sm font-medium truncate">
+                            {asset.category?.name || 'No Category'}
+                            {asset.subCategory?.name && ` - ${asset.subCategory.name}`}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {getStatusBadge(asset.status || null)}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveAsset(asset.id)}
+                          className="h-8 w-8"
+                      >
+                        <XIcon className="h-4 w-4" />
+                      </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Assignment & Checkout Details */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Assignment & Checkout Details</CardTitle>
+            <CardDescription className="text-xs">
+              Assign assets to an employee and set checkout dates
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2 pb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
+              <Field>
+                <FieldLabel htmlFor="employee">
+                  Assign To <span className="text-destructive">*</span>
+                </FieldLabel>
+                <FieldContent>
+                  <Select
+                    value={selectedEmployeeId}
+                    onValueChange={setSelectedEmployeeId}
+                    disabled={!canViewAssets || !canCheckout}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map((employee) => (
+                        <SelectItem key={employee.id} value={employee.id}>
+                          {employee.name} ({employee.email}){employee.department && <span className="text-muted-foreground"> - {employee.department}</span>}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="checkoutDate">
+                  Checkout Date <span className="text-destructive">*</span>
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="checkoutDate"
+                    type="date"
+                    value={checkoutDate}
+                    onChange={(e) => setCheckoutDate(e.target.value)}
+                    required
+                    disabled={!canViewAssets || !canCheckout}
+                  />
+                </FieldContent>
+              </Field>
+
+              <Field className="md:col-span-2">
+                <FieldLabel htmlFor="expectedReturnDate">
+                  Expected Return Date
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="expectedReturnDate"
+                    type="date"
+                    value={expectedReturnDate}
+                    onChange={(e) => setExpectedReturnDate(e.target.value)}
+                    min={checkoutDate}
+                    disabled={!canViewAssets || !canCheckout}
+                  />
+                </FieldContent>
+              </Field>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Additional Information */}
+        {selectedAssets.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Additional Information</CardTitle>
+              <CardDescription className="text-xs">
+                Optionally change site, location and department of assets
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-2 pb-4">
+              <div className="space-y-4">
+                {selectedAssets.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="p-4 border rounded-md space-y-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{asset.assetTagId}</Badge>
+                      <span className="text-sm font-medium truncate">
+                        {asset.description}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+                      <Field>
+                        <FieldLabel htmlFor={`department-${asset.id}`}>
+                          Department
+                          {asset.department && (
+                            <span className="text-xs text-muted-foreground font-normal ml-2">
+                              (Current: {asset.department})
+                            </span>
+                          )}
+                        </FieldLabel>
+                        <FieldContent>
+                          <Input
+                            id={`department-${asset.id}`}
+                            placeholder={asset.department || "Department"}
+                            value={asset.newDepartment || ""}
+                            onChange={(e) =>
+                              handleUpdateAssetInfo(asset.id, "newDepartment", e.target.value)
+                            }
+                            disabled={!canViewAssets || !canCheckout}
+                          />
+                        </FieldContent>
+                      </Field>
+
+                      <Field>
+                        <FieldLabel htmlFor={`site-${asset.id}`}>
+                          Site
+                          {asset.site && (
+                            <span className="text-xs text-muted-foreground font-normal ml-2">
+                              (Current: {asset.site})
+                            </span>
+                          )}
+                        </FieldLabel>
+                        <FieldContent>
+                          <Input
+                            id={`site-${asset.id}`}
+                            placeholder={asset.site || "Site"}
+                            value={asset.newSite || ""}
+                            onChange={(e) =>
+                              handleUpdateAssetInfo(asset.id, "newSite", e.target.value)
+                            }
+                            disabled={!canViewAssets || !canCheckout}
+                          />
+                        </FieldContent>
+                      </Field>
+
+                      <Field>
+                        <FieldLabel htmlFor={`location-${asset.id}`}>
+                          Location
+                          {asset.location && (
+                            <span className="text-xs text-muted-foreground font-normal ml-2">
+                              (Current: {asset.location})
+                            </span>
+                          )}
+                        </FieldLabel>
+                        <FieldContent>
+                          <Input
+                            id={`location-${asset.id}`}
+                            placeholder={asset.location || "Location"}
+                            value={asset.newLocation || ""}
+                            onChange={(e) =>
+                              handleUpdateAssetInfo(asset.id, "newLocation", e.target.value)
+                            }
+                            disabled={!canViewAssets || !canCheckout}
+                          />
+                        </FieldContent>
+                      </Field>
+        </div>
+      </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </form>
+
+      {/* Floating Action Buttons - Only show when form has changes */}
+      {isFormDirty && canViewAssets && canCheckout && (
+        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={clearForm}
+            className="min-w-[120px] bg-accent!"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => {
+              const form = document.querySelector('form') as HTMLFormElement
+              if (form) {
+                form.requestSubmit()
+              }
+            }}
+            disabled={checkoutMutation.isPending || selectedAssets.length === 0 || !canCheckout}
+            className="min-w-[120px]"
+          >
+            {checkoutMutation.isPending ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" />
+                Processing...
+              </>
+            ) : (
+              'Save'
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* QR Code Scanner Dialog */}
+      <QRScannerDialog
+        open={qrDialogOpen}
+        onOpenChange={setQrDialogOpen}
+        onScan={handleQRScan}
+        description="Scan or upload a QR code to add an asset"
+      />
+          
+      {/* QR Code Display Dialog */}
+      <QRCodeDisplayDialog
+        open={qrDisplayDialogOpen}
+        onOpenChange={setQrDisplayDialogOpen}
+        assetTagId={selectedAssetTagForQR}
+      />
+    </div>
+  )
+}

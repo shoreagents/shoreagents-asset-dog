@@ -1,0 +1,414 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+model Assets {
+  id                     String   @id @default(uuid())
+  assetTagId             String   @unique @map("asset_tag_id") @db.VarChar(100)
+  description            String   @map("description") @db.Text
+  purchasedFrom          String?  @map("purchased_from") @db.VarChar(255)
+  purchaseDate           DateTime? @map("purchase_date") @db.Date
+  brand                  String?  @map("brand") @db.VarChar(100)
+  cost                   Decimal? @map("cost") @db.Decimal(12, 2)
+  model                  String?  @map("model") @db.VarChar(100)
+  serialNo               String?  @map("serial_no") @db.VarChar(100)
+  additionalInformation  String?  @map("additional_information") @db.Text
+  xeroAssetNo            String?  @map("xero_asset_no") @db.VarChar(100)
+  owner                  String?  @map("owner") @db.VarChar(255)
+  pbiNumber              String?  @map("pbi_number") @db.VarChar(100)
+  status                 String?  @map("status") @db.VarChar(50)
+  issuedTo               String?  @map("issued_to") @db.VarChar(255)
+  poNumber               String?  @map("po_number") @db.VarChar(100)
+  paymentVoucherNumber   String?  @map("payment_voucher_number") @db.VarChar(100)
+  assetType              String?  @map("asset_type") @db.VarChar(100)
+  deliveryDate           DateTime? @map("delivery_date") @db.Date
+  unaccountedInventory   Boolean? @map("unaccounted_inventory") @default(false)
+  remarks                String?  @map("remarks") @db.Text
+  qr                     String?  @map("qr") @db.VarChar(255)
+  oldAssetTag            String?  @map("old_asset_tag") @db.VarChar(100)
+  depreciableAsset       Boolean? @map("depreciable_asset") @default(false)
+  depreciableCost        Decimal? @map("depreciable_cost") @db.Decimal(12, 2)
+  salvageValue           Decimal? @map("salvage_value") @db.Decimal(12, 2)
+  assetLifeMonths        Int?     @map("asset_life_months")
+  depreciationMethod     String?  @map("depreciation_method") @db.VarChar(50)
+  dateAcquired           DateTime? @map("date_acquired") @db.Date
+  
+  // Relations
+  categoryId             String?  @map("category_id")
+  category               Category? @relation(fields: [categoryId], references: [id])
+  
+  subCategoryId          String?  @map("sub_category_id")
+  subCategory            SubCategory? @relation(fields: [subCategoryId], references: [id])
+  
+  department             String?  @map("department") @db.VarChar(100)
+  site                   String?  @map("site") @db.VarChar(100)
+  location               String?  @map("location") @db.VarChar(255)
+  
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  
+  // Soft delete fields
+  deletedAt              DateTime? @map("deleted_at")
+  isDeleted              Boolean  @default(false) @map("is_deleted")
+  
+  checkouts              AssetsCheckout[]
+  checkins               AssetsCheckin[]
+  moves                  AssetsMove[]
+  reservations           AssetsReserve[]
+  leases                 AssetsLease[]
+  leaseReturns           AssetsLeaseReturn[]
+  disposals              AssetsDispose[]
+  maintenances           AssetsMaintenance[]
+  auditHistory           AssetsAuditHistory[]
+
+  @@map("assets")
+}
+
+model AssetsImage {
+  id          String   @id @default(uuid())
+  assetTagId String   @map("asset_tag_id") @db.VarChar(100)
+  imageUrl    String   @map("image_url") @db.VarChar(500)
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("assets_images")
+  @@index([assetTagId])
+}
+
+model Category {
+  id          String       @id @default(uuid())
+  name        String       @unique @map("name") @db.VarChar(100)
+  description String?      @map("description") @db.Text
+  
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  
+  subCategories SubCategory[]
+  assets       Assets[]
+
+  @@map("categories")
+}
+
+model SubCategory {
+  id          String    @id @default(uuid())
+  name        String    @unique @map("name") @db.VarChar(100)
+  description String?   @map("description") @db.Text
+  
+  categoryId  String    @map("category_id")
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  assets      Assets[]
+
+  @@map("sub_categories")
+  @@index([categoryId])
+}
+
+model EmployeeUser {
+  id        String   @id @default(uuid())
+  name      String   @map("name") @db.VarChar(255)
+  email     String   @unique @map("email") @db.VarChar(255)
+  department String?  @map("department") @db.VarChar(100)
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  checkouts AssetsCheckout[]
+  checkins  AssetsCheckin[]
+  moves     AssetsMove[]
+  reservations AssetsReserve[]
+
+  @@map("employee_users")
+}
+
+model AssetsCheckout {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  employeeUserId    String?   @map("employee_user_id")
+  employeeUser      EmployeeUser? @relation(fields: [employeeUserId], references: [id], onDelete: Cascade)
+  
+  checkoutDate      DateTime  @map("checkout_date") @db.Date
+  expectedReturnDate DateTime? @map("expected_return_date") @db.Date
+  
+  checkins          AssetsCheckin[]
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("assets_checkout")
+  @@index([assetId])
+  @@index([employeeUserId])
+  @@index([checkoutDate])
+}
+
+model AssetsCheckin {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  checkoutId        String    @map("checkout_id")
+  checkout          AssetsCheckout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  
+  employeeUserId    String    @map("employee_user_id")
+  employeeUser      EmployeeUser @relation(fields: [employeeUserId], references: [id], onDelete: Cascade)
+  
+  checkinDate       DateTime  @map("checkin_date") @db.Date
+  condition         String?   @map("condition") @db.VarChar(255)
+  notes             String?   @map("notes") @db.Text
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("assets_checkin")
+  @@index([assetId])
+  @@index([employeeUserId])
+  @@index([checkoutId])
+  @@index([checkinDate])
+}
+
+model AssetsMove {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  moveType          String    @map("move_type") @db.VarChar(50) // Location Transfer, Employee Assignment, Department Transfer
+  moveDate          DateTime  @map("move_date") @db.Date
+  
+  // Only for Employee Assignment moveType
+  employeeUserId    String?   @map("employee_user_id")
+  employeeUser      EmployeeUser? @relation(fields: [employeeUserId], references: [id], onDelete: Cascade)
+  
+  reason            String?   @map("reason") @db.Text
+  notes             String?   @map("notes") @db.Text
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("assets_move")
+  @@index([assetId])
+  @@index([employeeUserId])
+  @@index([moveDate])
+  @@index([moveType])
+}
+
+model AssetsReserve {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  reservationType   String    @map("reservation_type") @db.VarChar(50) // Employee or Department
+  reservationDate   DateTime  @map("reservation_date") @db.Date
+  purpose           String?   @map("purpose") @db.Text
+  notes             String?   @map("notes") @db.Text
+  
+  // Only for Employee reservationType
+  employeeUserId    String?   @map("employee_user_id")
+  employeeUser      EmployeeUser? @relation(fields: [employeeUserId], references: [id], onDelete: Cascade)
+  
+  // Only for Department reservationType
+  department        String?   @map("department") @db.VarChar(100)
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("assets_reserve")
+  @@index([assetId])
+  @@index([employeeUserId])
+  @@index([reservationDate])
+  @@index([reservationType])
+}
+
+model AssetsLease {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  lessee            String    @map("lessee") @db.VarChar(255) // Third party name/organization
+  leaseStartDate    DateTime  @map("lease_start_date") @db.Date
+  leaseEndDate      DateTime? @map("lease_end_date") @db.Date
+  conditions        String?   @map("conditions") @db.Text
+  notes             String?   @map("notes") @db.Text
+  
+  returns           AssetsLeaseReturn[]
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("assets_lease")
+  @@index([assetId])
+  @@index([leaseStartDate])
+  @@index([leaseEndDate])
+}
+
+model AssetsLeaseReturn {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  leaseId           String    @map("lease_id")
+  lease             AssetsLease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  
+  returnDate        DateTime  @map("return_date") @db.Date
+  condition         String?   @map("condition") @db.VarChar(255)
+  notes             String?   @map("notes") @db.Text
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("assets_lease_return")
+  @@index([assetId])
+  @@index([leaseId])
+  @@index([returnDate])
+}
+
+model AssetsDispose {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  disposeDate       DateTime  @map("dispose_date") @db.Date
+  disposalMethod    String    @map("disposal_method") @db.VarChar(50) // Sold, Donated, Scrapped, Lost/Missing, Destroyed
+  disposeReason     String?   @map("dispose_reason") @db.Text // Optional text reason for disposal
+  disposeValue      Decimal?  @map("dispose_value") @db.Decimal(12, 2) // If sold
+  notes             String?   @map("notes") @db.Text
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("assets_dispose")
+  @@index([assetId])
+  @@index([disposeDate])
+  @@index([disposalMethod])
+}
+
+model AssetsMaintenance {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  title             String    @map("title") @db.VarChar(255)
+  details           String?   @map("details") @db.Text
+  dueDate           DateTime? @map("due_date") @db.Date
+  maintenanceBy     String?   @map("maintenance_by") @db.VarChar(255)
+  status            String    @map("status") @db.VarChar(50) // Scheduled, In progress, Completed, Cancelled
+  dateCompleted     DateTime? @map("date_completed") @db.Date
+  dateCancelled     DateTime? @map("date_cancelled") @db.Date
+  cost              Decimal?  @map("cost") @db.Decimal(12, 2)
+  isRepeating       Boolean   @map("is_repeating") @default(false)
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("assets_maintenance")
+  @@index([assetId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+model AssetsAuditHistory {
+  id                String    @id @default(uuid())
+  assetId           String    @map("asset_id")
+  asset             Assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  auditType         String    @map("audit_type") @db.VarChar(100) // e.g., "October Audit", "April Audit", "Final Recon Audit", "Monthly Audit"
+  auditDate         DateTime  @map("audit_date") @db.Date
+  notes             String?   @map("notes") @db.Text
+  auditor           String?   @map("auditor") @db.VarChar(255)
+  status            String?   @map("status") @db.VarChar(50) // Completed, Pending, Failed, etc.
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("assets_audit_history")
+  @@index([assetId])
+  @@index([auditDate])
+  @@index([auditType])
+}
+
+model AssetUser {
+  id                String    @id @default(uuid())
+  userId            String    @unique @map("user_id") @db.VarChar(255) // Reference to Supabase auth.users.id (UUID)
+  // Note: Cannot create foreign key to auth.users as it's in a different schema
+  // Application should validate userId exists in Supabase auth.users before creating/updating
+  role              String    @map("role") @db.VarChar(50) // "admin" or "user"
+  
+  // Access permissions (only applicable when role is "user")
+  canDeleteAssets   Boolean   @map("can_delete_assets") @default(false)
+  canManageImport   Boolean   @map("can_manage_import") @default(false)
+  canManageExport  Boolean   @map("can_manage_export") @default(true)
+  canCreateAssets   Boolean   @map("can_create_assets") @default(true)
+  canEditAssets     Boolean   @map("can_edit_assets") @default(true)
+  canViewAssets     Boolean   @map("can_view_assets") @default(true)
+  canManageEmployees Boolean  @map("can_manage_employees") @default(false)
+  canManageCategories Boolean @map("can_manage_categories") @default(false)
+  canCheckout       Boolean   @map("can_checkout") @default(true)
+  canCheckin        Boolean   @map("can_checkin") @default(true)
+  canReserve        Boolean   @map("can_reserve") @default(true)
+  canMove           Boolean   @map("can_move") @default(false)
+  canLease          Boolean   @map("can_lease") @default(false)
+  canDispose        Boolean   @map("can_dispose") @default(false)
+  canManageMaintenance Boolean @map("can_manage_maintenance") @default(false)
+  canAudit          Boolean   @map("can_audit") @default(false)
+  canManageMedia    Boolean   @map("can_manage_media") @default(true)
+  canManageTrash    Boolean   @map("can_manage_trash") @default(true)
+  
+  isActive          Boolean   @map("is_active") @default(true)
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("asset_users")
+  @@index([userId])
+  @@index([role])
+}
+
+model FileHistory {
+  id                String    @id @default(uuid())
+  operationType     String    @map("operation_type") @db.VarChar(50) // "import" or "export"
+  fileName          String    @map("file_name") @db.VarChar(255)
+  filePath          String?   @map("file_path") @db.VarChar(500) // Path in Supabase storage
+  fileSize          Int?      @map("file_size") // Size in bytes
+  mimeType          String?   @map("mime_type") @db.VarChar(100)
+  
+  // User who performed the operation
+  userId            String    @map("user_id") @db.VarChar(255) // Reference to Supabase auth.users.id
+  
+  // Import-specific fields
+  recordsProcessed  Int?      @map("records_processed")
+  recordsCreated    Int?      @map("records_created")
+  recordsSkipped    Int?      @map("records_skipped")
+  recordsFailed     Int?      @map("records_failed")
+  
+  // Export-specific fields
+  recordsExported   Int?      @map("records_exported")
+  fieldsExported    Int?      @map("fields_exported")
+  
+  status            String    @map("status") @db.VarChar(50) // "success", "failed", "partial"
+  errorMessage      String?   @map("error_message") @db.Text
+  
+  metadata          String?   @map("metadata") @db.Text // JSON string for additional data
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("file_history")
+  @@index([userId])
+  @@index([operationType])
+  @@index([createdAt])
+  @@index([status])
+}
+
+

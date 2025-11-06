@@ -15,25 +15,6 @@ A Next.js application with Prisma ORM, Supabase, and Tailwind CSS.
 ```bash
 npm install
 ```
-
-2. Set up environment variables:
-
-Create a `.env.local` file in the root directory:
-
-```env
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-
-# Prisma Database Configuration
-# Use the Connection Pooling URL from Supabase Settings > Database
-DATABASE_URL=postgresql://postgres:[PASSWORD]@[PROJECT_REF].supabase.co:6543/postgres?pgbouncer=true&connect_timeout=15
-# Use the direct connection URL for migrations
-DIRECT_URL=postgresql://postgres:[PASSWORD]@[PROJECT_REF].supabase.co:5432/postgres
-```
-
-You can find these values in your Supabase project dashboard under Settings > Database.
-
 ### Authentication Setup
 
 The application uses **cookie-based authentication** with Supabase and Next.js API routes.

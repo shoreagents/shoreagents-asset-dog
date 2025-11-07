@@ -369,6 +369,7 @@ model AssetUser {
   canManageUsers    Boolean   @map("can_manage_users") @default(false)
   
   isActive          Boolean   @map("is_active") @default(true)
+  isApproved        Boolean   @map("is_approved") @default(false)
   
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")

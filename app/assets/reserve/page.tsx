@@ -573,6 +573,7 @@ export default function ReserveAssetPage() {
                   </Table>
               </div>
               <ScrollBar orientation="horizontal" />
+              <ScrollBar orientation="vertical" className='z-10' />
               </ScrollArea>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-4">

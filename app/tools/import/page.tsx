@@ -198,8 +198,8 @@ export default function ImportPage() {
       toast.success(`Template downloaded with ${fieldsToInclude.length} column(s)`)
       setIsTemplateDialogOpen(false)
     } catch (error) {
-      console.error('Template download error:', error)
-      toast.error('Failed to download template')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to download template'
+      toast.error(errorMessage)
     }
   }
 
@@ -299,7 +299,7 @@ export default function ImportPage() {
       const importedAssets = jsonData.map((row) => {
         // Map Excel column names to asset fields
         const assetData = {
-          assetTagId: row['Asset Tag ID'] || row['assetTagId'],
+          assetTagId: row['Asset Tag ID'] || row['assetTagId'] || null,
           description: row['Description'] || '',
           purchasedFrom: row['Purchased from'] || null,
           purchaseDate: row['Purchase Date'] || null,
@@ -332,10 +332,60 @@ export default function ImportPage() {
           department: row['Department'] || null,
           site: row['Site'] || null,
           location: row['Location'] || null,
+          // Audit fields - these will create audit history records
+          lastAuditDate: row['Last Audit Date'] || row['lastAuditDate'] || null,
+          lastAuditType: row['Last Audit Type'] || row['lastAuditType'] || null,
+          lastAuditor: row['Last Auditor'] || row['lastAuditor'] || null,
+          auditCount: row['Audit Count'] || row['auditCount'] || null,
         }
         
         return assetData
       })
+      
+       // Validate data before sending to API to prevent HTTP errors
+       // First, check if the file has the required "Asset Tag ID" column at all
+       const hasAssetTagColumn = jsonData.length > 0 && (
+         jsonData[0]['Asset Tag ID'] !== undefined || 
+         jsonData[0]['assetTagId'] !== undefined
+       )
+       
+       if (!hasAssetTagColumn) {
+         // Get the actual column names from the first row
+         const actualColumns = jsonData.length > 0 ? Object.keys(jsonData[0]) : []
+         const actualColumnsList = actualColumns.length > 0 
+           ? actualColumns.join(', ') 
+           : 'No columns found'
+         
+         toast.error(
+           `Invalid file format: The Excel file does not contain the required "Asset Tag ID" column. Found columns: ${actualColumnsList}. Please ensure your Excel file has the correct column headers matching the asset import template.`,
+           { duration: 10000 }
+         )
+         // Reset file input
+         if (fileInputRef.current) {
+           fileInputRef.current.value = ''
+         }
+         return // Stop processing, don't make HTTP request
+       }
+       
+       // If the column exists, check which rows are missing the value
+       const invalidRows: number[] = []
+       importedAssets.forEach((asset, index) => {
+         if (!asset.assetTagId || (typeof asset.assetTagId === 'string' && asset.assetTagId.trim() === '')) {
+           invalidRows.push(index + 2) // +2 because row 1 is header
+         }
+       })
+       
+       if (invalidRows.length > 0) {
+         toast.error(
+           `Invalid file format: ${invalidRows.length} row(s) are missing required "Asset Tag ID" field. Please ensure your Excel file has the correct column headers.${invalidRows.length <= 10 ? ` Rows: ${invalidRows.join(', ')}` : ` First 10 rows: ${invalidRows.slice(0, 10).join(', ')}...`}`,
+           { duration: 8000 }
+         )
+         // Reset file input
+         if (fileInputRef.current) {
+           fileInputRef.current.value = ''
+         }
+         return // Stop processing, don't make HTTP request
+       }
       
       // Remove duplicate rows within the same file (keep first occurrence)
       const uniqueAssets: typeof importedAssets = []
@@ -373,16 +423,45 @@ export default function ImportPage() {
       const allResults: Array<{ asset: string; action: string; reason?: string; error?: string }> = []
       
       for (const batch of batches) {
-        const response = await fetch('/api/assets/import', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ assets: batch }),
-        })
+        let response: Response
+        try {
+          response = await fetch('/api/assets/import', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ assets: batch }),
+          })
+        } catch (fetchError) {
+          // Network error (not HTTP error)
+          toast.dismiss(toastId)
+          toast.error('Network error. Please check your connection and try again.')
+          throw new Error('Network error occurred')
+        }
         
         if (!response.ok) {
-          throw new Error('Failed to import assets')
+          // Handle HTTP errors (400, 500, etc.) gracefully
+          let errorData: { error?: string; message?: string; details?: string } = {}
+          try {
+            errorData = await response.json()
+          } catch {
+            // If response is not JSON, use status text
+            errorData = { error: response.statusText || 'Failed to import assets' }
+          }
+          
+          const errorMessage = errorData.error || errorData.message || 'Failed to import assets'
+          const errorDetails = errorData.details
+          toast.dismiss(toastId)
+          
+          // Show error with details if available
+          if (errorDetails) {
+            toast.error(`${errorMessage} ${errorDetails}`, { duration: 6000 })
+          } else {
+            toast.error(errorMessage)
+          }
+          
+          // Throw error to stop processing, but don't let it bubble as unhandled
+          throw new Error(errorMessage)
         }
         
         const data = await response.json()
@@ -432,7 +511,7 @@ export default function ImportPage() {
           }),
         })
       } catch (historyError) {
-        console.error('Failed to save file history:', historyError)
+        // Silently fail history save, don't show toast for this
       }
       
       // Show results
@@ -471,8 +550,10 @@ export default function ImportPage() {
         fileInputRef.current.value = ''
       }
     } catch (error) {
-      console.error('Import error:', error)
       toast.dismiss()
+      
+      // Get error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import assets'
       
       // Save failed file history
       try {
@@ -488,14 +569,15 @@ export default function ImportPage() {
             fileSize: file.size,
             mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             status: 'failed',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error occurred',
+            errorMessage: errorMessage,
           }),
         })
       } catch (historyError) {
-        console.error('Failed to save file history:', historyError)
+        // Silently fail history save, don't show toast for this
       }
       
-      toast.error('Failed to import assets')
+      // Show error toast with the actual error message
+      toast.error(errorMessage)
     }
   }
 
@@ -730,6 +812,7 @@ export default function ImportPage() {
                   </TableBody>
                 </Table>
                 <ScrollBar orientation="horizontal" />
+                <ScrollBar orientation="vertical" className='z-10' />
               </ScrollArea>
               {historyData?.pagination && historyData.pagination.totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">

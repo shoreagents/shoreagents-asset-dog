@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
@@ -81,6 +81,7 @@ interface AssetUser {
   canManageTrash: boolean
   canManageUsers: boolean
   isActive: boolean
+  isApproved: boolean
   createdAt: string
   updatedAt: string
 }
@@ -147,7 +148,7 @@ async function createUser(data: { email: string; password?: string; role: string
   return response.json()
 }
 
-async function updateUser(id: string, data: { role: string; permissions?: UserPermissions; isActive?: boolean }) {
+async function updateUser(id: string, data: { role: string; permissions?: UserPermissions; isActive?: boolean; isApproved?: boolean }) {
   const response = await fetch(`/api/users/${id}`, {
     method: 'PUT',
     headers: {
@@ -184,31 +185,9 @@ const formatDate = (dateString: string | null) => {
 
 // Helper function to check if user is pending approval (never been approved)
 const isPendingApproval = (user: AssetUser): boolean => {
-  // A user is pending approval if:
-  // 1. They are inactive
-  // 2. All permissions are false (indicating they were created via signup and never approved)
-  if (user.isActive) return false
-  
-  // Check if all permissions are false
-  const allPermissionsFalse = 
-    !user.canDeleteAssets &&
-    !user.canManageImport &&
-    !user.canManageExport &&
-    !user.canCreateAssets &&
-    !user.canEditAssets &&
-    !user.canViewAssets &&
-    !user.canManageEmployees &&
-    !user.canManageCategories &&
-    !user.canCheckout &&
-    !user.canCheckin &&
-    !user.canReserve &&
-    !user.canMove &&
-    !user.canLease &&
-    !user.canDispose &&
-    !user.canManageMaintenance &&
-    !user.canAudit
-  
-  return allPermissionsFalse
+  // A user is pending approval if they have never been approved
+  // Approval status is separate from active/inactive status
+  return !user.isApproved
 }
 
 // Create column definitions for TanStack Table
@@ -311,12 +290,12 @@ const createColumns = (
       return (
         <div className="flex items-center justify-center">
           {isActive ? (
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-600">
-              <Check className="h-4 w-4 text-white" />
+            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-green-600">
+              <Check className="h-2 w-2 text-white" />
             </div>
           ) : (
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600">
-              <X className="h-4 w-4 text-white" />
+            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-red-600">
+              <X className="h-2 w-2 text-white" />
             </div>
           )}
         </div>
@@ -361,27 +340,37 @@ const createColumns = (
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {isPendingApproval(user) && (
+              {isPendingApproval(user) ? (
                 <>
                   <DropdownMenuItem onClick={() => onApprove(user)}>
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Approve Account
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => onDelete(user)}
+                    className="text-red-600"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                <>
+                  <DropdownMenuItem onClick={() => onEdit(user)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => onDelete(user)}
+                    className="text-red-600"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
                 </>
               )}
-              <DropdownMenuItem onClick={() => onEdit(user)}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => onDelete(user)}
-                className="text-red-600"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -404,6 +393,7 @@ export default function UsersPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [copiedPassword, setCopiedPassword] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
   
   // Fetch current user ID
   useEffect(() => {
@@ -428,6 +418,7 @@ export default function UsersPage() {
     password: '',
     role: 'user',
     isActive: true,
+    isApproved: false,
     permissions: {
       canDeleteAssets: false,
       canManageImport: false,
@@ -503,8 +494,10 @@ export default function UsersPage() {
       params.delete('page')
     }
     
-    router.push(`?${params.toString()}`, { scroll: false })
-  }, [searchParams, router])
+    startTransition(() => {
+      router.push(`?${params.toString()}`, { scroll: false })
+    })
+  }, [searchParams, router, startTransition])
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', searchQuery, roleFilter, page, pageSize],
@@ -581,6 +574,7 @@ export default function UsersPage() {
         password: '',
         role: 'user',
         isActive: true,
+        isApproved: false,
         permissions: {
           canDeleteAssets: false,
           canManageImport: false,
@@ -617,12 +611,12 @@ export default function UsersPage() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { role: string; permissions?: UserPermissions; isActive?: boolean } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { role: string; permissions?: UserPermissions; isActive?: boolean; isApproved?: boolean } }) =>
       updateUser(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       // Check if we were approving before clearing selectedUser
-      const wasApproving = selectedUser && isPendingApproval(selectedUser)
+      const wasApproving = selectedUser && !selectedUser.isApproved && variables.data.isApproved
       const approvedEmail = selectedUser?.email
       setIsEditDialogOpen(false)
       setSelectedUser(null)
@@ -631,6 +625,7 @@ export default function UsersPage() {
         password: '',
         role: 'user',
         isActive: true,
+        isApproved: false,
         permissions: {
           canDeleteAssets: false,
           canManageImport: false,
@@ -653,7 +648,7 @@ export default function UsersPage() {
           canManageUsers: false,
         },
       })
-      if (wasApproving && variables.data.isActive) {
+      if (wasApproving) {
         toast.success(`Account approved successfully. ${approvedEmail || 'User'} can now access the system.`)
       } else {
         toast.success('User updated successfully')
@@ -704,12 +699,13 @@ export default function UsersPage() {
       return
     }
     setSelectedUser(user)
-    setFormData({
-      email: '', // Email is not editable, only shown in display
-      password: '',
-      role: user.role,
-      isActive: user.isActive,
-      permissions: {
+      setFormData({
+        email: '', // Email is not editable, only shown in display
+        password: '',
+        role: user.role,
+        isActive: user.isActive,
+        isApproved: user.isApproved,
+        permissions: {
         canDeleteAssets: user.canDeleteAssets,
         canManageImport: user.canManageImport,
         canManageExport: user.canManageExport,
@@ -756,11 +752,15 @@ export default function UsersPage() {
       return
     }
     
+    // Check if this is an approval action (user was not approved before, now being approved)
+    const wasApproving = selectedUser && !selectedUser.isApproved && formData.isApproved
+    
     updateMutation.mutate({
       id: selectedUser.id,
       data: {
         role: formData.role,
         isActive: formData.isActive,
+        isApproved: formData.isApproved,
         permissions: formData.role === 'user' ? formData.permissions : undefined,
       },
     })
@@ -809,6 +809,7 @@ export default function UsersPage() {
       password: '',
       role: user.role,
       isActive: true, // Pre-set to active for approval
+      isApproved: true, // Mark as approved
       permissions: defaultPermissions,
     })
     setIsEditDialogOpen(true)
@@ -1021,6 +1022,7 @@ export default function UsersPage() {
                   </TableBody>
                 </Table>
                 <ScrollBar orientation="horizontal" />
+                <ScrollBar orientation="vertical" className='z-10' />
                 </ScrollArea>
               </div>
             )}

@@ -20,46 +20,95 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get('pageSize') || '100', 10)
     const skip = (page - 1) * pageSize
     
-    const whereClause: Prisma.AssetUserWhereInput = {}
-    
-    if (search) {
-      whereClause.userId = { contains: search, mode: 'insensitive' }
-    }
-    
-    if (role && role !== 'all') {
-      whereClause.role = role
-    }
-
-    // Get total count for pagination
-    const totalCount = await prisma.assetUser.count({ where: whereClause })
-
-    const users = await prisma.assetUser.findMany({
-      where: whereClause,
-      orderBy: {
-        createdAt: 'desc',
-      },
-      skip,
-      take: pageSize,
-    })
-
-    // Fetch emails from Supabase Auth for each user
     const supabaseAdmin = createAdminSupabaseClient()
-    const usersWithEmail = await Promise.all(
-      users.map(async (user) => {
-        try {
-          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(user.userId)
-          return {
-            ...user,
-            email: authUser?.user?.email || '-',
-          }
-        } catch {
-          return {
-            ...user,
-            email: '-',
-          }
-        }
+    
+    // Build base where clause for role filter
+    const baseWhereClause: Prisma.AssetUserWhereInput = {}
+    if (role && role !== 'all') {
+      baseWhereClause.role = role
+    }
+
+    let users: Array<{ id: string; userId: string; role: string; email?: string | null; [key: string]: unknown }> = []
+    let totalCount = 0
+
+    // If there's a search term, we need to search by both email and userId
+    // Since emails are in Supabase Auth, we'll fetch users and filter by email
+    if (search) {
+      // Fetch all users (or a reasonable limit) to search by email and userId
+      const allUsers = await prisma.assetUser.findMany({
+        where: baseWhereClause,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 10000, // Reasonable limit for search
       })
-    )
+
+      // Fetch emails from Supabase Auth for all users
+      const usersWithEmailData = await Promise.all(
+        allUsers.map(async (user) => {
+          try {
+            const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(user.userId)
+            return {
+              ...user,
+              email: authUser?.user?.email || null,
+            }
+          } catch {
+            return {
+              ...user,
+              email: null,
+            }
+          }
+        })
+      )
+
+      // Filter by email OR userId containing search term (case-insensitive)
+      const searchLower = search.toLowerCase()
+      const filteredUsers = usersWithEmailData.filter(user => {
+        const emailMatch = user.email?.toLowerCase().includes(searchLower) ?? false
+        const userIdMatch = user.userId.toLowerCase().includes(searchLower)
+        return emailMatch || userIdMatch
+      })
+
+      totalCount = filteredUsers.length
+      
+      // Apply pagination
+      users = filteredUsers.slice(skip, skip + pageSize) as Array<{ id: string; userId: string; role: string; email?: string | null; [key: string]: unknown }>
+    } else {
+      // No search term - normal query with pagination
+      totalCount = await prisma.assetUser.count({ where: baseWhereClause })
+
+      users = await prisma.assetUser.findMany({
+        where: baseWhereClause,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: pageSize,
+      })
+    }
+
+    // Fetch emails from Supabase Auth for each user (if not already fetched)
+    const usersWithEmail = search 
+      ? users.map(user => ({
+          ...user,
+          email: user.email || '-',
+        }))
+      : await Promise.all(
+          users.map(async (user) => {
+            try {
+              const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(user.userId)
+              return {
+                ...user,
+                email: authUser?.user?.email || '-',
+              }
+            } catch {
+              return {
+                ...user,
+                email: '-',
+              }
+            }
+          })
+        )
 
     const totalPages = Math.ceil(totalCount / pageSize)
 

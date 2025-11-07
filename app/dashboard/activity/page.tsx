@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -265,6 +265,7 @@ export default function ActivityPage() {
   
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [selectedAssetTag, setSelectedAssetTag] = useState<string>('')
+  const [isPending, startTransition] = useTransition()
   
   // Get page, pageSize, and type from URL, default to 1, 100, and 'all'
   const page = parseInt(searchParams.get('page') || '1', 10)
@@ -301,7 +302,9 @@ export default function ActivityPage() {
       params.delete('page')
     }
     
-    router.push(`?${params.toString()}`, { scroll: false })
+    startTransition(() => {
+      router.push(`?${params.toString()}`, { scroll: false })
+    })
   }
 
   const { data, isLoading, error } = useQuery<{ activities: ActivityItem[], pagination: PaginationInfo }>({

@@ -61,13 +61,14 @@ export async function POST(request: Request) {
 
     const userId = authData.user.id
 
-    // Create asset_users record with role='user', isActive=false (pending approval)
+    // Create asset_users record with role='user', isActive=false, isApproved=false (pending approval)
     // Default permissions are all false - admin will set them when approving
     const user = await prisma.assetUser.create({
       data: {
         userId,
         role: 'user',
         isActive: false, // Pending admin approval
+        isApproved: false, // Not yet approved by admin
         canDeleteAssets: false,
         canManageImport: false,
         canManageExport: true,

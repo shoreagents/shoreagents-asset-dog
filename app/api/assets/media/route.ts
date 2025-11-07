@@ -28,7 +28,7 @@ declare global {
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
+    // Check authentication (required for viewing)
     const auth = await verifyAuth()
     if (auth.error || !auth.user) {
       return auth.error || NextResponse.json(
@@ -37,9 +37,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check media permission
-    const permissionCheck = await requirePermission('canManageMedia')
-    if (!permissionCheck.allowed) return permissionCheck.error
+    // Allow viewing media without canManageMedia permission
+    // Users can view but actions (upload/delete) are controlled by client-side checks
 
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1', 10)

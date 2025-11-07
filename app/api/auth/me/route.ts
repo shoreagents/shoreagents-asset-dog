@@ -29,6 +29,7 @@ export async function GET() {
         select: {
           role: true,
           isActive: true,
+          isApproved: true,
           canDeleteAssets: true,
           canManageImport: true,
           canManageExport: true,

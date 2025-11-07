@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Image from 'next/image'
 import {
@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Upload, Image as ImageIcon, Eye, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { ImagePreviewDialog, type ImagePreviewData } from '@/components/image-preview-dialog'
 
 async function updateAsset(id: string, data: Partial<Asset>) {
   const response = await fetch(`/api/assets/${id}`, {
@@ -90,6 +91,9 @@ export function EditAssetDialog({
   const [isDeleteImageDialogOpen, setIsDeleteImageDialogOpen] = useState(false)
   const [isDeletingImage, setIsDeletingImage] = useState(false)
   const [mediaBrowserOpen, setMediaBrowserOpen] = useState(false)
+  const [previewImage, setPreviewImage] = useState<ImagePreviewData | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   // Create object URLs for selected images
@@ -399,18 +403,22 @@ export function EditAssetDialog({
           }
 
           toast.success(`Asset updated successfully with ${totalImages} image(s)`)
-          setSelectedImages([])
-          setSelectedExistingImages([])
-          setUploadProgress(0)
-          await queryClient.invalidateQueries({ queryKey: ['assets', 'images', updatedAssetTagId] })
-          if (updatedAssetTagId !== asset.assetTagId) {
-            await queryClient.invalidateQueries({ queryKey: ['assets', 'images', asset.assetTagId] })
-          }
-          // Invalidate media query so new images appear in media page
-          await queryClient.invalidateQueries({ queryKey: ['assets', 'media'] })
-          await refetchExistingImages()
+          // Close dialog immediately for responsive UX
           onOpenChange(false)
-          await queryClient.refetchQueries({ queryKey: ['assets'] })
+          // Cleanup state in transition (non-urgent)
+          startTransition(() => {
+            setSelectedImages([])
+            setSelectedExistingImages([])
+            setUploadProgress(0)
+          })
+          // Invalidate queries in background (non-blocking)
+          queryClient.invalidateQueries({ queryKey: ['assets', 'images', updatedAssetTagId] })
+          if (updatedAssetTagId !== asset.assetTagId) {
+            queryClient.invalidateQueries({ queryKey: ['assets', 'images', asset.assetTagId] })
+          }
+          queryClient.invalidateQueries({ queryKey: ['assets', 'media'] })
+          refetchExistingImages()
+          queryClient.refetchQueries({ queryKey: ['assets'] })
         } catch (error) {
           console.error('Error uploading images:', error)
           toast.error('Asset updated but some images failed to upload')
@@ -419,10 +427,13 @@ export function EditAssetDialog({
           setUploadingImages(false)
         }
       } else {
-        await queryClient.invalidateQueries({ queryKey: ['assets', 'images', asset.assetTagId] })
-        await refetchExistingImages()
+        toast.success('Asset updated successfully')
+        // Close dialog immediately for better UX
         onOpenChange(false)
-        await queryClient.refetchQueries({ queryKey: ['assets'] })
+        // Invalidate queries in background (non-blocking)
+        queryClient.invalidateQueries({ queryKey: ['assets', 'images', asset.assetTagId] })
+        refetchExistingImages()
+        queryClient.refetchQueries({ queryKey: ['assets'] })
       }
     } catch {
       // Error already handled by mutation
@@ -564,11 +575,21 @@ export function EditAssetDialog({
                     ) : (
                       <div className="space-y-2 mb-4">
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                          {existingImages.map((image: { id: string; imageUrl: string; assetTagId: string }) => (
+                          {existingImages.map((image: { id: string; imageUrl: string; assetTagId: string; fileName?: string; createdAt?: string }) => (
                             <div
                               key={image.id}
                               className="relative group border rounded-lg overflow-visible cursor-pointer"
                               onClick={() => {
+                                // Use the reusable ImagePreviewDialog component
+                                setPreviewImage({
+                                  imageUrl: image.imageUrl,
+                                  fileName: image.fileName,
+                                  assetTagId: image.assetTagId || asset.assetTagId,
+                                  alt: `Asset ${asset.assetTagId} image`,
+                                  createdAt: image.createdAt,
+                                })
+                                setIsPreviewOpen(true)
+                                // Also call the callback for backward compatibility
                                 if (onPreviewImage) {
                                   onPreviewImage(image.imageUrl)
                                 }
@@ -772,6 +793,14 @@ export function EditAssetDialog({
         description="Are you sure you want to delete this image? This action cannot be undone."
         confirmLabel="Delete Image"
         isLoading={isDeletingImage}
+      />
+
+      {/* Image Preview Dialog */}
+      <ImagePreviewDialog
+        open={isPreviewOpen}
+        onOpenChange={setIsPreviewOpen}
+        image={previewImage}
+        maxHeight="h-[70vh] max-h-[600px]"
       />
     </>
   )

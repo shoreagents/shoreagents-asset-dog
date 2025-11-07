@@ -35,10 +35,13 @@ export async function POST(request: Request) {
       })
 
       if (assetUser && !assetUser.isActive) {
+        // Sign out the user from Supabase session to prevent any access
+        await supabase.auth.signOut()
         return NextResponse.json(
           { 
-            error: 'Your account is pending admin approval. Please contact your administrator.',
+            error: 'Your account has been deactivated. Please contact your administrator.',
             requiresApproval: true,
+            isActive: false,
           },
           { status: 403 }
         )

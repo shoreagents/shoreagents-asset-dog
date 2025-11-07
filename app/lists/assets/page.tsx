@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
@@ -2136,6 +2136,7 @@ export default function ListOfAssetsPage() {
   })
   const [isSelectOpen, setIsSelectOpen] = useState(false)
   const [shouldCloseSelect, setShouldCloseSelect] = useState(false)
+  const [isPending, startTransition] = useTransition()
   
   // Convert column visibility to visible columns array for compatibility
   // Exclude Actions from count since it's always visible and not selectable
@@ -2189,8 +2190,10 @@ export default function ListOfAssetsPage() {
       params.delete('page')
     }
     
-    router.push(`?${params.toString()}`, { scroll: false })
-  }, [searchParams, router])
+    startTransition(() => {
+      router.push(`?${params.toString()}`, { scroll: false })
+    })
+  }, [searchParams, router, startTransition])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['assets-list', searchQuery, page, pageSize],
@@ -2542,6 +2545,7 @@ export default function ListOfAssetsPage() {
                   </TableBody>
                 </Table>
                 <ScrollBar orientation="horizontal" />
+                <ScrollBar orientation="vertical" className='z-10' />
                 </ScrollArea>
               </div>
             )}

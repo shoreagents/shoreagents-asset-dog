@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useTransition } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -2228,6 +2228,7 @@ export default function AssetsPage() {
   const lastSearchQueryRef = useRef<string>(searchParams.get('search') || '') // Track last searchQuery to avoid sync loops
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'all')
   const [categoryFilter, setCategoryFilter] = useState<string>(searchParams.get('category') || 'all')
+  const [isPending, startTransition] = useTransition()
 
   // TanStack Table state - initialize from URL
   const [sorting, setSorting] = useState<SortingState>([])
@@ -2321,6 +2322,38 @@ export default function AssetsPage() {
   const assets = useMemo(() => data?.assets || [], [data?.assets])
   const totalCount = data?.pagination?.total || 0
 
+  // Fetch all categories for filter dropdown (not filtered by current selection)
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const response = await fetch('/api/categories')
+      if (!response.ok) throw new Error('Failed to fetch categories')
+      const data = await response.json()
+      return data.categories as Array<{ id: string; name: string }>
+    },
+    enabled: canViewAssets,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+  })
+
+  // Fetch all unique statuses for filter dropdown (not filtered by current selection)
+  const { data: allStatusesData } = useQuery({
+    queryKey: ['assets', 'all-statuses'],
+    queryFn: async () => {
+      // Fetch a large page of assets without filters to get all unique statuses
+      const response = await fetch('/api/assets?page=1&pageSize=10000')
+      if (!response.ok) throw new Error('Failed to fetch statuses')
+      const data = await response.json()
+      const allAssets = data.assets as Asset[]
+      // Extract unique statuses
+      const uniqueStatuses = Array.from(new Set(
+        allAssets.map(asset => asset.status).filter(Boolean)
+      )).sort()
+      return uniqueStatuses as string[]
+    },
+    enabled: canViewAssets,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+  })
+
   // Create columns
   const columns = useMemo(() => createColumns(AssetActions), [])
 
@@ -2370,8 +2403,10 @@ export default function AssetsPage() {
     }
     
     const newUrl = params.toString() ? `/assets?${params.toString()}` : '/assets'
-    router.replace(newUrl, { scroll: false })
-  }, [pagination, searchQuery, categoryFilter, statusFilter, router])
+    startTransition(() => {
+      router.replace(newUrl, { scroll: false })
+    })
+  }, [pagination, searchQuery, categoryFilter, statusFilter, router, startTransition])
   
   // Reset to first page when filters change
   useEffect(() => {
@@ -3135,8 +3170,8 @@ export default function AssetsPage() {
                 <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>
-              <>
-                <Button
+                <>
+              <Button
                   onClick={() => {
                     if (!hasPermission('canManageImport')) {
                       toast.error('You do not have permission to import assets')
@@ -3144,21 +3179,21 @@ export default function AssetsPage() {
                     }
                     document.getElementById('import-file')?.click()
                   }}
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 sm:flex-initial"
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Import
-                </Button>
-                <input
-                  id="import-file"
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  className="hidden"
-                  onChange={handleImport}
-                />
-              </>
+                variant="outline"
+                size="sm"
+                className="flex-1 sm:flex-initial"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Import
+              </Button>
+              <input
+                id="import-file"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleImport}
+              />
+                </>
               {selectedAssets.size > 0 && (
                 <Button
                   onClick={() => {
@@ -3303,8 +3338,8 @@ export default function AssetsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Categories</SelectItem>
-                        {Array.from(new Set(assets.map(asset => asset.category?.name).filter(Boolean))).map(category => (
-                          <SelectItem key={category} value={category!}>{category}</SelectItem>
+                        {categoriesData?.map(category => (
+                          <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -3318,8 +3353,8 @@ export default function AssetsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Status</SelectItem>
-                        {Array.from(new Set(assets.map(asset => asset.status).filter(Boolean))).map(status => (
-                          <SelectItem key={status} value={status!}>{status}</SelectItem>
+                        {allStatusesData?.map(status => (
+                          <SelectItem key={status} value={status}>{status}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

@@ -379,6 +379,7 @@ export default function TrashPage() {
                   </div>
                 </div>
                 <ScrollBar orientation="horizontal" />
+                <ScrollBar orientation="vertical" className='z-10' />
               </ScrollArea>
             </div>
           ) : (
@@ -467,6 +468,7 @@ export default function TrashPage() {
                   </TableBody>
                 </Table>
                 <ScrollBar orientation="horizontal" />
+                <ScrollBar orientation="vertical" className='z-10' />
               </ScrollArea>
             </div>
           )}

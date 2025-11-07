@@ -748,6 +748,7 @@ export default function MaintenancePage() {
                   </Table>
                 </div>
                 <ScrollBar orientation="horizontal" />
+                <ScrollBar orientation="vertical" className='z-10' />
               </ScrollArea>
             )}
           </CardContent>

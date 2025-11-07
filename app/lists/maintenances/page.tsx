@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
@@ -1642,6 +1642,7 @@ export default function ListOfMaintenancesPage() {
   })
   const [isSelectOpen, setIsSelectOpen] = useState(false)
   const [shouldCloseSelect, setShouldCloseSelect] = useState(false)
+  const [isPending, startTransition] = useTransition()
   
   // Edit maintenance dialog state
   const [editingMaintenance, setEditingMaintenance] = useState<{
@@ -1706,8 +1707,10 @@ export default function ListOfMaintenancesPage() {
       params.delete('page')
     }
     
-    router.push(`?${params.toString()}`, { scroll: false })
-  }, [searchParams, router])
+    startTransition(() => {
+      router.push(`?${params.toString()}`, { scroll: false })
+    })
+  }, [searchParams, router, startTransition])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['maintenances-list', searchQuery, page, pageSize],
@@ -2131,6 +2134,7 @@ export default function ListOfMaintenancesPage() {
                   </TableBody>
                 </Table>
                 <ScrollBar orientation="horizontal" />
+                <ScrollBar orientation="vertical" className='z-10' />
                 </ScrollArea>
               </div>
             )}

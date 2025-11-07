@@ -47,6 +47,19 @@ const routeLabels: Record<string, string> = {
   '/assets/lease-return': 'Lease Return',
   '/assets/dispose': 'Dispose Asset',
   '/assets/maintenance': 'Maintenance',
+  '/lists': 'Lists',
+  '/lists/assets': 'Assets List',
+  '/lists/maintenances': 'Maintenances List',
+  '/lists/warranties': 'Warranties List',
+  '/tools': 'Tools',
+  '/tools/media': 'Media',
+  '/tools/trash': 'Trash',
+  '/tools/import': 'Import',
+  '/tools/export': 'Export',
+  '/settings': 'Settings',
+  '/settings/users': 'Users',
+  '/settings/categories': 'Categories',
+  '/employees': 'Employees',
 }
 
 function generateBreadcrumbs(pathname: string) {

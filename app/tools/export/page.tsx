@@ -662,6 +662,7 @@ export default function ExportPage() {
                   </TableBody>
                 </Table>
                 <ScrollBar orientation="horizontal" />
+                <ScrollBar orientation="vertical" className='z-10' />
               </ScrollArea>
               {historyData?.pagination && historyData.pagination.totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">

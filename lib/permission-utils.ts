@@ -27,6 +27,7 @@ interface UserPermissions {
 interface AssetUser {
   role: string
   isActive: boolean
+  isApproved: boolean
   canDeleteAssets: boolean
   canManageImport: boolean
   canManageExport: boolean
@@ -63,6 +64,7 @@ export async function getUserPermissions(): Promise<{ user: AssetUser | null; er
       select: {
         role: true,
         isActive: true,
+        isApproved: true,
         canDeleteAssets: true,
         canManageImport: true,
         canManageExport: true,

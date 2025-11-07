@@ -55,7 +55,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { role, permissions, isActive } = body
+    const { role, permissions, isActive, isApproved } = body
 
     if (!role) {
       return NextResponse.json(
@@ -104,6 +104,9 @@ export async function PUT(
     const updateData: any = {
       role,
       isActive: isActive !== undefined ? isActive : true,
+      // Only update isApproved if explicitly provided (for approval action)
+      // Don't allow un-approving a user
+      ...(isApproved !== undefined && { isApproved: isApproved }),
     }
 
     // Add permissions only for "user" role

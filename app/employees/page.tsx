@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   useReactTable,
@@ -327,6 +327,7 @@ export default function EmployeesPage() {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [formData, setFormData] = useState({ name: '', email: '', department: '' })
   const queryClient = useQueryClient()
+  const [isPending, startTransition] = useTransition()
 
   // Get page, pageSize, and search from URL
   const page = parseInt(searchParams.get('page') || '1', 10)
@@ -371,8 +372,10 @@ export default function EmployeesPage() {
       params.delete('page')
     }
     
-    router.push(`?${params.toString()}`, { scroll: false })
-  }, [searchParams, router])
+    startTransition(() => {
+      router.push(`?${params.toString()}`, { scroll: false })
+    })
+  }, [searchParams, router, startTransition])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['employees', searchQuery, page, pageSize],
@@ -704,6 +707,7 @@ export default function EmployeesPage() {
                   </TableBody>
                 </Table>
                 <ScrollBar orientation="horizontal" className='z-10' />
+                <ScrollBar orientation="vertical" className='z-10' />
                 </ScrollArea>
               </div>
             )}

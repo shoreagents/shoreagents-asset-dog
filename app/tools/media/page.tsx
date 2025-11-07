@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useTransition } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -77,6 +77,7 @@ export default function MediaPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isPending, startTransition] = useTransition()
 
   // Get page from URL params
   const currentPage = parseInt(searchParams.get('page') || '1', 10)
@@ -221,7 +222,7 @@ export default function MediaPage() {
     }
   }
 
-  // Fetch images with pagination
+  // Fetch images with pagination - allow viewing even without permission
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['assets', 'media', currentPage, gridColumns],
     queryFn: async () => {
@@ -243,7 +244,7 @@ export default function MediaPage() {
         }
       }>
     },
-    enabled: canManageMedia && !permissionsLoading,
+    enabled: !permissionsLoading, // Allow viewing even without canManageMedia permission
     staleTime: 0, // Always refetch when invalidated
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   })
@@ -363,9 +364,11 @@ export default function MediaPage() {
   }
 
   const handlePageChange = (page: number) => {
-    router.push(`/tools/media?page=${page}`)
-    // Clear selections when page changes
-    setSelectedImages(new Set())
+    startTransition(() => {
+      router.push(`/tools/media?page=${page}`)
+      // Clear selections when page changes
+      setSelectedImages(new Set())
+    })
     // Scroll to top when page changes
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -524,34 +527,6 @@ export default function MediaPage() {
   // Combined loading state
   const isLoadingData = permissionsLoading || isLoading
 
-  if (!canManageMedia && !permissionsLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">
-              You don&apos;t have permission to manage media.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  if (isError && !permissionsLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <p className="text-center text-destructive">
-              Failed to load media. Please try again.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   const images = data?.images || []
   const pagination = data?.pagination
   const storage = data?.storage
@@ -563,6 +538,7 @@ export default function MediaPage() {
 
   // Clear selections when images change (e.g., after delete)
   // Use a ref to track previous image IDs to avoid infinite loops
+  // IMPORTANT: This hook must be called before any early returns to avoid React hooks errors
   const prevImageIdsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     const currentImageIds = new Set(images.map(img => img.id))
@@ -582,6 +558,21 @@ export default function MediaPage() {
       prevImageIdsRef.current = currentImageIds
     }
   }, [images])
+
+  // Early returns must come AFTER all hooks
+  if (isError && !permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <p className="text-center text-destructive">
+              Failed to load media. Please try again.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -621,6 +612,7 @@ export default function MediaPage() {
                 title={selectedImages.size === images.length && images.length > 0
                   ? 'Deselect All'
                   : 'Select All'}
+                className='cursor-pointer'
               />
               <span className="text-sm text-muted-foreground">
                 {selectedImages.size}
@@ -672,7 +664,7 @@ export default function MediaPage() {
                 <DropdownMenuItem
                   onClick={() => {
                     if (!canManageMedia) {
-                      toast.error('You do not have permission to take actions')
+                      toast.error('You do not have permission to upload images')
                       return
                     }
                     if (isUploading) {
@@ -769,35 +761,33 @@ export default function MediaPage() {
                 onClick={() => handleImageClick(image)}
               >
                 {/* Checkbox */}
-                {canManageMedia && (
-                  <div 
-                    className={`absolute top-2 left-2 z-20 transition-opacity ${
-                      selectedImages.has(image.id)
-                        ? 'opacity-100'
-                        : 'opacity-0 group-hover:opacity-100'
-                    }`}
-                    onClick={(e) => handleImageSelect(e, image.id)}
-                  >
-                    <div>
-                      <Checkbox
-                        checked={selectedImages.has(image.id)}
-                        onCheckedChange={() => {
-                          setSelectedImages(prev => {
-                            const newSet = new Set(prev)
-                            if (newSet.has(image.id)) {
-                              newSet.delete(image.id)
-                            } else {
-                              newSet.add(image.id)
-                            }
-                            return newSet
-                          })
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="border-white data-[state=checked]:bg-white data-[state=checked]:text-black cursor-pointer"
-                      />
-                    </div>
+                <div 
+                  className={`absolute top-2 left-2 z-20 transition-opacity ${
+                    selectedImages.has(image.id)
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                  onClick={(e) => handleImageSelect(e, image.id)}
+                >
+                  <div>
+                    <Checkbox
+                      checked={selectedImages.has(image.id)}
+                      onCheckedChange={() => {
+                        setSelectedImages(prev => {
+                          const newSet = new Set(prev)
+                          if (newSet.has(image.id)) {
+                            newSet.delete(image.id)
+                          } else {
+                            newSet.add(image.id)
+                          }
+                          return newSet
+                        })
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="border-white data-[state=checked]:bg-white data-[state=checked]:text-black cursor-pointer"
+                    />
                   </div>
-                )}
+                </div>
                 {/* Selection overlay */}
                 {selectedImages.has(image.id) && (
                   <div className="absolute inset-0 bg-primary/20 border-2 border-primary rounded-lg pointer-events-none z-10" />
@@ -883,36 +873,40 @@ export default function MediaPage() {
                     {image.fileName || image.assetTagId}
                   </p>
                 </div>
-                {/* 3-dot menu */}
-                {canManageMedia && (
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 hover:!bg-transparent"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreVertical className="h-4 w-4 text-white" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenuItem onClick={(e) => handleDetailsClick(e, image)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={(e) => handleDeleteClick(e, image)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
+                {/* 3-dot menu - show Details for all users, Delete for all but with permission check */}
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 hover:!bg-transparent"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="h-4 w-4 text-white" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuItem onClick={(e) => handleDetailsClick(e, image)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={(e) => {
+                          if (!canManageMedia) {
+                            toast.error('You do not have permission to delete images')
+                            return
+                          }
+                          handleDeleteClick(e, image)
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             ))}
           </div>
@@ -1102,7 +1096,7 @@ export default function MediaPage() {
                                 }
                                 setIsDetailsDialogOpen(false)
                               }}
-                              className="text-primary hover:underline"
+                              className="text-primary hover:underline cursor-pointer"
                             >
                               {assetInfo.assetTagId}
                             </button>

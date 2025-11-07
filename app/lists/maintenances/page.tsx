@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Package, Edit2 } from 'lucide-react'
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Package, Edit2, Image as ImageIcon } from 'lucide-react'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldLabel, FieldContent } from '@/components/ui/field'
@@ -40,6 +40,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import Image from 'next/image'
 
 interface Asset {
   id: string
@@ -102,6 +103,7 @@ interface Asset {
     dateCancelled: string | null
     createdAt: string
   }[]
+  imagesCount?: number
   createdAt: string
 }
 
@@ -238,6 +240,7 @@ const ALL_COLUMNS = [
   { key: 'maintenanceDueDate', label: 'Maintenance Due Date' },
   { key: 'maintenanceCost', label: 'Maintenance Cost' },
   { key: 'maintenanceTimeAgo', label: 'Maintenance Time Ago' },
+  { key: 'images', label: 'Images' },
 ]
 
 // Create column definitions for TanStack Table
@@ -1449,6 +1452,13 @@ const createColumns = (
     },
   },
   {
+    id: 'images',
+    enableHiding: true,
+    enableSorting: false,
+    header: 'Images',
+    cell: ({ row }) => <AssetImagesCell asset={row.original} />,
+  },
+  {
     id: 'maintenanceActions',
     header: () => <div className="text-right">Actions</div>,
     cell: ({ row }) => {
@@ -1483,6 +1493,95 @@ const createColumns = (
     enableHiding: false,
   },
 ]
+
+// Component for asset images icon with dialog
+function AssetImagesCell({ asset }: { asset: Asset }) {
+  const [imagesDialogOpen, setImagesDialogOpen] = useState(false)
+  const [images, setImages] = useState<Array<{ id: string; imageUrl: string; assetTagId: string }>>([])
+  const [loadingImages, setLoadingImages] = useState(false)
+
+  const fetchImages = async () => {
+    if (!imagesDialogOpen) return
+    
+    setLoadingImages(true)
+    try {
+      const response = await fetch(`/api/assets/images/${asset.assetTagId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setImages(data.images || [])
+      } else {
+        setImages([])
+      }
+    } catch (error) {
+      console.error('Error fetching images:', error)
+      setImages([])
+    } finally {
+      setLoadingImages(false)
+    }
+  }
+
+  useEffect(() => {
+    if (imagesDialogOpen) {
+      fetchImages()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imagesDialogOpen])
+
+  // If no images, show dash
+  if (!asset.imagesCount || asset.imagesCount === 0) {
+    return <span className="text-muted-foreground">-</span>
+  }
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => setImagesDialogOpen(true)}
+        className="h-8 w-8"
+      >
+        <ImageIcon className="h-4 w-4" />
+      </Button>
+      <Dialog open={imagesDialogOpen} onOpenChange={setImagesDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Asset Images - {asset.assetTagId}</DialogTitle>
+            <DialogDescription>
+              Images for {asset.description}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+            {loadingImages ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner className="h-6 w-6" />
+              </div>
+            ) : images.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                No images found for this asset
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {images.map((image) => (
+                  <div key={image.id} className="relative group border rounded-lg overflow-hidden">
+                    <div className="aspect-square bg-muted relative">
+                      <Image
+                        src={image.imageUrl}
+                        alt={`Asset ${asset.assetTagId} image`}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
 
 export default function ListOfMaintenancesPage() {
   const router = useRouter()
@@ -1539,6 +1638,7 @@ export default function ListOfMaintenancesPage() {
     maintenanceDueDate: false,
     maintenanceCost: false,
     maintenanceTimeAgo: false,
+    images: true,
   })
   const [isSelectOpen, setIsSelectOpen] = useState(false)
   const [shouldCloseSelect, setShouldCloseSelect] = useState(false)
@@ -1990,7 +2090,7 @@ export default function ListOfMaintenancesPage() {
                               key={header.id} 
                               className={cn(
                                 isActionsColumn ? "text-right" : "text-left ",
-                                isActionsColumn && "sticky right-0 bg-card z-10  shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]"
+                                isActionsColumn && "sticky right-0 bg-card z-10"
                               )}
                             >
                               {header.isPlaceholder
@@ -2012,7 +2112,7 @@ export default function ListOfMaintenancesPage() {
                               <TableCell 
                                 key={cell.id}
                                 className={cn(
-                                  isActionsColumn && "sticky right-0 bg-card z-10  shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]"
+                                  isActionsColumn && "sticky right-0 bg-card z-10 "
                                 )}
                               >
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}

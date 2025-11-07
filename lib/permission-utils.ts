@@ -21,6 +21,7 @@ interface UserPermissions {
   canAudit: boolean
   canManageMedia: boolean
   canManageTrash: boolean
+  canManageUsers: boolean
 }
 
 interface AssetUser {
@@ -44,6 +45,7 @@ interface AssetUser {
   canAudit: boolean
   canManageMedia: boolean
   canManageTrash: boolean
+  canManageUsers: boolean
 }
 
 /**
@@ -79,6 +81,7 @@ export async function getUserPermissions(): Promise<{ user: AssetUser | null; er
         canAudit: true,
         canManageMedia: true,
         canManageTrash: true,
+        canManageUsers: true,
       },
     })
 

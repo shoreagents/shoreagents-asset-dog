@@ -1365,16 +1365,41 @@ function AssetActions({ asset }: { asset: Asset }) {
     },
   })
 
-  const handleDelete = () => {
+  const confirmDelete = () => {
     deleteMutation.mutate(asset.id)
   }
 
-  // Check if user has any permissions for actions
-  const hasAnyActionPermission = 
-    hasPermission('canEditAssets') ||
-    hasPermission('canAudit') ||
-    hasPermission('canCheckout') ||
-    hasPermission('canDeleteAssets')
+  const handleEdit = () => {
+    if (!hasPermission('canEditAssets')) {
+      toast.error('You do not have permission to edit assets')
+      return
+    }
+    setIsEditOpen(true)
+  }
+
+  const handleAudit = () => {
+    if (!hasPermission('canAudit')) {
+      toast.error('You do not have permission to manage audits')
+      return
+    }
+    setIsAuditOpen(true)
+  }
+
+  const handleCheckout = () => {
+    if (!hasPermission('canCheckout')) {
+      toast.error('You do not have permission to manage checkouts')
+      return
+    }
+    setIsCheckoutOpen(true)
+  }
+
+  const handleDelete = () => {
+    if (!hasPermission('canDeleteAssets')) {
+      toast.error('You do not have permission to delete assets')
+      return
+    }
+    setIsDeleteOpen(true)
+  }
 
   return (
     <>
@@ -1384,50 +1409,32 @@ function AssetActions({ asset }: { asset: Asset }) {
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={(e) => {
-                  if (!hasAnyActionPermission) {
-                    e.preventDefault()
-                    toast.error('You do not have permission to take actions')
-                  }
-                }}
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            {hasAnyActionPermission ? (
-              <DropdownMenuContent align="end">
-                {hasPermission('canEditAssets') && (
-                  <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                )}
-                {hasPermission('canAudit') && (
-                  <DropdownMenuItem onClick={() => setIsAuditOpen(true)}>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Manage Audits
-                  </DropdownMenuItem>
-                )}
-                {hasPermission('canCheckout') && (
-                  <DropdownMenuItem onClick={() => setIsCheckoutOpen(true)}>
-                    <ArrowRight className="mr-2 h-4 w-4" />
-                    Manage Checkouts
-                  </DropdownMenuItem>
-                )}
-                {(hasPermission('canEditAssets') || hasPermission('canAudit') || hasPermission('canCheckout')) && (
-                  <DropdownMenuSeparator />
-                )}
-                {hasPermission('canDeleteAssets') && (
-                  <DropdownMenuItem
-                    onClick={() => setIsDeleteOpen(true)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            ) : null}
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleEdit}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleAudit}>
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Manage Audits
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleCheckout}>
+                <ArrowRight className="mr-2 h-4 w-4" />
+                Manage Checkouts
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
@@ -1468,7 +1475,7 @@ function AssetActions({ asset }: { asset: Asset }) {
       <DeleteConfirmationDialog
         open={isDeleteOpen}
         onOpenChange={setIsDeleteOpen}
-        onConfirm={handleDelete}
+        onConfirm={confirmDelete}
         itemName={asset.assetTagId}
         isLoading={deleteMutation.isPending}
         title={`Delete ${asset.assetTagId}?`}
@@ -2494,7 +2501,7 @@ export default function ListOfAssetsPage() {
                               key={header.id}
                               className={cn(
                                 isActionsColumn ? "text-right" : "text-left",
-                                isActionsColumn && "sticky right-0 bg-card z-10 shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]"
+                                isActionsColumn && "sticky right-0 bg-card z-10"
                               )}
                             >
                             {header.isPlaceholder
@@ -2516,7 +2523,7 @@ export default function ListOfAssetsPage() {
                               <TableCell 
                                 key={cell.id}
                                 className={cn(
-                                  isActionsColumn && "sticky right-0 bg-card z-10 shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]"
+                                  isActionsColumn && "sticky right-0 bg-card z-10"
                                 )}
                               >
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}

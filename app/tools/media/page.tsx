@@ -37,8 +37,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { BulkDeleteDialog } from '@/components/bulk-delete-dialog'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Progress } from '@/components/ui/progress'
+import { ImagePreviewDialog, type ImagePreviewData } from '@/components/image-preview-dialog'
 
 interface MediaImage {
   id: string
@@ -51,6 +55,8 @@ interface MediaImage {
   linkedAssetTagIds?: string[] // Array of all linked asset tag IDs
   linkedAssetsInfo?: Array<{ assetTagId: string; isDeleted: boolean }> // Info about each linked asset
   assetIsDeleted?: boolean
+  imageType?: string | null
+  imageSize?: number | null
 }
 
 export default function MediaPage() {
@@ -64,6 +70,10 @@ export default function MediaPage() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [imageToDelete, setImageToDelete] = useState<MediaImage | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+  const [imageDetails, setImageDetails] = useState<MediaImage | null>(null)
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set())
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -227,6 +237,10 @@ export default function MediaPage() {
           pageSize: number
           totalPages: number
         }
+        storage?: {
+          used: number
+          limit: number
+        }
       }>
     },
     enabled: canManageMedia && !permissionsLoading,
@@ -298,6 +312,19 @@ export default function MediaPage() {
 
     if (validFiles.length === 0) return
 
+    // Check storage limit before uploading
+    const storageLimit = data?.storage?.limit || 5 * 1024 * 1024 // 5MB default
+    const currentStorageUsed = data?.storage?.used || 0
+    const totalNewSize = validFiles.reduce((sum, file) => sum + file.size, 0)
+    
+    if (currentStorageUsed + totalNewSize > storageLimit) {
+      toast.error(
+        `Storage limit exceeded. Current usage: ${formatFileSize(currentStorageUsed)} / ${formatFileSize(storageLimit)}. ` +
+        `Cannot upload ${formatFileSize(totalNewSize)}. Please delete some images first.`
+      )
+      return
+    }
+
     setIsUploading(true)
     setUploadProgress(0)
 
@@ -337,6 +364,8 @@ export default function MediaPage() {
 
   const handlePageChange = (page: number) => {
     router.push(`/tools/media?page=${page}`)
+    // Clear selections when page changes
+    setSelectedImages(new Set())
     // Scroll to top when page changes
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -350,6 +379,19 @@ export default function MediaPage() {
     e.stopPropagation()
     setImageToDelete(image)
     setIsDeleteDialogOpen(true)
+  }
+
+  const handleDetailsClick = (e: React.MouseEvent, image: MediaImage) => {
+    e.stopPropagation()
+    setImageDetails(image)
+    setIsDetailsDialogOpen(true)
+  }
+
+  const formatFileSize = (bytes: number | null | undefined): string => {
+    if (!bytes) return 'Unknown'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
   }
 
   // Delete image mutation - deletes ALL links for this image and the file from storage
@@ -403,6 +445,82 @@ export default function MediaPage() {
     }
   }
 
+  // Handle checkbox selection
+  const handleImageSelect = (e: React.MouseEvent, imageId: string) => {
+    e.stopPropagation()
+    setSelectedImages(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(imageId)) {
+        newSet.delete(imageId)
+      } else {
+        newSet.add(imageId)
+      }
+      return newSet
+    })
+  }
+
+  // Handle select/deselect all
+  const handleToggleSelectAll = () => {
+    if (selectedImages.size === images.length) {
+      setSelectedImages(new Set())
+    } else {
+      setSelectedImages(new Set(images.map(img => img.id)))
+    }
+  }
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (imageUrls: string[]) => {
+      const response = await fetch('/api/assets/media/bulk-delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageUrls }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to delete images')
+      }
+
+      return response.json()
+    },
+    onSuccess: async (data) => {
+      const deletedCount = data.deletedCount || 0
+      const deletedLinks = data.deletedLinks || 0
+      if (deletedLinks > 0) {
+        toast.success(`Deleted ${deletedCount} image(s) and removed ${deletedLinks} link(s)`)
+      } else {
+        toast.success(`Deleted ${deletedCount} image(s)`)
+      }
+      setIsBulkDeleteDialogOpen(false)
+      setSelectedImages(new Set())
+      // Invalidate media query to refresh the list
+      await queryClient.invalidateQueries({ queryKey: ['assets', 'media'] })
+      await refetch()
+      // Also invalidate assets query to update image counts
+      await queryClient.invalidateQueries({ queryKey: ['assets'] })
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to delete images')
+      setIsBulkDeleteDialogOpen(false)
+    },
+  })
+
+  const handleBulkDelete = () => {
+    const selectedImageUrls = images
+      .filter(img => selectedImages.has(img.id))
+      .map(img => img.imageUrl)
+    
+    if (selectedImageUrls.length === 0) {
+      toast.error('No images selected')
+      return
+    }
+
+    bulkDeleteMutation.mutate(selectedImageUrls)
+  }
+
   // Combined loading state
   const isLoadingData = permissionsLoading || isLoading
 
@@ -436,17 +554,79 @@ export default function MediaPage() {
 
   const images = data?.images || []
   const pagination = data?.pagination
+  const storage = data?.storage
+
+  // Calculate storage usage percentage
+  const storageUsed = storage?.used || 0
+  const storageLimit = storage?.limit || 5 * 1024 * 1024 // 5MB default
+  const storagePercentage = storageLimit > 0 ? (storageUsed / storageLimit) * 100 : 0
+
+  // Clear selections when images change (e.g., after delete)
+  // Use a ref to track previous image IDs to avoid infinite loops
+  const prevImageIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const currentImageIds = new Set(images.map(img => img.id))
+    const prevImageIds = prevImageIdsRef.current
+    
+    // Only update if image IDs actually changed
+    const idsChanged = 
+      currentImageIds.size !== prevImageIds.size ||
+      Array.from(currentImageIds).some(id => !prevImageIds.has(id)) ||
+      Array.from(prevImageIds).some(id => !currentImageIds.has(id))
+    
+    if (idsChanged) {
+      // Remove selections for images that no longer exist
+      setSelectedImages(prev => {
+        return new Set(Array.from(prev).filter(id => currentImageIds.has(id)))
+      })
+      prevImageIdsRef.current = currentImageIds
+    }
+  }, [images])
 
   return (
     <>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Media</h1>
-          <p className="text-muted-foreground mt-1">
-            {pagination ? `Total: ${pagination.total} images` : 'Loading...'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="mb-6 space-y-4">
+        {/* Header Section */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Media</h1>
+            <p className="text-muted-foreground mt-1">
+              {pagination ? `Total: ${pagination.total} images` : 'Loading...'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+          {selectedImages.size > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                if (!canManageMedia) {
+                  toast.error('You do not have permission to delete images')
+                  return
+                }
+                setIsBulkDeleteDialogOpen(true)
+              }}
+              title={`Delete ${selectedImages.size} image(s)`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+          {images.length > 0 && selectedImages.size > 0 && (
+            <div className="flex items-center gap-2 px-2">
+              <Checkbox
+                id="select-all-media"
+                checked={selectedImages.size === images.length && images.length > 0}
+                onCheckedChange={handleToggleSelectAll}
+                disabled={images.length === 0}
+                title={selectedImages.size === images.length && images.length > 0
+                  ? 'Deselect All'
+                  : 'Select All'}
+              />
+              <span className="text-sm text-muted-foreground">
+                {selectedImages.size}
+              </span>
+            </div>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -458,47 +638,107 @@ export default function MediaPage() {
           />
           <Button
             variant="outline"
-            onClick={() => {
-              if (!canManageMedia) {
-                toast.error('You do not have permission to take actions')
-                return
-              }
-              if (isUploading) {
-                return
-              }
-              fileInputRef.current?.click()
-            }}
-            disabled={isUploading}
-          >
-            <Upload className={`h-4 w-4 mr-2 ${isUploading ? 'animate-pulse' : ''}`} />
-            {isUploading ? `Uploading... ${Math.round(uploadProgress)}%` : 'Upload Images'}
-          </Button>
-          <Button
-            variant="outline"
+            size="sm"
             onClick={handleRefresh}
             disabled={isLoadingData}
           >
             <RotateCw className={`h-4 w-4 mr-2 ${isLoadingData ? 'animate-spin' : ''}`} />
             Reload
           </Button>
-          <Select
-            value={gridColumns.toString()}
-            onValueChange={(value) => setGridColumns(parseInt(value, 10))}
-          >
-            <SelectTrigger className="w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="4">4 Columns</SelectItem>
-              <SelectItem value="5">5 Columns</SelectItem>
-              <SelectItem value="6">6 Columns</SelectItem>
-              <SelectItem value="7">7 Columns</SelectItem>
-              <SelectItem value="8">8 Columns</SelectItem>
-              <SelectItem value="9">9 Columns</SelectItem>
-              <SelectItem value="10">10 Columns</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select
+              value={gridColumns.toString()}
+              onValueChange={(value) => setGridColumns(parseInt(value, 10))}
+            >
+              <SelectTrigger className="w-[120px]" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="4">4 Columns</SelectItem>
+                <SelectItem value="5">5 Columns</SelectItem>
+                <SelectItem value="6">6 Columns</SelectItem>
+                <SelectItem value="7">7 Columns</SelectItem>
+                <SelectItem value="8">8 Columns</SelectItem>
+                <SelectItem value="9">9 Columns</SelectItem>
+                <SelectItem value="10">10 Columns</SelectItem>
+              </SelectContent>
+            </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (!canManageMedia) {
+                      toast.error('You do not have permission to take actions')
+                      return
+                    }
+                    if (isUploading) {
+                      return
+                    }
+                    fileInputRef.current?.click()
+                  }}
+                  disabled={isUploading}
+                >
+                  {isUploading ? `Uploading... ${Math.round(uploadProgress)}%` : 'Upload Images'}
+                </DropdownMenuItem>
+                {images.length > 0 && (
+                  <DropdownMenuItem onClick={handleToggleSelectAll}>
+                    {selectedImages.size === images.length && images.length > 0
+                      ? 'Deselect All'
+                      : 'Select All'}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+
+        {/* Storage Usage Card */}
+        {storage && (
+          <div className="p-5 border rounded-lg bg-gradient-to-br from-muted/50 to-muted/30 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="text-sm font-semibold">Storage Usage</span>
+              </div>
+              <span className="text-sm font-medium text-muted-foreground">
+                {formatFileSize(storageUsed)} / {formatFileSize(storageLimit)}
+              </span>
+            </div>
+            <div className="space-y-2">
+              <div className="relative h-3 w-full overflow-hidden rounded-full bg-primary/20">
+                <div
+                  className={`h-full transition-all ${
+                    storagePercentage >= 90
+                      ? 'bg-destructive'
+                      : storagePercentage >= 70
+                        ? 'bg-amber-500'
+                        : 'bg-primary'
+                  }`}
+                  style={{ width: `${Math.min(storagePercentage, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  {storagePercentage.toFixed(1)}% used
+                </span>
+                {storageUsed >= storageLimit ? (
+                  <span className="text-xs font-medium text-destructive flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                    Storage limit reached
+                  </span>
+                ) : storagePercentage >= 90 ? (
+                  <span className="text-xs font-medium text-amber-600 flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    Storage almost full
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {isLoadingData ? (
@@ -521,9 +761,47 @@ export default function MediaPage() {
             {images.map((image) => (
               <div
                 key={image.id}
-                className="relative group aspect-square rounded-lg overflow-hidden border cursor-pointer hover:opacity-90 transition-opacity"
+                className={`relative group aspect-square rounded-lg overflow-hidden border cursor-pointer hover:opacity-90 transition-all ${
+                  selectedImages.has(image.id)
+                    ? 'border-primary'
+                    : ''
+                }`}
                 onClick={() => handleImageClick(image)}
               >
+                {/* Checkbox */}
+                {canManageMedia && (
+                  <div 
+                    className={`absolute top-2 left-2 z-20 transition-opacity ${
+                      selectedImages.has(image.id)
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                    onClick={(e) => handleImageSelect(e, image.id)}
+                  >
+                    <div>
+                      <Checkbox
+                        checked={selectedImages.has(image.id)}
+                        onCheckedChange={() => {
+                          setSelectedImages(prev => {
+                            const newSet = new Set(prev)
+                            if (newSet.has(image.id)) {
+                              newSet.delete(image.id)
+                            } else {
+                              newSet.add(image.id)
+                            }
+                            return newSet
+                          })
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="border-white data-[state=checked]:bg-white data-[state=checked]:text-black cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
+                {/* Selection overlay */}
+                {selectedImages.has(image.id) && (
+                  <div className="absolute inset-0 bg-primary/20 border-2 border-primary rounded-lg pointer-events-none z-10" />
+                )}
                 <Image
                   src={image.imageUrl}
                   alt={`Asset ${image.assetTagId} image`}
@@ -532,14 +810,10 @@ export default function MediaPage() {
                   unoptimized
                 />
                 {/* Hover overlay */}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <div className="bg-white/90 rounded-full p-2">
-                    <Eye className="h-5 w-5 text-black" />
-                  </div>
-                </div>
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"/>
                 {/* Linked to Asset Indicator */}
                 {image.isLinked && (
-                  <div className="absolute top-0 left-0 z-10">
+                  <div className="absolute top-0 right-0 z-10">
                     {image.linkedAssetTagIds && image.linkedAssetTagIds.length > 1 ? (
                       // Multiple assets - show dropdown
                       <DropdownMenu>
@@ -553,7 +827,7 @@ export default function MediaPage() {
                             <ChevronDown className="h-2 w-2" />
                           </div>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                           <div className="max-h-60 overflow-y-auto">
                             {image.linkedAssetsInfo?.map((assetInfo) => (
                               <DropdownMenuItem
@@ -615,15 +889,19 @@ export default function MediaPage() {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
-                          variant="secondary"
+                          variant="ghost"
                           size="icon"
-                          className="h-8 w-8 bg-black/50 hover:bg-black/70 border-0"
+                          className="h-8 w-8 hover:!bg-transparent"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <MoreVertical className="h-4 w-4 text-white" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem onClick={(e) => handleDetailsClick(e, image)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          Details
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
                           onClick={(e) => handleDeleteClick(e, image)}
@@ -724,36 +1002,119 @@ export default function MediaPage() {
             affectedAssets={imageToDelete?.linkedAssetsInfo || undefined}
           />
 
+          {/* Bulk Delete Confirmation Dialog */}
+          <BulkDeleteDialog
+            open={isBulkDeleteDialogOpen}
+            onOpenChange={setIsBulkDeleteDialogOpen}
+            onConfirm={handleBulkDelete}
+            itemCount={selectedImages.size}
+            itemName="image"
+            isDeleting={bulkDeleteMutation.isPending}
+          />
+
           {/* Image Preview Dialog */}
-          <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-            <DialogContent className="max-w-4xl max-h-[90vh]">
+          <ImagePreviewDialog
+            open={isPreviewOpen}
+            onOpenChange={setIsPreviewOpen}
+            image={previewImage ? {
+              imageUrl: previewImage.imageUrl,
+              fileName: previewImage.fileName,
+              assetTagId: previewImage.assetTagId,
+              linkedAssetTagIds: previewImage.linkedAssetTagIds,
+              linkedAssetTagId: previewImage.linkedAssetTagId,
+              createdAt: previewImage.createdAt,
+              alt: `Asset ${previewImage.assetTagId} image`,
+            } : null}
+          />
+
+          {/* Image Details Dialog */}
+          <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>
-                  <div className="space-y-1">
-                    <div>{previewImage?.fileName || previewImage?.assetTagId}</div>
-                    {previewImage?.assetTagId && previewImage.fileName !== previewImage.assetTagId && (
-                      <div className="text-sm text-muted-foreground font-normal">
-                        Asset: {previewImage.assetTagId}
-                      </div>
-                    )}
-                    {previewImage?.createdAt && (
-                      <div className="text-sm text-muted-foreground font-normal">
-                        {format(new Date(previewImage.createdAt), 'PPp')}
-                      </div>
-                    )}
-                  </div>
-                </DialogTitle>
+                <DialogTitle>Image Details</DialogTitle>
               </DialogHeader>
-              {previewImage && (
-                <div className="flex items-center justify-center mt-4">
-                  <div className="relative w-full h-[70vh] max-h-[600px]">
-                    <Image
-                      src={previewImage.imageUrl}
-                      alt={`Asset ${previewImage.assetTagId} image`}
-                      fill
-                      className="object-contain"
-                      unoptimized
-                    />
+              {imageDetails && (
+                <div className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">File Name</div>
+                    <div className="text-sm text-muted-foreground break-all">
+                      {imageDetails.fileName || 'N/A'}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">URL</div>
+                    <div className="text-sm text-muted-foreground break-all">
+                      <a
+                        href={imageDetails.imageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {imageDetails.imageUrl}
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Type</div>
+                      <div className="text-sm text-muted-foreground">
+                        {imageDetails.imageType || 'Unknown'}
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Size</div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatFileSize(imageDetails.imageSize)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">Created At</div>
+                    <div className="text-sm text-muted-foreground">
+                      {imageDetails.createdAt
+                        ? format(new Date(imageDetails.createdAt), 'PPp')
+                        : 'Unknown'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">
+                      Linked Asset{imageDetails.linkedAssetTagIds && imageDetails.linkedAssetTagIds.length > 1 ? 's' : ''}
+                    </div>
+                    {imageDetails.linkedAssetTagIds && imageDetails.linkedAssetTagIds.length > 0 ? (
+                      <div className="space-y-1">
+                        {imageDetails.linkedAssetsInfo?.map((assetInfo) => (
+                          <div
+                            key={assetInfo.assetTagId}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            <button
+                              onClick={() => {
+                                if (assetInfo.isDeleted) {
+                                  router.push(`/tools/trash?search=${encodeURIComponent(assetInfo.assetTagId)}`)
+                                } else {
+                                  router.push(`/assets?search=${encodeURIComponent(assetInfo.assetTagId)}`)
+                                }
+                                setIsDetailsDialogOpen(false)
+                              }}
+                              className="text-primary hover:underline"
+                            >
+                              {assetInfo.assetTagId}
+                            </button>
+                            {assetInfo.isDeleted && (
+                              <span className="text-xs text-muted-foreground">(Archived)</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Not linked to any asset</div>
+                    )}
                   </div>
                 </div>
               )}

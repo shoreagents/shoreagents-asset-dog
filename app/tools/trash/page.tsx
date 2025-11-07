@@ -239,11 +239,19 @@ export default function TrashPage() {
   })
 
   const handleRestore = (asset: DeletedAsset) => {
+    if (!canManageTrash) {
+      toast.error('You do not have permission to restore assets')
+      return
+    }
     setSelectedAsset(asset)
     setIsRestoreDialogOpen(true)
   }
 
   const handleDelete = (asset: DeletedAsset) => {
+    if (!canManageTrash) {
+      toast.error('You do not have permission to permanently delete assets')
+      return
+    }
     setSelectedAsset(asset)
     setIsDeleteDialogOpen(true)
   }
@@ -386,7 +394,7 @@ export default function TrashPage() {
                       <TableHead>Location</TableHead>
                       <TableHead>Deleted Date</TableHead>
                       <TableHead>Days Left</TableHead>
-                      <TableHead className={cn("text-center sticky right-0 bg-card z-10 shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]")}>Actions</TableHead>
+                      <TableHead className={cn("text-center sticky right-0 bg-card z-10 ")}>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -422,25 +430,18 @@ export default function TrashPage() {
                               </Badge>
                             )}
                           </TableCell>
-                          <TableCell className={cn("sticky right-0 bg-card z-10 shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]")}>
+                          <TableCell className={cn("sticky right-0 bg-card z-10 ")}>
                             <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button 
                                     variant="ghost" 
                                     className="h-8 w-8 p-0"
-                                    onClick={(e) => {
-                                      if (!canManageTrash) {
-                                        e.preventDefault()
-                                        toast.error('You do not have permission to take actions')
-                                      }
-                                    }}
                                   >
                                     <span className="sr-only">Open menu</span>
                                     <MoreHorizontal className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
-                                {canManageTrash && (
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem
                                     onClick={() => handleRestore(asset)}
@@ -457,7 +458,6 @@ export default function TrashPage() {
                                     Delete Permanently
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
-                                )}
                               </DropdownMenu>
                             </div>
                           </TableCell>

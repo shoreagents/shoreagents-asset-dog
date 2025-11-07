@@ -285,20 +285,13 @@ const createColumns = (
               <Button 
                 variant="ghost" 
                 className="h-8 w-8 p-0"
-                onClick={(e) => {
-                  if (!canManageEmployees) {
-                    e.preventDefault()
-                    toast.error('You do not have permission to take actions')
-                  }
-                }}
               >
                 <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            {canManageEmployees && (
             <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onEdit(employee)}>
+              <DropdownMenuItem onClick={() => onEdit(employee)}>
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
@@ -311,7 +304,6 @@ const createColumns = (
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
-            )}
           </DropdownMenu>
         </div>
       )
@@ -504,10 +496,14 @@ export default function EmployeesPage() {
   }
 
   const handleEdit = useCallback((employee: Employee) => {
+    if (!canManageEmployees) {
+      toast.error('You do not have permission to edit employees')
+      return
+    }
     setSelectedEmployee(employee)
     setFormData({ name: employee.name, email: employee.email, department: employee.department || '' })
     setIsEditDialogOpen(true)
-  }, [])
+  }, [canManageEmployees])
 
   const handleUpdate = () => {
     if (!canManageEmployees) {
@@ -529,9 +525,13 @@ export default function EmployeesPage() {
   }
 
   const handleDelete = useCallback((employee: Employee) => {
+    if (!canManageEmployees) {
+      toast.error('You do not have permission to delete employees')
+      return
+    }
     setSelectedEmployee(employee)
     setIsDeleteDialogOpen(true)
-  }, [])
+  }, [canManageEmployees])
 
   const handleViewCheckouts = useCallback((employee: Employee) => {
     setSelectedEmployee(employee)

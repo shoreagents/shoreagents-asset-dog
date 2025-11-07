@@ -47,6 +47,7 @@ export async function GET() {
           canAudit: true,
           canManageMedia: true,
           canManageTrash: true,
+          canManageUsers: true,
         },
       })
 

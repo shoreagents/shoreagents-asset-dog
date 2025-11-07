@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { createAdminSupabaseClient } from '@/lib/supabase-server'
-import { requireAdmin } from '@/lib/permission-utils'
+import { requirePermission } from '@/lib/permission-utils'
 
 export async function GET(
   request: NextRequest,
@@ -11,9 +11,9 @@ export async function GET(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  // Only admins can view users
-  const adminCheck = await requireAdmin()
-  if (!adminCheck.allowed) return adminCheck.error
+  // Only users with canManageUsers permission can view users
+  const permissionCheck = await requirePermission('canManageUsers')
+  if (!permissionCheck.allowed) return permissionCheck.error
 
   try {
     const { id } = await params
@@ -48,9 +48,9 @@ export async function PUT(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  // Only admins can update users
-  const adminCheck = await requireAdmin()
-  if (!adminCheck.allowed) return adminCheck.error
+  // Only users with canManageUsers permission can update users
+  const permissionCheck = await requirePermission('canManageUsers')
+  if (!permissionCheck.allowed) return permissionCheck.error
 
   try {
     const { id } = await params
@@ -84,31 +84,16 @@ export async function PUT(
       )
     }
 
-    // Get current authenticated user's asset_users record
-    const currentUser = await prisma.assetUser.findUnique({
-      where: { userId: auth.user.id },
-      select: { role: true },
-    })
-
-    // Prevent admin from changing their own role from admin to user
-    if (
-      currentUser?.role === 'admin' &&
-      userToUpdate.userId === auth.user.id &&
-      userToUpdate.role === 'admin' &&
-      role === 'user'
-    ) {
+    // Prevent user from changing their own role
+    if (userToUpdate.userId === auth.user.id && userToUpdate.role !== role) {
       return NextResponse.json(
-        { error: 'You cannot change your own role from admin to user' },
+        { error: 'You cannot change your own role' },
         { status: 403 }
       )
     }
 
-    // Prevent admin from setting their own status to inactive
-    if (
-      currentUser?.role === 'admin' &&
-      userToUpdate.userId === auth.user.id &&
-      isActive === false
-    ) {
+    // Prevent user from setting their own status to inactive
+    if (userToUpdate.userId === auth.user.id && isActive === false) {
       return NextResponse.json(
         { error: 'You cannot set your own status to inactive' },
         { status: 403 }
@@ -141,6 +126,7 @@ export async function PUT(
       updateData.canAudit = permissions.canAudit !== undefined ? permissions.canAudit : false
       updateData.canManageMedia = permissions.canManageMedia !== undefined ? permissions.canManageMedia : true
       updateData.canManageTrash = permissions.canManageTrash !== undefined ? permissions.canManageTrash : true
+      updateData.canManageUsers = permissions.canManageUsers !== undefined ? permissions.canManageUsers : false
     }
 
     const user = await prisma.assetUser.update({
@@ -177,9 +163,9 @@ export async function DELETE(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  // Only admins can delete users
-  const adminCheck = await requireAdmin()
-  if (!adminCheck.allowed) return adminCheck.error
+  // Only users with canManageUsers permission can delete users
+  const permissionCheck = await requirePermission('canManageUsers')
+  if (!permissionCheck.allowed) return permissionCheck.error
 
   try {
     const { id } = await params
@@ -197,14 +183,8 @@ export async function DELETE(
       )
     }
 
-    // Get current authenticated user's asset_users record
-    const currentUser = await prisma.assetUser.findUnique({
-      where: { userId: auth.user.id },
-      select: { role: true },
-    })
-
-    // Prevent admin from deleting their own account
-    if (currentUser?.role === 'admin' && userToDelete.userId === auth.user.id) {
+    // Prevent user from deleting their own account
+    if (userToDelete.userId === auth.user.id) {
       return NextResponse.json(
         { error: 'You cannot delete your own account' },
         { status: 403 }

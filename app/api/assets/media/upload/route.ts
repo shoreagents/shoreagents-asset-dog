@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-server'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
+import { prisma } from '@/lib/prisma'
 
 // Clear the media files cache after upload
 declare global {
@@ -52,25 +53,99 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024 // 5MB
-    if (file.size > maxSize) {
+    // Validate file size (max 5MB per file)
+    const maxFileSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxFileSize) {
       return NextResponse.json(
         { error: 'File size too large. Maximum size is 5MB.' },
         { status: 400 }
       )
     }
 
-    // Create Supabase admin client for storage operations
-    let supabaseAdmin
+    // Check storage limit (5MB total - temporary)
+    const storageLimit = 5 * 1024 * 1024 // 5MB limit
+    
+    // Calculate current storage used directly from storage and database
+    // This avoids making an authenticated HTTP request
+    let supabaseAdmin = createAdminSupabaseClient()
+    
     try {
-      supabaseAdmin = createAdminSupabaseClient()
-    } catch (clientError) {
-      console.error('Failed to create Supabase admin client:', clientError)
-      return NextResponse.json(
-        { error: 'Storage service unavailable' },
-        { status: 503 }
-      )
+      // List all files from storage to calculate total size
+      const listAllFiles = async (bucket: string, folder: string = ''): Promise<Array<{
+        metadata?: { size?: number }
+        path: string
+      }>> => {
+        const allFiles: Array<{ metadata?: { size?: number }; path: string }> = []
+        const { data, error } = await supabaseAdmin.storage
+          .from(bucket)
+          .list(folder, {
+            limit: 1000,
+          })
+
+        if (error || !data) return allFiles
+
+        for (const item of data) {
+          const itemPath = folder ? `${folder}/${item.name}` : item.name
+          const isFolder = item.id === null || item.id === undefined
+          
+          if (isFolder) {
+            const subFiles = await listAllFiles(bucket, itemPath)
+            allFiles.push(...subFiles)
+          } else {
+            allFiles.push({ 
+              metadata: item.metadata as { size?: number } | undefined,
+              path: itemPath
+            })
+          }
+        }
+
+        return allFiles
+      }
+
+      const assetsFiles = await listAllFiles('assets', '')
+      const fileHistoryFiles = await listAllFiles('file-history', 'assets')
+      
+      // Calculate storage from files
+      let currentStorageUsed = 0
+      const allFiles = [...assetsFiles, ...fileHistoryFiles]
+      
+      // Get sizes from storage metadata
+      allFiles.forEach((file) => {
+        if (file.metadata?.size) {
+          currentStorageUsed += file.metadata.size
+        }
+      })
+
+      // Also check database for images that might have size info
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dbImages = await (prisma as any).assetsImage.findMany({
+        select: {
+          imageUrl: true,
+          imageSize: true,
+        },
+      })
+
+      // Create a set of storage file sizes for quick lookup
+      const storageSizes = new Set(allFiles.map(f => f.metadata?.size).filter((s): s is number => s !== undefined))
+
+      // Add database sizes for images not already counted from storage
+      dbImages.forEach((img: { imageUrl: string; imageSize: number | null }) => {
+        if (img.imageSize && !storageSizes.has(img.imageSize)) {
+          currentStorageUsed += img.imageSize
+        }
+      })
+
+      if (currentStorageUsed + file.size > storageLimit) {
+        return NextResponse.json(
+          { 
+            error: `Storage limit exceeded. Current usage: ${(currentStorageUsed / (1024 * 1024)).toFixed(2)}MB / ${(storageLimit / (1024 * 1024)).toFixed(2)}MB` 
+          },
+          { status: 400 }
+        )
+      }
+    } catch (error) {
+      // If we can't check storage, allow upload but log warning
+      console.warn('Could not check storage limit:', error)
     }
 
     // Generate unique file path

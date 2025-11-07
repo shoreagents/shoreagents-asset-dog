@@ -47,6 +47,7 @@ import { Badge } from '@/components/ui/badge'
 import { MoreHorizontal, Trash2, Edit, Download, Upload, Search, Package, CheckCircle2, User, DollarSign, XIcon, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, UserPlus, Calendar, UserCircle, Clock, CheckCircle, Edit2, X, Image as ImageIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { ImagePreviewDialog } from '@/components/image-preview-dialog'
 import * as XLSX from 'xlsx'
 import {
   Pagination,
@@ -1466,18 +1467,41 @@ function AssetActions({ asset }: { asset: Asset }) {
     },
   })
 
-
-  const handleDelete = () => {
+  const confirmDelete = () => {
     deleteMutation.mutate(asset.id)
   }
 
+  const handleEdit = () => {
+    if (!hasPermission('canEditAssets')) {
+      toast.error('You do not have permission to edit assets')
+      return
+    }
+    setIsEditOpen(true)
+  }
 
-  // Check if user has any permissions for actions
-  const hasAnyActionPermission = 
-    hasPermission('canEditAssets') ||
-    hasPermission('canAudit') ||
-    hasPermission('canCheckout') ||
-    hasPermission('canDeleteAssets')
+  const handleAudit = () => {
+    if (!hasPermission('canAudit')) {
+      toast.error('You do not have permission to manage audits')
+      return
+    }
+    setIsAuditOpen(true)
+  }
+
+  const handleCheckout = () => {
+    if (!hasPermission('canCheckout')) {
+      toast.error('You do not have permission to manage checkouts')
+      return
+    }
+    setIsCheckoutOpen(true)
+  }
+
+  const handleDelete = () => {
+    if (!hasPermission('canDeleteAssets')) {
+      toast.error('You do not have permission to delete assets')
+      return
+    }
+    setIsDeleteOpen(true)
+  }
 
   return (
     <>
@@ -1486,50 +1510,32 @@ function AssetActions({ asset }: { asset: Asset }) {
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={(e) => {
-              if (!hasAnyActionPermission) {
-                e.preventDefault()
-                toast.error('You do not have permission to take actions')
-              }
-            }}
           >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        {hasAnyActionPermission ? (
         <DropdownMenuContent align="end">
-            {hasPermission('canEditAssets') && (
-          <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
+          <DropdownMenuItem onClick={handleEdit}>
             <Edit className="mr-2 h-4 w-4" />
             Edit
           </DropdownMenuItem>
-            )}
-            {hasPermission('canAudit') && (
-          <DropdownMenuItem onClick={() => setIsAuditOpen(true)}>
+          <DropdownMenuItem onClick={handleAudit}>
             <CheckCircle2 className="mr-2 h-4 w-4" />
             Manage Audits
           </DropdownMenuItem>
-            )}
-            {hasPermission('canCheckout') && (
-          <DropdownMenuItem onClick={() => setIsCheckoutOpen(true)}>
+          <DropdownMenuItem onClick={handleCheckout}>
             <ArrowRight className="mr-2 h-4 w-4" />
             Manage Checkouts
           </DropdownMenuItem>
-            )}
-            {(hasPermission('canEditAssets') || hasPermission('canAudit') || hasPermission('canCheckout')) && (
           <DropdownMenuSeparator />
-            )}
-            {hasPermission('canDeleteAssets') && (
           <DropdownMenuItem
-            onClick={() => setIsDeleteOpen(true)}
+            onClick={handleDelete}
             variant="destructive"
           >
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
           </DropdownMenuItem>
-            )}
         </DropdownMenuContent>
-        ) : null}
       </DropdownMenu>
 
       {/* Edit Dialog */}
@@ -1544,32 +1550,21 @@ function AssetActions({ asset }: { asset: Asset }) {
       />
 
       {/* Image Preview Dialog */}
-      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Image Preview</DialogTitle>
-          </DialogHeader>
-          {previewImageUrl && (
-            <div className="flex items-center justify-center">
-              <div className="relative w-full h-[70vh] max-h-[600px]">
-                                <Image
-                  src={previewImageUrl}
-                  alt="Preview"
-                                  fill
-                  className="object-contain"
-                                  unoptimized
-                                />
-                              </div>
-                      </div>
-                    )}
-        </DialogContent>
-      </Dialog>
+      <ImagePreviewDialog
+        open={isPreviewDialogOpen}
+        onOpenChange={setIsPreviewDialogOpen}
+        image={previewImageUrl ? {
+          imageUrl: previewImageUrl,
+          alt: 'Image Preview',
+        } : null}
+        maxHeight="h-[70vh] max-h-[600px]"
+      />
 
       {/* Delete Dialog */}
       <DeleteConfirmationDialog
         open={isDeleteOpen}
         onOpenChange={setIsDeleteOpen}
-        onConfirm={handleDelete}
+        onConfirm={confirmDelete}
         itemName={asset.assetTagId}
         isLoading={deleteMutation.isPending}
         title={`Delete ${asset.assetTagId}?`}
@@ -2594,6 +2589,13 @@ export default function AssetsPage() {
     const file = event.target.files?.[0]
     if (!file) return
     
+    if (!hasPermission('canManageImport')) {
+      toast.error('You do not have permission to import assets')
+      // Reset the input
+      event.target.value = ''
+      return
+    }
+    
     try {
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data)
@@ -2990,13 +2992,18 @@ export default function AssetsPage() {
             Manage and track all your assets in one place
           </p>
         </div>
-        {hasPermission('canCreateAssets') && (
         <Link href="/assets/add">
-          <Button>
+          <Button
+            onClick={(e) => {
+              if (!hasPermission('canCreateAssets')) {
+                e.preventDefault()
+                toast.error('You do not have permission to create assets')
+              }
+            }}
+          >
             Add Asset
           </Button>
         </Link>
-        )}
       </div>
 
       {/* Summary Cards */}
@@ -3113,9 +3120,14 @@ export default function AssetsPage() {
               </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2 justify-end">
-              {hasPermission('canManageExport') && (
               <Button
-                onClick={() => setIsExportDialogOpen(true)}
+                onClick={() => {
+                  if (!hasPermission('canManageExport')) {
+                    toast.error('You do not have permission to export assets')
+                    return
+                  }
+                  setIsExportDialogOpen(true)
+                }}
                 variant="outline"
                 size="sm"
                 className="flex-1 sm:flex-initial"
@@ -3123,30 +3135,39 @@ export default function AssetsPage() {
                 <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>
-              )}
-              {hasPermission('canManageImport') && (
-                <>
-              <Button
-                onClick={() => document.getElementById('import-file')?.click()}
-                variant="outline"
-                size="sm"
-                className="flex-1 sm:flex-initial"
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Import
-              </Button>
-              <input
-                id="import-file"
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={handleImport}
-              />
-                </>
-              )}
-              {selectedAssets.size > 0 && hasPermission('canDeleteAssets') && (
+              <>
                 <Button
-                  onClick={handleBulkDeleteClick}
+                  onClick={() => {
+                    if (!hasPermission('canManageImport')) {
+                      toast.error('You do not have permission to import assets')
+                      return
+                    }
+                    document.getElementById('import-file')?.click()
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import
+                </Button>
+                <input
+                  id="import-file"
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={handleImport}
+                />
+              </>
+              {selectedAssets.size > 0 && (
+                <Button
+                  onClick={() => {
+                    if (!hasPermission('canDeleteAssets')) {
+                      toast.error('You do not have permission to delete assets')
+                      return
+                    }
+                    handleBulkDeleteClick()
+                  }}
                   variant="destructive"
                   size="sm"
                   className="flex-1 sm:flex-initial"

@@ -406,6 +406,8 @@ export function EditAssetDialog({
           if (updatedAssetTagId !== asset.assetTagId) {
             await queryClient.invalidateQueries({ queryKey: ['assets', 'images', asset.assetTagId] })
           }
+          // Invalidate media query so new images appear in media page
+          await queryClient.invalidateQueries({ queryKey: ['assets', 'media'] })
           await refetchExistingImages()
           onOpenChange(false)
           await queryClient.refetchQueries({ queryKey: ['assets'] })

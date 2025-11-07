@@ -485,6 +485,10 @@ export default function MaintenancePage() {
     dateCompleted?: string | null
     dateCancelled?: string | null
   }) => {
+    if (!canManageMaintenance) {
+      toast.error('You do not have permission to take actions')
+      return
+    }
     setEditingMaintenance(maintenance)
     setEditStatus(maintenance.status as MaintenanceStatus)
     setEditDateCompleted(maintenance.dateCompleted ? new Date(maintenance.dateCompleted).toISOString().split('T')[0] : "")
@@ -723,7 +727,6 @@ export default function MaintenancePage() {
                           {getTimeAgo(maintenance.createdAt)}
                         </TableCell>
                         <TableCell className="py-1.5 text-right">
-                          {canManageMaintenance ? (
                           <Button
                             type="button"
                             variant="ghost"
@@ -738,9 +741,6 @@ export default function MaintenancePage() {
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
-                          ) : (
-                            <div className="text-xs text-muted-foreground">View only</div>
-                          )}
                         </TableCell>
                       </TableRow>
                     ))}

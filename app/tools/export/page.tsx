@@ -579,7 +579,7 @@ export default function ExportPage() {
                       <TableHead>Status</TableHead>
                       <TableHead>Exported By</TableHead>
                       <TableHead>Date</TableHead>
-                      <TableHead className={cn("text-right sticky right-0 bg-card z-10 shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]")}>Actions</TableHead>
+                      <TableHead className={cn("text-right sticky right-0 bg-card z-10")}>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -613,7 +613,7 @@ export default function ExportPage() {
                         <TableCell className="text-muted-foreground">
                           {format(new Date(history.createdAt), 'MMM dd, yyyy HH:mm')}
                         </TableCell>
-                        <TableCell className={cn("text-right sticky right-0 bg-card z-10 shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]")}>
+                        <TableCell className={cn("text-right sticky right-0 bg-card z-10")}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

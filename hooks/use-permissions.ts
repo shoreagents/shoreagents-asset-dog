@@ -20,6 +20,7 @@ interface UserPermissions {
   canAudit: boolean
   canManageMedia: boolean
   canManageTrash: boolean
+  canManageUsers: boolean
 }
 
 export function usePermissions() {

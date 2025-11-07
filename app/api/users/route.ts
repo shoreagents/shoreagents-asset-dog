@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { createAdminSupabaseClient } from '@/lib/supabase-server'
-import { requireAdmin } from '@/lib/permission-utils'
+import { requirePermission } from '@/lib/permission-utils'
 import { Prisma } from '@prisma/client'
 
 export async function GET(request: NextRequest) {
@@ -100,9 +100,9 @@ export async function POST(request: NextRequest) {
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  // Only admins can create users
-  const adminCheck = await requireAdmin()
-  if (!adminCheck.allowed) return adminCheck.error
+  // Only users with canManageUsers permission can create users
+  const permissionCheck = await requirePermission('canManageUsers')
+  if (!permissionCheck.allowed) return permissionCheck.error
 
   try {
     const body = await request.json()
@@ -193,6 +193,7 @@ export async function POST(request: NextRequest) {
       canAudit: permissions?.canAudit ?? false,
       canManageMedia: permissions?.canManageMedia ?? true,
       canManageTrash: permissions?.canManageTrash ?? true,
+      canManageUsers: permissions?.canManageUsers ?? false,
     } : {}
 
     // Create asset_users record

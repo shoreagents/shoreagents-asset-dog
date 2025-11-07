@@ -76,6 +76,8 @@ model AssetsImage {
   id          String   @id @default(uuid())
   assetTagId String   @map("asset_tag_id") @db.VarChar(100)
   imageUrl    String   @map("image_url") @db.VarChar(500)
+  imageType   String?  @map("image_type") @db.VarChar(50)
+  imageSize   Int?     @map("image_size")
   
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -364,6 +366,7 @@ model AssetUser {
   canAudit          Boolean   @map("can_audit") @default(false)
   canManageMedia    Boolean   @map("can_manage_media") @default(true)
   canManageTrash    Boolean   @map("can_manage_trash") @default(true)
+  canManageUsers    Boolean   @map("can_manage_users") @default(false)
   
   isActive          Boolean   @map("is_active") @default(true)
   

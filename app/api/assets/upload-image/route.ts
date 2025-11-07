@@ -75,13 +75,60 @@ export async function POST(request: NextRequest) {
 
     // If linking existing image, just create the database record
     if (linkExisting && imageUrl) {
+      // Extract image type from URL if possible
+      const urlExtension = imageUrl.split('.').pop()?.split('?')[0]?.toLowerCase() || null
+      const imageType = urlExtension ? `image/${urlExtension === 'jpg' ? 'jpeg' : urlExtension}` : null
+      
+      // Try to get file size from Supabase Storage
+      let imageSize: number | null = null
+      try {
+        // Create Supabase admin client for storage operations
+        const supabaseAdmin = createAdminSupabaseClient()
+        
+        // Extract bucket and path from URL
+        // URL format: https://[project].supabase.co/storage/v1/object/public/[bucket]/[path]
+        const urlMatch = imageUrl.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)/)
+        if (urlMatch) {
+          const bucket = urlMatch[1]
+          const fullPath = urlMatch[2]
+          const pathParts = fullPath.split('/')
+          const fileName = pathParts[pathParts.length - 1]
+          const folderPath = pathParts.slice(0, -1).join('/')
+          
+          // List files in the folder to find the matching file
+          const { data: fileData, error: listError } = await supabaseAdmin.storage
+            .from(bucket)
+            .list(folderPath || '', {
+              limit: 1000,
+            })
+          
+          if (!listError && fileData && fileData.length > 0) {
+            const file = fileData.find(f => f.name === fileName)
+            if (file && file.metadata?.size) {
+              imageSize = file.metadata.size
+            }
+          }
+        }
+      } catch (error) {
+        // If we can't get size from storage, that's okay - just log it
+        console.warn('Could not fetch file size from storage for linked image:', error)
+      }
+      
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const imageRecord = await (prisma as any).assetsImage.create({
         data: {
           assetTagId: assetTagId,
           imageUrl: imageUrl,
+          imageType: imageType,
+          imageSize: imageSize,
         },
       })
+
+      // Clear media files cache so new images appear immediately
+      if (typeof globalThis !== 'undefined') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(globalThis as any).mediaFilesCache = undefined
+      }
 
       return NextResponse.json({
         id: imageRecord.id,
@@ -206,8 +253,16 @@ export async function POST(request: NextRequest) {
       data: {
         assetTagId: assetTagId,
         imageUrl: publicUrl,
+        imageType: file.type,
+        imageSize: file.size,
       },
     })
+
+    // Clear media files cache so new images appear immediately
+    if (typeof globalThis !== 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).mediaFilesCache = undefined
+    }
 
     return NextResponse.json({
       id: imageRecord.id,

@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { usePermissions } from '@/hooks/use-permissions'
 import {
   useReactTable,
   getCoreRowModel,
@@ -78,6 +79,7 @@ interface AssetUser {
   canAudit: boolean
   canManageMedia: boolean
   canManageTrash: boolean
+  canManageUsers: boolean
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -111,6 +113,7 @@ interface UserPermissions {
   canAudit: boolean
   canManageMedia: boolean
   canManageTrash: boolean
+  canManageUsers: boolean
 }
 
 async function fetchUsers(search?: string, role?: string, page: number = 1, pageSize: number = 100): Promise<{ users: AssetUser[], pagination: PaginationInfo }> {
@@ -213,7 +216,7 @@ const createColumns = (
   onEdit: (user: AssetUser) => void,
   onDelete: (user: AssetUser) => void,
   onApprove: (user: AssetUser) => void,
-  isAdmin: boolean
+  canManageUsers: boolean
 ): ColumnDef<AssetUser>[] => [
   {
     accessorKey: 'userId',
@@ -352,7 +355,7 @@ const createColumns = (
         <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0" disabled={!isAdmin}>
+              <Button variant="ghost" className="h-8 w-8 p-0">
                 <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -360,14 +363,14 @@ const createColumns = (
             <DropdownMenuContent align="end">
               {isPendingApproval(user) && (
                 <>
-                  <DropdownMenuItem onClick={() => onApprove(user)} disabled={!isAdmin}>
+                  <DropdownMenuItem onClick={() => onApprove(user)}>
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Approve Account
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                 </>
               )}
-              <DropdownMenuItem onClick={() => onEdit(user)} disabled={!isAdmin}>
+              <DropdownMenuItem onClick={() => onEdit(user)}>
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
@@ -375,7 +378,6 @@ const createColumns = (
               <DropdownMenuItem
                 onClick={() => onDelete(user)}
                 className="text-red-600"
-                disabled={!isAdmin}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
@@ -391,6 +393,8 @@ const createColumns = (
 export default function UsersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { hasPermission, isLoading: permissionsLoading, permissions } = usePermissions()
+  const canManageUsers = hasPermission('canManageUsers')
   
   const [sorting, setSorting] = useState<SortingState>([])
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -399,17 +403,15 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<AssetUser | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [copiedPassword, setCopiedPassword] = useState(false)
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   
-  // Fetch current user role and ID
+  // Fetch current user ID
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
         const response = await fetch('/api/auth/me')
         if (response.ok) {
           const data = await response.json()
-          setCurrentUserRole(data.role || null)
           setCurrentUserId(data.user?.id || null)
         }
       } catch (error) {
@@ -419,9 +421,8 @@ export default function UsersPage() {
     fetchCurrentUser()
   }, [])
   
-  const isAdmin = currentUserRole === 'admin'
-  const isEditingSelf = selectedUser && currentUserId && selectedUser.userId === currentUserId
-  const isEditingSelfAdmin = Boolean(isEditingSelf && currentUserRole === 'admin')
+  const isEditingSelf = Boolean(selectedUser && currentUserId && selectedUser.userId === currentUserId)
+  const isEditingSelfWithPermission = Boolean(isEditingSelf && canManageUsers)
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -446,6 +447,7 @@ export default function UsersPage() {
       canAudit: false,
       canManageMedia: true,
       canManageTrash: true,
+      canManageUsers: false,
     },
   })
   const queryClient = useQueryClient()
@@ -598,6 +600,7 @@ export default function UsersPage() {
           canAudit: false,
           canManageMedia: true,
           canManageTrash: true,
+          canManageUsers: false,
         },
       })
       if (data.generatedPassword) {
@@ -647,6 +650,7 @@ export default function UsersPage() {
           canAudit: false,
           canManageMedia: true,
           canManageTrash: true,
+          canManageUsers: false,
         },
       })
       if (wasApproving && variables.data.isActive) {
@@ -674,6 +678,10 @@ export default function UsersPage() {
   })
 
   const handleCreate = () => {
+    if (!canManageUsers) {
+      toast.error('You do not have permission to create users')
+      return
+    }
     if (!formData.email) {
       toast.error('Email is required')
       return
@@ -691,6 +699,10 @@ export default function UsersPage() {
   }
 
   const handleEdit = useCallback((user: AssetUser) => {
+    if (!canManageUsers) {
+      toast.error('You do not have permission to edit users')
+      return
+    }
     setSelectedUser(user)
     setFormData({
       email: '', // Email is not editable, only shown in display
@@ -716,25 +728,30 @@ export default function UsersPage() {
         canAudit: user.canAudit,
         canManageMedia: user.canManageMedia ?? true,
         canManageTrash: user.canManageTrash ?? true,
+        canManageUsers: user.canManageUsers ?? false,
       },
     })
     setIsEditDialogOpen(true)
-  }, [])
+  }, [canManageUsers])
 
   const handleUpdate = () => {
+    if (!canManageUsers) {
+      toast.error('You do not have permission to update users')
+      return
+    }
     if (!selectedUser || !formData.role) {
       toast.error('Role is required')
       return
     }
     
-    // Prevent admin from changing their own role to user
-    if (isEditingSelfAdmin && formData.role === 'user') {
-      toast.error('You cannot change your own role from admin to user')
+    // Prevent user from changing their own role if they have canManageUsers permission
+    if (isEditingSelfWithPermission && formData.role !== selectedUser?.role) {
+      toast.error('You cannot change your own role')
       return
     }
     
-    // Prevent admin from setting their own status to inactive
-    if (isEditingSelfAdmin && !formData.isActive) {
+    // Prevent user from setting their own status to inactive
+    if (isEditingSelf && !formData.isActive) {
       toast.error('You cannot set your own status to inactive')
       return
     }
@@ -750,11 +767,19 @@ export default function UsersPage() {
   }
 
   const handleDelete = useCallback((user: AssetUser) => {
+    if (!canManageUsers) {
+      toast.error('You do not have permission to delete users')
+      return
+    }
     setSelectedUser(user)
     setIsDeleteDialogOpen(true)
-  }, [])
+  }, [canManageUsers])
 
   const handleApprove = useCallback((user: AssetUser) => {
+    if (!canManageUsers) {
+      toast.error('You do not have permission to approve users')
+      return
+    }
     // Open edit dialog with default permissions for admin to review and adjust
     // Admin can set permissions before approving the account
     setSelectedUser(user)
@@ -777,6 +802,7 @@ export default function UsersPage() {
       canAudit: false,
       canManageMedia: true,
       canManageTrash: true,
+      canManageUsers: false,
     }
     setFormData({
       email: '', // Email is not editable, only shown in display
@@ -786,9 +812,57 @@ export default function UsersPage() {
       permissions: defaultPermissions,
     })
     setIsEditDialogOpen(true)
-  }, [])
+  }, [canManageUsers])
 
-  const columns = useMemo(() => createColumns(handleEdit, handleDelete, handleApprove, isAdmin), [handleEdit, handleDelete, handleApprove, isAdmin])
+  const handleToggleAllPermissions = useCallback(() => {
+    const allSelected = 
+      formData.permissions.canDeleteAssets &&
+      formData.permissions.canManageImport &&
+      formData.permissions.canManageExport &&
+      formData.permissions.canCreateAssets &&
+      formData.permissions.canEditAssets &&
+      formData.permissions.canViewAssets &&
+      formData.permissions.canManageEmployees &&
+      formData.permissions.canManageCategories &&
+      formData.permissions.canCheckout &&
+      formData.permissions.canCheckin &&
+      formData.permissions.canReserve &&
+      formData.permissions.canMove &&
+      formData.permissions.canLease &&
+      formData.permissions.canDispose &&
+      formData.permissions.canManageMaintenance &&
+      formData.permissions.canAudit &&
+      formData.permissions.canManageMedia &&
+      formData.permissions.canManageTrash &&
+      formData.permissions.canManageUsers
+
+    setFormData({
+      ...formData,
+      permissions: {
+        canDeleteAssets: !allSelected,
+        canManageImport: !allSelected,
+        canManageExport: !allSelected,
+        canCreateAssets: !allSelected,
+        canEditAssets: !allSelected,
+        canViewAssets: !allSelected,
+        canManageEmployees: !allSelected,
+        canManageCategories: !allSelected,
+        canCheckout: !allSelected,
+        canCheckin: !allSelected,
+        canReserve: !allSelected,
+        canMove: !allSelected,
+        canLease: !allSelected,
+        canDispose: !allSelected,
+        canManageMaintenance: !allSelected,
+        canAudit: !allSelected,
+        canManageMedia: !allSelected,
+        canManageTrash: !allSelected,
+        canManageUsers: !allSelected,
+      },
+    })
+  }, [formData])
+
+  const columns = useMemo(() => createColumns(handleEdit, handleDelete, handleApprove, canManageUsers), [handleEdit, handleDelete, handleApprove, canManageUsers])
 
   const users = useMemo(() => data?.users || [], [data?.users])
   const pagination = data?.pagination
@@ -823,20 +897,17 @@ export default function UsersPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2 sm:gap-3 items-center">
-              <Select value={roleFilter} onValueChange={handleRoleFilterChange}>
-                <SelectTrigger className="w-full sm:w-[140px]">
-                  <SelectValue placeholder="Filter by role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
-                </SelectContent>
-              </Select>
+              
               
               <Button 
-                onClick={() => setIsCreateDialogOpen(true)} 
-                disabled={!isAdmin}
+                onClick={() => {
+                  if (!canManageUsers) {
+                    toast.error('You do not have permission to create users')
+                    return
+                  }
+                  setIsCreateDialogOpen(true)
+                }} 
+                size="sm"
               >
                <UserPlus className="mr-2 h-4 w-4" />
                Add User
@@ -848,12 +919,13 @@ export default function UsersPage() {
                   toast.success('Users list refreshed')
                 }}
                 disabled={isLoading}
+                size="sm"
               >
                 <RotateCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
-          <div className="relative flex-1 mt-3 w-full md:w-sm">
+          <div className="relative flex items-center gap-2 mt-3 w-full md:w-sm">
             <div className="relative flex-1 sm:flex-initial sm:min-w-[250px]">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -862,16 +934,27 @@ export default function UsersPage() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-8"
               />
+              
             </div>
+            <Select value={roleFilter} onValueChange={handleRoleFilterChange}>
+                <SelectTrigger className="w-full sm:w-[140px]">
+                  <SelectValue placeholder="Filter by role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
+                </SelectContent>
+              </Select>
           </div>
         </CardHeader>
 
         <CardContent className='px-0'>
             {isLoading ? (
-              <div className="flex items-center justify-center py-12">
+              <div className="h-[calc(100vh-25rem)] min-h-[500px] flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
                   <Spinner className="h-8 w-8" />
-                  <p className="text-sm text-muted-foreground">Loading users...</p>
+                  <p className="text-sm text-muted-foreground">Loading...</p>
                 </div>
               </div>
             ) : users.length === 0 ? (
@@ -894,7 +977,7 @@ export default function UsersPage() {
                               key={header.id}
                               className={cn(
                                 isActionsColumn ? "text-center" : "text-left",
-                                isActionsColumn && "sticky right-0 bg-card z-10  shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]"
+                                isActionsColumn && "sticky right-0 bg-card z-10"
                               )}
                             >
                               {header.isPlaceholder
@@ -919,7 +1002,7 @@ export default function UsersPage() {
                               <TableCell 
                                 key={cell.id}
                                 className={cn(
-                                  isActionsColumn && "sticky right-0 bg-card z-10  shadow-[inset_4px_0_6px_-4px_rgba(0,0,0,0.1)]"
+                                  isActionsColumn && "sticky right-0 bg-card z-10 "
                                 )}
                               >
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1143,7 +1226,37 @@ export default function UsersPage() {
 
             {formData.role === 'user' && (
               <div className="space-y-4 border-t pt-4">
-                <Label className="text-base font-semibold">Permissions</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Permissions</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleToggleAllPermissions}
+                  >
+                    {formData.permissions.canDeleteAssets &&
+                    formData.permissions.canManageImport &&
+                    formData.permissions.canManageExport &&
+                    formData.permissions.canCreateAssets &&
+                    formData.permissions.canEditAssets &&
+                    formData.permissions.canViewAssets &&
+                    formData.permissions.canManageEmployees &&
+                    formData.permissions.canManageCategories &&
+                    formData.permissions.canCheckout &&
+                    formData.permissions.canCheckin &&
+                    formData.permissions.canReserve &&
+                    formData.permissions.canMove &&
+                    formData.permissions.canLease &&
+                    formData.permissions.canDispose &&
+                    formData.permissions.canManageMaintenance &&
+                    formData.permissions.canAudit &&
+                    formData.permissions.canManageMedia &&
+                    formData.permissions.canManageTrash &&
+                    formData.permissions.canManageUsers
+                      ? 'Deselect All'
+                      : 'Select All'}
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -1379,6 +1492,19 @@ export default function UsersPage() {
                     />
                     <Label htmlFor="canManageTrash" className="cursor-pointer">Manage Trash</Label>
                   </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="canManageUsers"
+                      checked={formData.permissions.canManageUsers}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          permissions: { ...formData.permissions, canManageUsers: checked as boolean },
+                        })
+                      }
+                    />
+                    <Label htmlFor="canManageUsers" className="cursor-pointer">Manage Users</Label>
+                  </div>
                 </div>
               </div>
             )}
@@ -1430,9 +1556,9 @@ export default function UsersPage() {
             <Field>
               <FieldLabel htmlFor="edit-role">
                 Role <span className="text-destructive">*</span>
-                {isEditingSelfAdmin && (
+                {isEditingSelfWithPermission && (
                   <span className="text-sm text-muted-foreground ml-2">
-                    (You cannot change your own role from admin to user)
+                    (You cannot change your own role)
                   </span>
                 )}
               </FieldLabel>
@@ -1440,14 +1566,14 @@ export default function UsersPage() {
                 <Select
                   value={formData.role}
                   onValueChange={(value) => {
-                    // Prevent changing from admin to user if editing self
-                    if (isEditingSelfAdmin && formData.role === 'admin' && value === 'user') {
-                      toast.error('You cannot change your own role from admin to user')
+                    // Prevent changing own role if editing self
+                    if (isEditingSelfWithPermission && formData.role !== value) {
+                      toast.error('You cannot change your own role')
                       return
                     }
                     setFormData({ ...formData, role: value })
                   }}
-                  disabled={isEditingSelfAdmin && formData.role === 'admin'}
+                  disabled={isEditingSelf}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select role" />
@@ -1456,7 +1582,7 @@ export default function UsersPage() {
                     <SelectItem value="admin">Admin (Full Access)</SelectItem>
                     <SelectItem 
                       value="user"
-                      disabled={isEditingSelfAdmin}
+                      disabled={isEditingSelf}
                     >
                       User (Custom Permissions)
                     </SelectItem>
@@ -1468,7 +1594,7 @@ export default function UsersPage() {
             <Field>
               <FieldLabel htmlFor="edit-isActive">
                 Status
-                {isEditingSelfAdmin && (
+                {isEditingSelf && (
                   <span className="text-sm text-muted-foreground ml-2">
                     (You cannot set your own status to inactive)
                   </span>
@@ -1478,14 +1604,14 @@ export default function UsersPage() {
                 <Select
                   value={formData.isActive ? 'active' : 'inactive'}
                   onValueChange={(value) => {
-                    // Prevent setting status to inactive if editing self as admin
-                    if (isEditingSelfAdmin && value === 'inactive') {
+                    // Prevent setting status to inactive if editing self
+                    if (isEditingSelf && value === 'inactive') {
                       toast.error('You cannot set your own status to inactive')
                       return
                     }
                     setFormData({ ...formData, isActive: value === 'active' })
                   }}
-                  disabled={isEditingSelfAdmin && formData.isActive}
+                  disabled={isEditingSelf && formData.isActive}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1494,7 +1620,7 @@ export default function UsersPage() {
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem 
                       value="inactive"
-                      disabled={isEditingSelfAdmin}
+                      disabled={isEditingSelf}
                     >
                       Inactive
                     </SelectItem>
@@ -1505,7 +1631,37 @@ export default function UsersPage() {
 
             {formData.role === 'user' && (
               <div className="space-y-4 border-t pt-4">
-                <Label className="text-base font-semibold">Permissions</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Permissions</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleToggleAllPermissions}
+                  >
+                    {formData.permissions.canDeleteAssets &&
+                    formData.permissions.canManageImport &&
+                    formData.permissions.canManageExport &&
+                    formData.permissions.canCreateAssets &&
+                    formData.permissions.canEditAssets &&
+                    formData.permissions.canViewAssets &&
+                    formData.permissions.canManageEmployees &&
+                    formData.permissions.canManageCategories &&
+                    formData.permissions.canCheckout &&
+                    formData.permissions.canCheckin &&
+                    formData.permissions.canReserve &&
+                    formData.permissions.canMove &&
+                    formData.permissions.canLease &&
+                    formData.permissions.canDispose &&
+                    formData.permissions.canManageMaintenance &&
+                    formData.permissions.canAudit &&
+                    formData.permissions.canManageMedia &&
+                    formData.permissions.canManageTrash &&
+                    formData.permissions.canManageUsers
+                      ? 'Deselect All'
+                      : 'Select All'}
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -1740,6 +1896,19 @@ export default function UsersPage() {
                       }
                     />
                     <Label htmlFor="edit-canManageTrash" className="cursor-pointer">Manage Trash</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-canManageUsers"
+                      checked={formData.permissions.canManageUsers}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          permissions: { ...formData.permissions, canManageUsers: checked as boolean },
+                        })
+                      }
+                    />
+                    <Label htmlFor="edit-canManageUsers" className="cursor-pointer">Manage Users</Label>
                   </div>
                 </div>
               </div>

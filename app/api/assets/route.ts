@@ -53,20 +53,146 @@ export async function GET(request: NextRequest) {
     
     // Search filter
     if (search) {
-      whereClause.OR = [
-          { assetTagId: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } },
-          { brand: { contains: search, mode: 'insensitive' } },
-          { model: { contains: search, mode: 'insensitive' } },
-          { serialNo: { contains: search, mode: 'insensitive' } },
-          { owner: { contains: search, mode: 'insensitive' } },
-          { issuedTo: { contains: search, mode: 'insensitive' } },
-          { department: { contains: search, mode: 'insensitive' } },
-          { site: { contains: search, mode: 'insensitive' } },
-          { location: { contains: search, mode: 'insensitive' } },
+      const searchFieldsParam = searchParams.get('searchFields')
+      const searchFields = searchFieldsParam ? searchFieldsParam.split(',') : null
+      
+      const searchConditions: Prisma.AssetsWhereInput[] = []
+      
+      // If searchFields is provided, only search in those fields
+      // Otherwise, search in all default fields
+      const fieldsToSearch = searchFields || [
+        'assetTagId', 'description', 'brand', 'model', 'serialNo', 'owner', 
+        'issuedTo', 'department', 'site', 'location'
+      ]
+      
+      // Map field names to Prisma conditions
+      fieldsToSearch.forEach(field => {
+        if (field === 'assetTagId') {
+          searchConditions.push({ assetTagId: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'description') {
+          searchConditions.push({ description: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'brand') {
+          searchConditions.push({ brand: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'model') {
+          searchConditions.push({ model: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'serialNo') {
+          searchConditions.push({ serialNo: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'owner') {
+          searchConditions.push({ owner: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'issuedTo') {
+          searchConditions.push({ issuedTo: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'department') {
+          searchConditions.push({ department: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'site') {
+          searchConditions.push({ site: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'location') {
+          searchConditions.push({ location: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'category.name') {
+          searchConditions.push({ category: { name: { contains: search, mode: 'insensitive' } } })
+        } else if (field === 'subCategory.name') {
+          searchConditions.push({ subCategory: { name: { contains: search, mode: 'insensitive' } } })
+        } else if (field === 'status') {
+          searchConditions.push({ status: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'purchasedFrom') {
+          searchConditions.push({ purchasedFrom: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'additionalInformation') {
+          searchConditions.push({ additionalInformation: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'xeroAssetNo') {
+          searchConditions.push({ xeroAssetNo: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'pbiNumber') {
+          searchConditions.push({ pbiNumber: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'poNumber') {
+          searchConditions.push({ poNumber: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'paymentVoucherNumber') {
+          searchConditions.push({ paymentVoucherNumber: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'assetType') {
+          searchConditions.push({ assetType: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'remarks') {
+          searchConditions.push({ remarks: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'qr') {
+          searchConditions.push({ qr: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'oldAssetTag') {
+          searchConditions.push({ oldAssetTag: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'depreciationMethod') {
+          searchConditions.push({ depreciationMethod: { contains: search, mode: 'insensitive' } })
+        } else if (field === 'checkouts.checkoutDate') {
+          // Date fields - parse search string as date and search by date range
+          const searchDate = parseDate(search)
+          if (searchDate) {
+            // Search for dates on the same day (start of day to end of day)
+            const startOfDay = new Date(searchDate)
+            startOfDay.setHours(0, 0, 0, 0)
+            const endOfDay = new Date(searchDate)
+            endOfDay.setHours(23, 59, 59, 999)
+            searchConditions.push({
+              checkouts: {
+                some: {
+                  checkoutDate: {
+                    gte: startOfDay,
+                    lte: endOfDay,
+                  },
+                },
+              },
+            })
+          }
+        } else if (field === 'checkouts.expectedReturnDate') {
+          // Date fields - parse search string as date and search by date range
+          const searchDate = parseDate(search)
+          if (searchDate) {
+            // Search for dates on the same day (start of day to end of day)
+            const startOfDay = new Date(searchDate)
+            startOfDay.setHours(0, 0, 0, 0)
+            const endOfDay = new Date(searchDate)
+            endOfDay.setHours(23, 59, 59, 999)
+            searchConditions.push({
+              checkouts: {
+                some: {
+                  expectedReturnDate: {
+                    gte: startOfDay,
+                    lte: endOfDay,
+                  },
+                },
+              },
+            })
+          }
+        } else if (field === 'auditHistory.auditDate') {
+          // Date fields - parse search string as date and search by date range
+          const searchDate = parseDate(search)
+          if (searchDate) {
+            // Search for dates on the same day (start of day to end of day)
+            const startOfDay = new Date(searchDate)
+            startOfDay.setHours(0, 0, 0, 0)
+            const endOfDay = new Date(searchDate)
+            endOfDay.setHours(23, 59, 59, 999)
+            searchConditions.push({
+              auditHistory: {
+                some: {
+                  auditDate: {
+                    gte: startOfDay,
+                    lte: endOfDay,
+                  },
+                },
+              },
+            })
+          }
+        } else if (field === 'auditHistory.auditType') {
+          searchConditions.push({ auditHistory: { some: { auditType: { contains: search, mode: 'insensitive' } } } })
+        } else if (field === 'auditHistory.auditor') {
+          searchConditions.push({ auditHistory: { some: { auditor: { contains: search, mode: 'insensitive' } } } })
+        }
+      })
+      
+      // Also include employee search if not filtering by specific fields or if employee fields are included
+      if (!searchFields || searchFields.some(f => f.includes('employee'))) {
+        searchConditions.push(
           { checkouts: { some: { employeeUser: { name: { contains: search, mode: 'insensitive' } } } } },
-          { checkouts: { some: { employeeUser: { email: { contains: search, mode: 'insensitive' } } } } },
-        ]
+          { checkouts: { some: { employeeUser: { email: { contains: search, mode: 'insensitive' } } } } }
+        )
+      }
+      
+      if (searchConditions.length > 0) {
+        whereClause.OR = searchConditions
+      }
       }
     
     // Category filter
@@ -194,22 +320,33 @@ export async function GET(request: NextRequest) {
     // Check if summary is requested
     const summaryOnly = searchParams.get('summary') === 'true'
     if (summaryOnly) {
-      // Calculate summary statistics for all assets (ignoring pagination)
-      const allAssets = await retryDbOperation(() => prisma.assets.findMany({
+      // Use database aggregation for much faster summary calculation
+      // Run all queries in a transaction to use a single connection and improve performance
+      const [totalAssets, totalValueResult, availableAssets, checkedOutAssets] = await retryDbOperation(() =>
+        prisma.$transaction([
+          prisma.assets.count({ where: whereClause }),
+          prisma.assets.aggregate({
         where: whereClause,
-        select: {
+            _sum: {
           cost: true,
-          status: true,
-        },
-      }))
+            },
+          }),
+          prisma.assets.count({
+            where: {
+              ...whereClause,
+              status: { equals: 'Available', mode: 'insensitive' },
+            },
+          }),
+          prisma.assets.count({
+            where: {
+              ...whereClause,
+              status: { equals: 'Checked out', mode: 'insensitive' },
+            },
+          }),
+        ])
+      )
 
-      const totalValue = allAssets.reduce((sum, asset) => {
-        return sum + (asset.cost ? Number(asset.cost) : 0)
-      }, 0)
-
-      const totalAssets = allAssets.length
-      const availableAssets = allAssets.filter(a => a.status?.toLowerCase() === 'available').length
-      const checkedOutAssets = allAssets.filter(a => a.status?.toLowerCase() === 'checked out').length
+      const totalValue = totalValueResult._sum.cost ? Number(totalValueResult._sum.cost) : 0
 
       return NextResponse.json({
         summary: {
@@ -221,6 +358,33 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Compute summary statistics in parallel with assets query for main response
+    // This avoids a separate API call and improves performance
+    const [totalValueResult, availableAssets, checkedOutAssets] = await retryDbOperation(() =>
+      prisma.$transaction([
+        prisma.assets.aggregate({
+          where: whereClause,
+          _sum: {
+            cost: true,
+          },
+        }),
+        prisma.assets.count({
+          where: {
+            ...whereClause,
+            status: { equals: 'Available', mode: 'insensitive' },
+          },
+        }),
+        prisma.assets.count({
+          where: {
+            ...whereClause,
+            status: { equals: 'Checked out', mode: 'insensitive' },
+          },
+        }),
+      ])
+    )
+
+    const totalValue = totalValueResult._sum.cost ? Number(totalValueResult._sum.cost) : 0
+
     return NextResponse.json({ 
       assets: assetsWithImageCount,
       pagination: {
@@ -228,6 +392,12 @@ export async function GET(request: NextRequest) {
         page,
         pageSize,
         totalPages: Math.ceil(totalCount / pageSize)
+      },
+      summary: {
+        totalAssets: totalCount,
+        totalValue,
+        availableAssets,
+        checkedOutAssets,
       }
     })
   } catch (error: unknown) {
@@ -254,7 +424,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    const asset = await prisma.assets.create({
+    const asset = await retryDbOperation(() => prisma.assets.create({
       data: {
         assetTagId: body.assetTagId,
         description: body.description,
@@ -301,10 +471,18 @@ export async function POST(request: NextRequest) {
           take: 1,
         },
       },
-    })
+    }))
 
     return NextResponse.json({ asset }, { status: 201 })
-  } catch (error) {
+  } catch (error: unknown) {
+    // Handle connection pool errors specifically
+    const prismaError = error as { code?: string; message?: string }
+    if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
     console.error('Error creating asset:', error)
     return NextResponse.json(
       { error: 'Failed to create asset' },

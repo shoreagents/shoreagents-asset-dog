@@ -359,6 +359,7 @@ export function AppHeader() {
           {canViewAssets && (
           <Button
             type="button"
+            className="hover:bg-transparent!"
             variant="ghost"
             size="icon"
             onClick={() => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
+import { retryDbOperation } from '@/lib/db-utils'
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAuth()
@@ -51,17 +52,19 @@ export async function GET(request: NextRequest) {
     // If we need to exclude employees with checked out assets
     if (excludeWithCheckedOutAssets) {
       // Get IDs of employees who have active checkouts (assets with status "Checked out")
-      const employeesWithActiveCheckouts = await prisma.assetsCheckout.findMany({
-        where: {
-          asset: {
-            status: "Checked out"
-          }
-        },
-        select: {
-          employeeUserId: true
-        },
-        distinct: ['employeeUserId']
-      })
+      const employeesWithActiveCheckouts = await retryDbOperation(() => 
+        prisma.assetsCheckout.findMany({
+          where: {
+            asset: {
+              status: "Checked out"
+            }
+          },
+          select: {
+            employeeUserId: true
+          },
+          distinct: ['employeeUserId']
+        })
+      )
 
       const employeeIdsToExclude = employeesWithActiveCheckouts
         .map(checkout => checkout.employeeUserId)
@@ -78,9 +81,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Get total count for pagination
-    const totalCount = await prisma.employeeUser.count({ where: whereClause })
+    const totalCount = await retryDbOperation(() => 
+      prisma.employeeUser.count({ where: whereClause })
+    )
 
-    const employees = await prisma.employeeUser.findMany({
+    const employees = await retryDbOperation(() => 
+      prisma.employeeUser.findMany({
       where: whereClause,
       include: {
         checkouts: {
@@ -127,7 +133,8 @@ export async function GET(request: NextRequest) {
       },
       skip,
       take: pageSize,
-    })
+      })
+    )
 
     // Filter checkouts to only include active ones (those without checkins)
     const employeesWithFilteredCheckouts = employees.map(employee => ({
@@ -149,9 +156,22 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error: unknown) {
-    // Only log non-transient errors (not connection retries)
+    // Handle connection pool errors specifically
     const prismaError = error as { code?: string; message?: string }
-    if (prismaError?.code !== 'P1001') {
+    if (prismaError?.code === 'P2024' || 
+        (error instanceof Error && (
+          error.message.includes('connection pool') ||
+          error.message.includes('Timed out fetching')
+        ))) {
+      console.error('[Employees API] Connection pool error:', error)
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+    
+    // Only log non-transient errors (not connection retries)
+    if (prismaError?.code !== 'P1001' && prismaError?.code !== 'P2024') {
       console.error('Error fetching employees:', error)
     }
     return NextResponse.json(
@@ -188,13 +208,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const employee = await prisma.employeeUser.create({
-      data: {
-        name,
-        email,
-        department: department || null,
-      },
-    })
+    const employee = await retryDbOperation(() => 
+      prisma.employeeUser.create({
+        data: {
+          name,
+          email,
+          department: department || null,
+        },
+      })
+    )
 
     return NextResponse.json({ employee }, { status: 201 })
   } catch (error: any) {

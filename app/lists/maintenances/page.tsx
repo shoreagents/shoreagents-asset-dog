@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -115,14 +115,19 @@ interface PaginationInfo {
   totalPages: number
 }
 
-async function fetchMaintenances(search?: string, page: number = 1, pageSize: number = 100): Promise<{ assets: Asset[], pagination: PaginationInfo }> {
+async function fetchMaintenances(search?: string, searchFields?: string[], page: number = 1, pageSize: number = 100): Promise<{ assets: Asset[], pagination: PaginationInfo }> {
   const params = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
     status: 'Maintenance',
     withMaintenance: 'true',
   })
-  if (search) params.append('search', search)
+  if (search) {
+    params.append('search', search)
+    if (searchFields && searchFields.length > 0) {
+      params.append('searchFields', searchFields.join(','))
+    }
+  }
   
   const response = await fetch(`/api/assets?${params.toString()}`)
   if (!response.ok) {
@@ -243,6 +248,56 @@ const ALL_COLUMNS = [
   { key: 'maintenanceTimeAgo', label: 'Maintenance Time Ago' },
   { key: 'images', label: 'Images' },
 ]
+
+// Map column keys to API search field names
+const COLUMN_TO_SEARCH_FIELD: Record<string, string[]> = {
+  'assetTag': ['assetTagId'],
+  'description': ['description'],
+  'brand': ['brand'],
+  'model': ['model'],
+  'serialNo': ['serialNo'],
+  'owner': ['owner'],
+  'issuedTo': ['issuedTo'],
+  'department': ['department'],
+  'site': ['site'],
+  'location': ['location'],
+  'category': ['category.name'],
+  'subCategory': ['subCategory.name'],
+  'status': ['status'],
+  'purchasedFrom': ['purchasedFrom'],
+  'purchaseDate': ['purchaseDate'],
+  'cost': ['cost'],
+  'additionalInformation': ['additionalInformation'],
+  'xeroAssetNo': ['xeroAssetNo'],
+  'pbiNumber': ['pbiNumber'],
+  'poNumber': ['poNumber'],
+  'paymentVoucherNumber': ['paymentVoucherNumber'],
+  'assetType': ['assetType'],
+  'deliveryDate': ['deliveryDate'],
+  'unaccountedInventory': ['unaccountedInventory'],
+  'remarks': ['remarks'],
+  'qr': ['qr'],
+  'oldAssetTag': ['oldAssetTag'],
+  'depreciableAsset': ['depreciableAsset'],
+  'depreciableCost': ['depreciableCost'],
+  'salvageValue': ['salvageValue'],
+  'assetLifeMonths': ['assetLifeMonths'],
+  'depreciationMethod': ['depreciationMethod'],
+  'dateAcquired': ['dateAcquired'],
+  'checkoutDate': ['checkouts.checkoutDate'],
+  'expectedReturnDate': ['checkouts.expectedReturnDate'],
+  'lastAuditDate': ['auditHistory.auditDate'],
+  'lastAuditType': ['auditHistory.auditType'],
+  'lastAuditor': ['auditHistory.auditor'],
+  'auditCount': [], // Not searchable
+  'maintenanceTitle': ['maintenances.title'],
+  'maintenanceStatus': ['maintenances.status'],
+  'maintenanceBy': ['maintenances.maintenanceBy'],
+  'maintenanceDueDate': ['maintenances.dueDate'],
+  'maintenanceCost': ['maintenances.cost'],
+  'maintenanceTimeAgo': [], // Not searchable (computed field)
+  'images': [], // Not searchable
+}
 
 // Create column definitions for TanStack Table
 const createColumns = (
@@ -1671,6 +1726,7 @@ export default function ListOfMaintenancesPage() {
   })
   const [isSelectOpen, setIsSelectOpen] = useState(false)
   const [shouldCloseSelect, setShouldCloseSelect] = useState(false)
+  const [isManualRefresh, setIsManualRefresh] = useState(false)
   const [, startTransition] = useTransition()
   
   // Edit maintenance dialog state
@@ -1700,12 +1756,15 @@ export default function ListOfMaintenancesPage() {
   // Separate states for search input (immediate UI) and search query (debounced API calls)
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
+  const [searchType, setSearchType] = useState<string>(
+    searchParams.get('searchType') || 'unified'
+  )
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSearchQueryRef = useRef<string>(searchParams.get('search') || '')
   const previousSearchInputRef = useRef<string>(searchParams.get('search') || '')
 
   // Update URL parameters
-  const updateURL = useCallback((updates: { page?: number; pageSize?: number; search?: string }) => {
+  const updateURL = useCallback((updates: { page?: number; pageSize?: number; search?: string; searchType?: string }) => {
     const params = new URLSearchParams(searchParams.toString())
     
     if (updates.page !== undefined) {
@@ -1729,10 +1788,21 @@ export default function ListOfMaintenancesPage() {
     if (updates.search !== undefined) {
       if (updates.search === '') {
         params.delete('search')
+        params.delete('searchType')
       } else {
         params.set('search', updates.search)
       }
       // Reset to page 1 when search changes
+      params.delete('page')
+    }
+
+    if (updates.searchType !== undefined) {
+      if (updates.searchType === 'unified') {
+        params.delete('searchType')
+      } else {
+        params.set('searchType', updates.searchType)
+      }
+      // Reset to page 1 when searchType changes
       params.delete('page')
     }
     
@@ -1741,11 +1811,37 @@ export default function ListOfMaintenancesPage() {
     })
   }, [searchParams, router, startTransition])
 
+  // Get search fields based on visible columns and searchType
+  const searchFields = useMemo(() => {
+    if (searchType === 'unified') {
+      // Unified search: search in all visible columns
+      const fields: string[] = []
+      visibleColumns.forEach(colKey => {
+        const fieldMappings = COLUMN_TO_SEARCH_FIELD[colKey] || []
+        fields.push(...fieldMappings)
+      })
+      // Remove duplicates
+      return Array.from(new Set(fields))
+    } else {
+      // Specific column search: only search in the selected column
+      const fieldMappings = COLUMN_TO_SEARCH_FIELD[searchType] || []
+      return fieldMappings
+    }
+  }, [visibleColumns, searchType])
+
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ['maintenances-list', searchQuery, page, pageSize],
-    queryFn: () => fetchMaintenances(searchQuery || undefined, page, pageSize),
+    queryKey: ['maintenances-list', searchQuery, searchType, searchFields, page, pageSize],
+    queryFn: () => fetchMaintenances(searchQuery || undefined, searchFields.length > 0 ? searchFields : undefined, page, pageSize),
     enabled: canViewAssets, // Only fetch if user has permission
+    placeholderData: (previousData) => previousData,
   })
+
+  // Reset manual refresh flag after successful fetch
+  useEffect(() => {
+    if (!isFetching && isManualRefresh) {
+      setIsManualRefresh(false)
+    }
+  }, [isFetching, isManualRefresh])
 
   // Update maintenance mutation
   const updateMaintenanceMutation = useMutation({
@@ -1860,10 +1956,15 @@ export default function ListOfMaintenancesPage() {
     }
   }, [searchInput, searchParams, updateURL])
 
-  // Sync searchInput with URL params only on initial mount or external navigation
+  // Sync searchInput and searchType with URL params only on initial mount or external navigation
   useEffect(() => {
     const urlSearch = searchParams.get('search') || ''
+    const urlSearchType = searchParams.get('searchType') || 'unified'
     const currentSearchQuery = lastSearchQueryRef.current || ''
+    
+    if (urlSearchType !== searchType) {
+      setSearchType(urlSearchType)
+    }
     
     if (urlSearch !== currentSearchQuery) {
       if (searchTimeoutRef.current) {
@@ -1875,6 +1976,7 @@ export default function ListOfMaintenancesPage() {
       previousSearchInputRef.current = urlSearch
       lastSearchQueryRef.current = urlSearch
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
   
   useEffect(() => {
@@ -1900,7 +2002,6 @@ export default function ListOfMaintenancesPage() {
   // Memoize assets data
   const assets = useMemo(() => data?.assets || [], [data?.assets])
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: assets,
     columns,
@@ -1996,7 +2097,7 @@ export default function ListOfMaintenancesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-screen">
       <div>
         <h1 className="text-3xl font-bold">List of Maintenances</h1>
         <p className="text-muted-foreground">
@@ -2006,49 +2107,69 @@ export default function ListOfMaintenancesPage() {
 
       <Card className="relative flex flex-col flex-1 min-h-0 pb-0 gap-0">
         <CardHeader>
-          <div>
-            <div className="flex items-center justify-between">
-              <CardTitle>List of Maintenances</CardTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  queryClient.invalidateQueries({ queryKey: ['maintenances-list'] })
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-center w-full md:flex-1 md:max-w-md border rounded-md overflow-hidden">
+              <Select
+                value={searchType}
+                onValueChange={(value: string) => {
+                  setSearchType(value)
+                  updateURL({ searchType: value, page: 1 })
                 }}
-                className="h-8 w-8"
-                title="Refresh table"
               >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
+                <SelectTrigger className="w-[140px] h-8 rounded-none border-0 border-r focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none" size='sm'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unified">Unified Search</SelectItem>
+                  {visibleColumns
+                    .filter(colKey => {
+                      // Only show columns that have searchable fields
+                      const fieldMappings = COLUMN_TO_SEARCH_FIELD[colKey] || []
+                      return fieldMappings.length > 0
+                    })
+                    .map(colKey => {
+                      const column = ALL_COLUMNS.find(c => c.key === colKey)
+                      return (
+                        <SelectItem key={colKey} value={colKey}>
+                          {column?.label || colKey}
+                        </SelectItem>
+                      )
+                    })}
+                </SelectContent>
+              </Select>
+              <div className="relative flex-1">
+                {searchInput ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchInput('')
+                      updateURL({ search: '', page: 1 })
+                    }}
+                    className="absolute left-2 top-2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer z-10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+                )}
+                <Input
+                  placeholder={
+                    searchType === 'unified'
+                      ? visibleColumns.length > 0
+                        ? `Search by ${visibleColumns.slice(0, 3).map(col => ALL_COLUMNS.find(c => c.key === col)?.label).filter(Boolean).join(', ').toLowerCase()}${visibleColumns.length > 3 ? '...' : ''}...`
+                        : 'Search maintenances...'
+                      : ALL_COLUMNS.find(c => c.key === searchType)?.label
+                        ? `Search by ${ALL_COLUMNS.find(c => c.key === searchType)?.label}`
+                        : 'Search...'
+                  }
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="pl-8 h-8 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                />
+              </div>
             </div>
-            <CardDescription>View and manage all assets with Maintenance status</CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 px-0 relative max-h-screen">
-          <div className="flex items-center justify-between p-4 gap-4">
-            <div className="relative flex-1 max-w-sm">
-              {searchInput ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchInput('')
-                    updateURL({ search: '', page: 1 })
-                  }}
-                  className="absolute left-2 top-2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : (
-                <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
-              )}
-              <Input
-                placeholder="Search maintenances..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="pl-8 h-8"
-              />
-            </div>
-            <Select 
+            <div className="flex items-center gap-2">
+              <Select 
               open={isSelectOpen} 
               onOpenChange={handleSelectOpenChange}
               value=""
@@ -2108,16 +2229,30 @@ export default function ListOfMaintenancesPage() {
                 ))}
               </SelectContent>
             </Select>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  setIsManualRefresh(true)
+                  queryClient.invalidateQueries({ queryKey: ['maintenances-list'] })
+                }}
+                className="h-8 w-8"
+                title="Refresh table"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-
-          {isFetching && data && (
-            <div className="absolute inset-x-0 top-[65px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+        </CardHeader>
+        <CardContent className="flex-1 px-0 relative">
+          {isFetching && data && isManualRefresh && (
+            <div className="absolute inset-x-0 top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
 
-          <div className='h-130'>
-            {permissionsLoading || isLoading ? (
+          <div className='h-140 pt-8'>
+            {permissionsLoading || (isLoading && !data) ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
                   <Spinner className="h-8 w-8" />
@@ -2142,11 +2277,11 @@ export default function ListOfMaintenancesPage() {
               </div>
             ) : (
               <div className="min-w-full ">
-                <ScrollArea className='h-130'>
+                <ScrollArea className='h-132'>
                 <Table className='border-t'>
                   <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
+                      <TableRow key={headerGroup.id} className="group">
                         {headerGroup.headers.map((header) => {
                           const isActionsColumn = header.column.id === 'maintenanceActions'
                           return (
@@ -2154,7 +2289,7 @@ export default function ListOfMaintenancesPage() {
                               key={header.id} 
                               className={cn(
                                 isActionsColumn ? "text-right" : "text-left ",
-                                isActionsColumn && "sticky right-0 bg-card z-10"
+                                isActionsColumn && "sticky right-0 bg-card z-0 border-l group-hover:bg-muted/50 transition-colors"
                               )}
                             >
                               {header.isPlaceholder
@@ -2169,14 +2304,14 @@ export default function ListOfMaintenancesPage() {
                   <TableBody>
                     {table.getRowModel().rows?.length ? (
                       table.getRowModel().rows.map((row) => (
-                        <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
+                        <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'} className="group">
                           {row.getVisibleCells().map((cell) => {
                             const isActionsColumn = cell.column.id === 'maintenanceActions'
                             return (
                               <TableCell 
                                 key={cell.id}
                                 className={cn(
-                                  isActionsColumn && "sticky right-0 bg-card z-10 "
+                                  isActionsColumn && "sticky right-0 bg-card z-10 group-hover:bg-muted/50 border-l transition-colors"
                                 )}
                               >
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}

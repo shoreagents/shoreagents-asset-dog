@@ -239,7 +239,24 @@ const createColumns = (
   },
   {
     accessorKey: 'checkouts',
-    header: 'Active Checkouts',
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="h-8 px-0 hover:bg-transparent! has-[>svg]:px-0"
+        >
+          Active Checkouts
+          {column.getIsSorted() === 'asc' ? (
+            <ArrowUp className="ml-2 h-4 w-4" />
+          ) : column.getIsSorted() === 'desc' ? (
+            <ArrowDown className="ml-2 h-4 w-4" />
+          ) : (
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          )}
+        </Button>
+      )
+    },
     cell: ({ row }) => {
       const checkouts = row.original.checkouts || []
       return (
@@ -255,6 +272,12 @@ const createColumns = (
           {checkouts.length}
         </div>
       )
+    },
+    enableSorting: true,
+    sortingFn: (rowA, rowB) => {
+      const a = rowA.original.checkouts?.length || 0
+      const b = rowB.original.checkouts?.length || 0
+      return a - b
     },
   },
   {
@@ -633,7 +656,7 @@ export default function EmployeesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-screen">
       <div>
         <h1 className="text-3xl font-bold">Employee Users</h1>
         <p className="text-muted-foreground">
@@ -723,14 +746,13 @@ export default function EmployeesPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 px-0 relative max-h-screen">
+        <CardContent className="flex-1 px-0 relative">
           {isFetching && data && isManualRefresh && (
             <div className="absolute inset-x-0 top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
-
-          <div className="h-150 pt-8">
+          <div className="h-140 pt-8">
             {isLoading && !data ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
@@ -746,19 +768,19 @@ export default function EmployeesPage() {
               </div>
             ) : (
               <div className="min-w-full">
-                <ScrollArea className='h-142'>
+                <ScrollArea className='h-132'>
                 <Table className='border-t'>
                   <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
+                      <TableRow key={headerGroup.id} className="group">
                         {headerGroup.headers.map((header) => {
                           const isActionsColumn = header.column.id === 'actions'
                           return (
                             <TableHead 
                               key={header.id}
                               className={cn(
-                                isActionsColumn ? "text-right" : "text-left",
-                                isActionsColumn && "sticky right-0 bg-card z-10"
+                                isActionsColumn ? "text-center" : "text-left",
+                                isActionsColumn && "sticky right-0 bg-card z-0 border-l group-hover:bg-muted/50 transition-colors"
                               )}
                             >
                               {header.isPlaceholder
@@ -795,7 +817,7 @@ export default function EmployeesPage() {
                                 <TableCell 
                                   key={cell.id}
                                   className={cn(
-                                    isActionsColumn && "sticky right-0 bg-card z-10"
+                                    isActionsColumn && "sticky text-center right-0 bg-card z-10 group-hover:bg-muted/50 border-l transition-colors"
                                   )}
                                 >
                                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

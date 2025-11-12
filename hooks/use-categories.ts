@@ -25,14 +25,21 @@ interface CreateSubCategoryData {
 }
 
 // Fetch categories
-export const useCategories = () => {
+export const useCategories = (enabled: boolean = true) => {
   return useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
       const response = await fetch("/api/categories")
+      if (!response.ok) {
+        // Return empty array on error instead of undefined
+        return []
+      }
       const data = await response.json()
-      return data.categories as Category[]
+      // Ensure we always return an array, never undefined
+      return (data.categories || []) as Category[]
     },
+    enabled,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes to reduce API calls
   })
 }
 
@@ -43,10 +50,16 @@ export const useSubCategories = (categoryId: string | null) => {
     queryFn: async () => {
       if (!categoryId) return []
       const response = await fetch(`/api/subcategories?categoryId=${categoryId}`)
+      if (!response.ok) {
+        // Return empty array on error instead of undefined
+        return []
+      }
       const data = await response.json()
-      return data.subcategories as SubCategory[]
+      // Ensure we always return an array, never undefined
+      return (data.subcategories || []) as SubCategory[]
     },
     enabled: !!categoryId,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes to reduce API calls
   })
 }
 

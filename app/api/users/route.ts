@@ -5,6 +5,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase-server'
 import { requirePermission } from '@/lib/permission-utils'
 import { Prisma } from '@prisma/client'
 import { sendWelcomeEmail } from '@/lib/email'
+import { retryDbOperation } from '@/lib/db-utils'
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAuth()
@@ -38,13 +39,13 @@ export async function GET(request: NextRequest) {
     if (search) {
       // Fetch all users (or a reasonable limit) to search
       // We'll filter in JavaScript since we need to check email from Supabase Auth anyway
-      const allUsers = await prisma.assetUser.findMany({
+      const allUsers = await retryDbOperation(() => prisma.assetUser.findMany({
         where: baseWhereClause,
         orderBy: {
           createdAt: 'desc',
         },
         take: 10000, // Reasonable limit for search
-      })
+      }))
 
       // Fetch emails from Supabase Auth for all users
       const usersWithEmailData = await Promise.all(
@@ -75,8 +76,8 @@ export async function GET(request: NextRequest) {
           return user.role.toLowerCase().includes(searchLower)
         } else {
           // unified search - search by email OR userId OR role
-          const emailMatch = user.email?.toLowerCase().includes(searchLower) ?? false
-          const userIdMatch = user.userId.toLowerCase().includes(searchLower)
+        const emailMatch = user.email?.toLowerCase().includes(searchLower) ?? false
+        const userIdMatch = user.userId.toLowerCase().includes(searchLower)
           const roleMatch = user.role.toLowerCase().includes(searchLower)
           return emailMatch || userIdMatch || roleMatch
         }
@@ -88,16 +89,16 @@ export async function GET(request: NextRequest) {
       users = filteredUsers.slice(skip, skip + pageSize) as Array<{ id: string; userId: string; role: string; email?: string | null; [key: string]: unknown }>
     } else {
       // No search term - normal query with pagination
-      totalCount = await prisma.assetUser.count({ where: baseWhereClause })
+      totalCount = await retryDbOperation(() => prisma.assetUser.count({ where: baseWhereClause }))
 
-      users = await prisma.assetUser.findMany({
+      users = await retryDbOperation(() => prisma.assetUser.findMany({
         where: baseWhereClause,
         orderBy: {
           createdAt: 'desc',
         },
         skip,
         take: pageSize,
-      })
+      }))
     }
 
     // Fetch emails from Supabase Auth for each user (if not already fetched)
@@ -138,6 +139,12 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     const prismaError = error as { code?: string; message?: string }
+    if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
     if (prismaError?.code !== 'P1001') {
       console.error('Error fetching users:', error)
     }
@@ -260,14 +267,14 @@ export async function POST(request: NextRequest) {
 
     // Create asset_users record
     // When admin creates an account, automatically approve it
-    const user = await prisma.assetUser.create({
+    const user = await retryDbOperation(() => prisma.assetUser.create({
       data: {
         userId,
         role,
         isApproved: true, // Automatically approve accounts created by admin
         ...permissionsData,
       },
-    })
+    }))
 
     // Always send welcome email with password when user is created
     // The password is either auto-generated or provided by admin, but we send it via email either way
@@ -296,12 +303,19 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
   } catch (error: unknown) {
     const prismaError = error as { code?: string; message?: string }
-    if (prismaError.code === 'P2002') {
+    if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+    if (prismaError?.code === 'P2002') {
       return NextResponse.json(
         { error: 'User already exists' },
         { status: 409 }
       )
     }
+    console.error('Error creating user:', error)
     return NextResponse.json(
       { error: 'Failed to create user' },
       { status: 500 }

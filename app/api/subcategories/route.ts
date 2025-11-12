@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
+import { retryDbOperation } from '@/lib/db-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest) {
     const categoryId = searchParams.get('categoryId')
 
     // Use select instead of include to reduce data transfer and connection time
-    const subcategories = await prisma.subCategory.findMany({
+    const subcategories = await retryDbOperation(() => 
+      prisma.subCategory.findMany({
       where: categoryId ? { categoryId } : undefined,
       select: {
         id: true,
@@ -33,19 +35,30 @@ export async function GET(request: NextRequest) {
         name: 'asc',
       },
     })
+    )
 
     return NextResponse.json({ subcategories })
   } catch (error) {
     // Handle connection pool errors specifically
-    if (error instanceof Error && error.message.includes('connection pool')) {
-      console.error('[Subcategories API] Connection pool exhausted:', error.message)
+    const prismaError = error as { code?: string; message?: string }
+    if (prismaError?.code === 'P2024' || 
+        prismaError?.code === 'P1001' ||
+        (error instanceof Error && (
+          error.message.includes('connection pool') ||
+          error.message.includes('Timed out fetching') ||
+          error.message.includes("Can't reach database server")
+        ))) {
+      console.error('[Subcategories API] Connection pool error:', error)
       return NextResponse.json(
         { error: 'Database connection limit reached. Please try again in a moment.' },
         { status: 503 }
       )
     }
     
+    // Only log non-transient errors
+    if (prismaError?.code !== 'P1001' && prismaError?.code !== 'P2024') {
     console.error('Error fetching subcategories:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to fetch subcategories' },
       { status: 500 }
@@ -63,7 +76,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    const subcategory = await prisma.subCategory.create({
+    const subcategory = await retryDbOperation(() => 
+      prisma.subCategory.create({
       data: {
         name: body.name,
         description: body.description,
@@ -73,6 +87,7 @@ export async function POST(request: NextRequest) {
         category: true,
       },
     })
+    )
 
     return NextResponse.json({ subcategory }, { status: 201 })
   } catch (error) {

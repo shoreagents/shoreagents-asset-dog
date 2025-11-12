@@ -40,7 +40,7 @@ import { Upload, Image as ImageIcon, Eye, X, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { ImagePreviewDialog } from '@/components/image-preview-dialog'
 import { editAssetSchema, type EditAssetFormData } from '@/lib/validations/assets'
-import { useCategories, useSubCategories, useCreateCategory, useCreateSubCategory, type Category, type SubCategory } from '@/hooks/use-categories'
+import { useCategories, useSubCategories, useCreateCategory, useCreateSubCategory, type Category } from '@/hooks/use-categories'
 import { CategoryDialog } from '@/components/category-dialog'
 import { SubCategoryDialog } from '@/components/subcategory-dialog'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -95,7 +95,6 @@ export function EditAssetDialog({
   asset,
   open,
   onOpenChange,
-  onPreviewImage,
 }: EditAssetDialogProps) {
   const queryClient = useQueryClient()
   const { hasPermission } = usePermissions()
@@ -111,13 +110,13 @@ export function EditAssetDialog({
   const [mediaBrowserOpen, setMediaBrowserOpen] = useState(false)
   const [previewImageIndex, setPreviewImageIndex] = useState(0)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [subCategoryDialogOpen, setSubCategoryDialogOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
-  // Categories and subcategories
-  const { data: categories = [] } = useCategories()
+  // Categories and subcategories - only fetch when dialog is open to avoid unnecessary requests
+  const { data: categories = [] } = useCategories(open)
   const createCategoryMutation = useCreateCategory()
   const createSubCategoryMutation = useCreateSubCategory()
 
@@ -150,7 +149,8 @@ export function EditAssetDialog({
   // Watch categoryId to sync with selectedCategory state
   const categoryId = form.watch('categoryId')
   const selectedCategory = categoryId || ''
-  const { data: subCategories = [] } = useSubCategories(selectedCategory || null)
+  // Only fetch subcategories when dialog is open to avoid unnecessary requests
+  const { data: subCategories = [] } = useSubCategories(open ? (selectedCategory || null) : null)
 
   // Reset subcategory when category changes
   const handleCategoryChange = (value: string) => {
@@ -238,16 +238,6 @@ export function EditAssetDialog({
       selectedImageUrls.forEach(url => URL.revokeObjectURL(url))
     }
   }, [selectedImageUrls])
-
-  const formatDateForInput = (dateString: string | null) => {
-    if (!dateString) return ''
-    try {
-      const date = new Date(dateString)
-      return date.toISOString().split('T')[0]
-    } catch {
-      return ''
-    }
-  }
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Asset> }) => updateAsset(id, data),

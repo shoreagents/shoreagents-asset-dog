@@ -4,6 +4,7 @@ import { verifyAuth } from '@/lib/auth-utils'
 import { createAdminSupabaseClient } from '@/lib/supabase-server'
 import { requirePermission, clearPermissionCache } from '@/lib/permission-utils'
 import { Prisma } from '@prisma/client'
+import { retryDbOperation } from '@/lib/db-utils'
 
 export async function GET(
   request: NextRequest,
@@ -19,11 +20,11 @@ export async function GET(
   try {
     const { id } = await params
 
-    const user = await prisma.assetUser.findUnique({
+    const user = await retryDbOperation(() => prisma.assetUser.findUnique({
       where: {
         id,
       },
-    })
+    }))
 
     if (!user) {
       return NextResponse.json(
@@ -33,7 +34,14 @@ export async function GET(
     }
 
     return NextResponse.json({ user })
-  } catch (error) {
+  } catch (error: unknown) {
+    const prismaError = error as { code?: string; message?: string }
+    if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
     console.error('Error fetching user:', error)
     return NextResponse.json(
       { error: 'Failed to fetch user' },
@@ -73,10 +81,10 @@ export async function PUT(
     }
 
     // Get the user being updated
-    const userToUpdate = await prisma.assetUser.findUnique({
+    const userToUpdate = await retryDbOperation(() => prisma.assetUser.findUnique({
       where: { id },
       select: { userId: true, role: true },
-    })
+    }))
 
     if (!userToUpdate) {
       return NextResponse.json(
@@ -133,13 +141,13 @@ export async function PUT(
       updateData.canManageUsers = permissions.canManageUsers !== undefined ? permissions.canManageUsers : false
     }
 
-    const user = await prisma.assetUser.update({
+    const user = await retryDbOperation(() => prisma.assetUser.update({
       where: {
         id,
       },
       data: updateData,
       select: { userId: true },
-    })
+    }))
 
     // Clear permission cache for the updated user
     if (user.userId) {
@@ -147,9 +155,9 @@ export async function PUT(
     }
 
     // Fetch full user data for response
-    const fullUser = await prisma.assetUser.findUnique({
+    const fullUser = await retryDbOperation(() => prisma.assetUser.findUnique({
       where: { id },
-    })
+    }))
 
     if (!fullUser) {
       return NextResponse.json(
@@ -178,8 +186,16 @@ export async function PUT(
     console.error('Error updating user:', error)
     const prismaError = error as { code?: string; message?: string }
     
+    // Handle connection pool errors
+    if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+    
     // Handle not found
-    if (prismaError.code === 'P2025') {
+    if (prismaError?.code === 'P2025') {
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
@@ -208,10 +224,10 @@ export async function DELETE(
     const { id } = await params
 
     // Get the user being deleted
-    const userToDelete = await prisma.assetUser.findUnique({
+    const userToDelete = await retryDbOperation(() => prisma.assetUser.findUnique({
       where: { id },
       select: { userId: true },
-    })
+    }))
 
     if (!userToDelete) {
       return NextResponse.json(
@@ -241,19 +257,27 @@ export async function DELETE(
     }
 
     // Delete from asset_users
-    await prisma.assetUser.delete({
+    await retryDbOperation(() => prisma.assetUser.delete({
       where: {
         id,
       },
-    })
+    }))
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     console.error('Error deleting user:', error)
     const prismaError = error as { code?: string; message?: string }
     
+    // Handle connection pool errors
+    if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+    
     // Handle not found
-    if (prismaError.code === 'P2025') {
+    if (prismaError?.code === 'P2025') {
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }

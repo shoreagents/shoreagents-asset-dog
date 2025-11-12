@@ -4,20 +4,28 @@ import { Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 
 export function ThemeToggle() {
-  const { setTheme } = useTheme()
+  const { setTheme, resolvedTheme } = useTheme()
 
   const toggleTheme = () => {
-    setTheme((theme) => (theme === "dark" ? "light" : "dark"))
+    // Use resolvedTheme to determine current state (handles system theme)
+    const currentResolved = resolvedTheme || "light"
+    setTheme(currentResolved === "dark" ? "light" : "dark")
   }
+
+  // Determine which icon to show based on resolved theme (handles system theme)
+  const isDark = resolvedTheme === "dark"
 
   return (
     <button
       onClick={toggleTheme}
-      className="flex size-9 items-center justify-center rounded-md border bg-background hover:bg-accent relative"
-      aria-label="Toggle theme"
+      className="flex size-9 items-center justify-center rounded-md relative cursor-pointer transition-all"
+      aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
     >
-      <Sun className="h-4 w-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-      <Moon className="absolute h-4 w-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+      {isDark ? (
+        <Moon className="h-4 w-4 transition-all" />
+      ) : (
+        <Sun className="h-4 w-4 transition-all" />
+      )}
     </button>
   )
 }

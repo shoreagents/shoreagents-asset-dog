@@ -120,10 +120,6 @@ export async function POST(request: NextRequest) {
       dateAcquiredTo,
       includeDepreciableOnly,
       depreciationMethod,
-      groupBy,
-      sortBy,
-      sortOrder,
-      fieldsToInclude,
       notes,
     } = body
 
@@ -155,10 +151,6 @@ export async function POST(request: NextRequest) {
         dateAcquiredTo: dateAcquiredTo ? new Date(dateAcquiredTo) : null,
         includeDepreciableOnly: includeDepreciableOnly || false,
         depreciationMethod: depreciationMethod || null,
-        groupBy: groupBy || null,
-        sortBy: sortBy || null,
-        sortOrder: sortOrder || 'asc',
-        fieldsToInclude: fieldsToInclude ? JSON.stringify(fieldsToInclude) : null,
         userId: auth.user.id,
         generatedAt: new Date(),
         reportStatus: 'draft',

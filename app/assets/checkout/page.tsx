@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo } from "react"
-import { useForm, Controller } from "react-hook-form"
+import { useForm, useWatch, type Control } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, Package, CheckCircle2, Users, History, QrCode } from "lucide-react"
 import { usePermissions } from '@/hooks/use-permissions'
@@ -118,7 +118,10 @@ export default function CheckoutPage() {
   })
 
   // Watch checkoutDate to update expectedReturnDate min
-  const checkoutDate = form.watch('checkoutDate')
+  const checkoutDate = useWatch({
+    control: form.control,
+    name: 'checkoutDate',
+  })
 
   // Fetch asset suggestions based on input (only Available assets)
   const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
@@ -820,7 +823,7 @@ export default function CheckoutPage() {
             <div className="space-y-4">
               <EmployeeSelectField
                 name="employeeId"
-                control={form.control}
+                control={form.control as unknown as Control<Record<string, unknown>>}
                 error={form.formState.errors.employeeId}
                 label="Assign To"
                 required

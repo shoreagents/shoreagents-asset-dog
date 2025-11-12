@@ -267,7 +267,7 @@ export default function ActivityPage() {
   
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [selectedAssetTag, setSelectedAssetTag] = useState<string>('')
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
   
   // Get page, pageSize, and type from URL, default to 1, 100, and 'all'
   const page = parseInt(searchParams.get('page') || '1', 10)

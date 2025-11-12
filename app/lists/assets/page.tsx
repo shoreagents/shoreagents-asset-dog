@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -123,12 +123,61 @@ interface PaginationInfo {
   totalPages: number
 }
 
-async function fetchAssets(search?: string, page: number = 1, pageSize: number = 100): Promise<{ assets: Asset[], pagination: PaginationInfo }> {
+// Mapping from column keys to API search field names
+const COLUMN_TO_SEARCH_FIELD: Record<string, string[]> = {
+  'assetTag': ['assetTagId'],
+  'description': ['description'],
+  'brand': ['brand'],
+  'model': ['model'],
+  'serialNo': ['serialNo'],
+  'owner': ['owner'],
+  'issuedTo': ['issuedTo'],
+  'department': ['department'],
+  'site': ['site'],
+  'location': ['location'],
+  'category': ['category.name'],
+  'subCategory': ['subCategory.name'],
+  'status': ['status'],
+  'purchasedFrom': ['purchasedFrom'],
+  'purchaseDate': ['purchaseDate'],
+  'cost': ['cost'],
+  'additionalInformation': ['additionalInformation'],
+  'xeroAssetNo': ['xeroAssetNo'],
+  'pbiNumber': ['pbiNumber'],
+  'poNumber': ['poNumber'],
+  'paymentVoucherNumber': ['paymentVoucherNumber'],
+  'assetType': ['assetType'],
+  'deliveryDate': ['deliveryDate'],
+  'unaccountedInventory': ['unaccountedInventory'],
+  'remarks': ['remarks'],
+  'qr': ['qr'],
+  'oldAssetTag': ['oldAssetTag'],
+  'depreciableAsset': ['depreciableAsset'],
+  'depreciableCost': ['depreciableCost'],
+  'salvageValue': ['salvageValue'],
+  'assetLifeMonths': ['assetLifeMonths'],
+  'depreciationMethod': ['depreciationMethod'],
+  'dateAcquired': ['dateAcquired'],
+  'checkoutDate': ['checkouts.checkoutDate'],
+  'expectedReturnDate': ['checkouts.expectedReturnDate'],
+  'lastAuditDate': ['auditHistory.auditDate'],
+  'lastAuditType': ['auditHistory.auditType'],
+  'lastAuditor': ['auditHistory.auditor'],
+  'auditCount': [], // Not searchable
+  'images': [], // Not searchable
+}
+
+async function fetchAssets(search?: string, searchFields?: string[], page: number = 1, pageSize: number = 100): Promise<{ assets: Asset[], pagination: PaginationInfo }> {
   const params = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
   })
-  if (search) params.append('search', search)
+  if (search) {
+    params.append('search', search)
+    if (searchFields && searchFields.length > 0) {
+      params.append('searchFields', searchFields.join(','))
+    }
+  }
   
   const response = await fetch(`/api/assets?${params.toString()}`)
   if (!response.ok) {
@@ -1466,12 +1515,14 @@ function AssetActions({ asset }: { asset: Asset }) {
           </DropdownMenu>
         </div>
 
-      {/* Edit Dialog */}
+      {/* Edit Dialog - Only render when open to prevent unnecessary query creation */}
+      {isEditOpen && (
       <EditAssetDialog
         asset={asset}
         open={isEditOpen}
         onOpenChange={setIsEditOpen}
       />
+      )}
 
       {/* Delete Dialog */}
       <DeleteConfirmationDialog
@@ -1563,6 +1614,7 @@ export default function ListOfAssetsPage() {
   })
   const [isSelectOpen, setIsSelectOpen] = useState(false)
   const [shouldCloseSelect, setShouldCloseSelect] = useState(false)
+  const [isManualRefresh, setIsManualRefresh] = useState(false)
   const [, startTransition] = useTransition()
   
   // Convert column visibility to visible columns array for compatibility
@@ -1581,12 +1633,15 @@ export default function ListOfAssetsPage() {
   // Separate states for search input (immediate UI) and search query (debounced API calls)
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
+  const [searchType, setSearchType] = useState<string>(
+    searchParams.get('searchType') || 'unified'
+  )
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSearchQueryRef = useRef<string>(searchParams.get('search') || '')
   const previousSearchInputRef = useRef<string>(searchParams.get('search') || '')
 
   // Update URL parameters
-  const updateURL = useCallback((updates: { page?: number; pageSize?: number; search?: string }) => {
+  const updateURL = useCallback((updates: { page?: number; pageSize?: number; search?: string; searchType?: string }) => {
     const params = new URLSearchParams(searchParams.toString())
     
     if (updates.page !== undefined) {
@@ -1610,10 +1665,21 @@ export default function ListOfAssetsPage() {
     if (updates.search !== undefined) {
       if (updates.search === '') {
         params.delete('search')
+        params.delete('searchType')
       } else {
         params.set('search', updates.search)
       }
       // Reset to page 1 when search changes
+      params.delete('page')
+    }
+
+    if (updates.searchType !== undefined) {
+      if (updates.searchType === 'unified') {
+        params.delete('searchType')
+      } else {
+        params.set('searchType', updates.searchType)
+      }
+      // Reset to page 1 when searchType changes
       params.delete('page')
     }
     
@@ -1622,10 +1688,32 @@ export default function ListOfAssetsPage() {
     })
   }, [searchParams, router, startTransition])
 
+  // Get search fields based on visible columns and searchType
+  const searchFields = useMemo(() => {
+    if (searchType === 'unified') {
+      // Unified search: search in all visible columns
+      const fields: string[] = []
+      visibleColumns.forEach(colKey => {
+        const fieldMappings = COLUMN_TO_SEARCH_FIELD[colKey] || []
+        fields.push(...fieldMappings)
+      })
+      // Remove duplicates
+      return Array.from(new Set(fields))
+    } else {
+      // Specific column search: only search in the selected column
+      const fieldMappings = COLUMN_TO_SEARCH_FIELD[searchType] || []
+      return fieldMappings
+    }
+  }, [visibleColumns, searchType])
+
   const { data, isLoading, isFetching, error } = useQuery({
-    queryKey: ['assets-list', searchQuery, page, pageSize],
-    queryFn: () => fetchAssets(searchQuery || undefined, page, pageSize),
+    queryKey: ['assets-list', searchQuery, searchType, searchFields, page, pageSize],
+    queryFn: () => fetchAssets(searchQuery || undefined, searchFields.length > 0 ? searchFields : undefined, page, pageSize),
     enabled: canViewAssets, // Only fetch if user has permission
+    placeholderData: (previousData) => previousData,
+    staleTime: 30000, // Cache for 30 seconds to reduce unnecessary refetches
+    refetchOnWindowFocus: false, // Don't refetch on window focus to reduce connection pool pressure
+    refetchOnMount: false, // Don't refetch on mount if data exists
   })
 
   const handlePageSizeChange = (newPageSize: string) => {
@@ -1665,10 +1753,15 @@ export default function ListOfAssetsPage() {
     }
   }, [searchInput, searchParams, updateURL])
 
-  // Sync searchInput with URL params only on initial mount or external navigation
+  // Sync searchInput and searchType with URL params only on initial mount or external navigation
   useEffect(() => {
     const urlSearch = searchParams.get('search') || ''
+    const urlSearchType = searchParams.get('searchType') || 'unified'
     const currentSearchQuery = lastSearchQueryRef.current || ''
+    
+    if (urlSearchType !== searchType) {
+      setSearchType(urlSearchType)
+    }
     
     if (urlSearch !== currentSearchQuery) {
       if (searchTimeoutRef.current) {
@@ -1680,6 +1773,7 @@ export default function ListOfAssetsPage() {
       previousSearchInputRef.current = urlSearch
       lastSearchQueryRef.current = urlSearch
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
   
   useEffect(() => {
@@ -1692,7 +1786,6 @@ export default function ListOfAssetsPage() {
   // Memoize assets data
   const assets = useMemo(() => data?.assets || [], [data?.assets])
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: assets,
     columns,
@@ -1784,6 +1877,13 @@ export default function ListOfAssetsPage() {
 
   const pagination = data?.pagination
 
+  // Reset manual refresh flag after successful fetch
+  useEffect(() => {
+    if (!isFetching && isManualRefresh) {
+      setIsManualRefresh(false)
+    }
+  }, [isFetching, isManualRefresh])
+
   if (error) {
     return (
       <div className="space-y-6">
@@ -1797,7 +1897,7 @@ export default function ListOfAssetsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-screen">
       <div>
         <h1 className="text-3xl font-bold">List of Assets</h1>
         <p className="text-muted-foreground">
@@ -1805,65 +1905,85 @@ export default function ListOfAssetsPage() {
         </p>
       </div>
 
-      <Card className="relative flex flex-col flex-1 min-h-0 pb-0 gap-0 ">
+      <Card className="relative flex flex-col flex-1 min-h-0 pb-0 gap-0">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>List of Assets</CardTitle>
-              <CardDescription>View and manage all assets in the system</CardDescription>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ['assets-list'] })
-              }}
-              className="h-8 w-8"
-              title="Refresh table"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 px-0 relative max-h-screen">
-          <div className="flex items-center justify-between p-4 gap-4">
-            <div className="relative flex-1 max-w-sm">
-              {searchInput ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchInput('')
-                    updateURL({ search: '', page: 1 })
-                  }}
-                  className="absolute left-2 top-2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : (
-                <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
-              )}
-              <Input
-                placeholder="Search assets..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="pl-8 h-8"
-              />
-            </div>
-            <Select 
-              open={isSelectOpen} 
-              onOpenChange={handleSelectOpenChange}
-              value=""
-              onValueChange={(value) => {
-                toggleColumn(value)
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-[200px]" size='sm'>
-                <span className="flex-1 text-left truncate">
-                  {visibleColumns.length > 0 
-                    ? `${visibleColumns.length} column${visibleColumns.length !== 1 ? 's' : ''} selected`
-                    : 'Select columns'
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-center w-full md:flex-1 md:max-w-md border rounded-md overflow-hidden">
+              <Select
+                value={searchType}
+                onValueChange={(value: string) => {
+                  setSearchType(value)
+                  updateURL({ searchType: value, page: 1 })
+                }}
+              >
+                <SelectTrigger className="w-[140px] h-8 rounded-none border-0 border-r focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none" size='sm'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unified">Unified Search</SelectItem>
+                  {visibleColumns
+                    .filter(colKey => {
+                      // Only show columns that have searchable fields
+                      const fieldMappings = COLUMN_TO_SEARCH_FIELD[colKey] || []
+                      return fieldMappings.length > 0
+                    })
+                    .map(colKey => {
+                      const column = ALL_COLUMNS.find(c => c.key === colKey)
+                      return (
+                        <SelectItem key={colKey} value={colKey}>
+                          {column?.label || colKey}
+                        </SelectItem>
+                      )
+                    })}
+                </SelectContent>
+              </Select>
+              <div className="relative flex-1">
+                {searchInput ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchInput('')
+                      updateURL({ search: '', page: 1 })
+                    }}
+                    className="absolute left-2 top-2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer z-10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+                )}
+                <Input
+                  placeholder={
+                    searchType === 'unified'
+                      ? visibleColumns.length > 0
+                        ? `Search by ${visibleColumns.slice(0, 3).map(col => ALL_COLUMNS.find(c => c.key === col)?.label).filter(Boolean).join(', ').toLowerCase()}${visibleColumns.length > 3 ? '...' : ''}...`
+                        : 'Search assets...'
+                      : ALL_COLUMNS.find(c => c.key === searchType)?.label
+                        ? `Search by ${ALL_COLUMNS.find(c => c.key === searchType)?.label}`
+                        : 'Search...'
                   }
-                </span>
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="pl-8 h-8 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select 
+                open={isSelectOpen} 
+                onOpenChange={handleSelectOpenChange}
+                value=""
+                onValueChange={(value) => {
+                  toggleColumn(value)
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-[200px]" size='sm'>
+                  <span className="flex-1 text-left truncate">
+                    {visibleColumns.length > 0 
+                      ? `${visibleColumns.length} column${visibleColumns.length !== 1 ? 's' : ''} selected`
+                      : 'Select columns'
+                    }
+                  </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
@@ -1917,16 +2037,30 @@ export default function ListOfAssetsPage() {
                 })}
               </SelectContent>
             </Select>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  setIsManualRefresh(true)
+                  queryClient.invalidateQueries({ queryKey: ['assets-list'] })
+                }}
+                className="h-8 w-8"
+                title="Refresh table"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-
-          {isFetching && data && (
-            <div className="absolute inset-x-0 top-[65px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+        </CardHeader>
+        <CardContent className="flex-1 px-0 relative">
+          {isFetching && data && isManualRefresh && (
+            <div className="absolute inset-x-0 top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
 
-          <div className="h-130">
-            {permissionsLoading || isLoading ? (
+          <div className="h-140 pt-8">
+            {permissionsLoading || (isLoading && !data) ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
                   <Spinner className="h-8 w-8" />
@@ -1951,11 +2085,11 @@ export default function ListOfAssetsPage() {
               </div>
             ) : (
               <div className="min-w-full">
-                <ScrollArea className='h-130'>
+                <ScrollArea className='h-132'>
                 <Table className='border-t'>
                   <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
+                      <TableRow key={headerGroup.id} className="group">
                         {headerGroup.headers.map((header) => {
                           const isActionsColumn = header.column.id === 'actions'
                           return (
@@ -1963,7 +2097,7 @@ export default function ListOfAssetsPage() {
                               key={header.id}
                               className={cn(
                                 isActionsColumn ? "text-right" : "text-left",
-                                isActionsColumn && "sticky right-0 bg-card z-10"
+                                isActionsColumn && "sticky right-0 bg-card z-0 border-l group-hover:bg-muted/50 transition-colors"
                               )}
                             >
                             {header.isPlaceholder
@@ -1978,14 +2112,14 @@ export default function ListOfAssetsPage() {
                   <TableBody>
                     {table.getRowModel().rows?.length ? (
                       table.getRowModel().rows.map((row) => (
-                        <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
+                        <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'} className="group">
                           {row.getVisibleCells().map((cell) => {
                             const isActionsColumn = cell.column.id === 'actions'
                             return (
                               <TableCell 
                                 key={cell.id}
                                 className={cn(
-                                  isActionsColumn && "sticky right-0 bg-card z-10"
+                                  isActionsColumn && "sticky right-0 bg-card z-10 group-hover:bg-muted/50 border-l transition-colors"
                                 )}
                               >
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -2012,7 +2146,7 @@ export default function ListOfAssetsPage() {
         </CardContent>
         
         {/* Pagination Bar - Fixed at Bottom */}
-        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-bl-lg rounded-br-lg">
+        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-bl-xl rounded-br-xl">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
             {/* Left Side - Navigation */}
             <div className="flex items-center justify-center sm:justify-start gap-2">

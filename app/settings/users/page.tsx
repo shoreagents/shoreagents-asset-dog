@@ -335,7 +335,7 @@ const createColumns = (
         <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
+              <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-transparent!">
                 <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -891,7 +891,7 @@ export default function UsersPage() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-screen">
       <div>
         <h1 className="text-3xl font-bold">Users</h1>
         <p className="text-muted-foreground">
@@ -982,13 +982,13 @@ export default function UsersPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 px-0 relative max-h-screen">
+        <CardContent className="flex-1 px-0 relative">
           {isFetching && data && isManualRefresh && (
             <div className="absolute inset-x-0 top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
-           <div className="h-150 pt-8">
+           <div className="h-140 pt-8">
            {isLoading && !data ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
@@ -1004,11 +1004,11 @@ export default function UsersPage() {
               </div>
             ) : (
               <div className="min-w-full">
-                <ScrollArea className='h-142'>
+                <ScrollArea className='h-132'>
                 <Table className='border-t'>
                   <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
+                      <TableRow key={headerGroup.id} className="group">
                         {headerGroup.headers.map((header) => {
                           const isActionsColumn = header.column.id === 'actions'
                           return (
@@ -1016,7 +1016,7 @@ export default function UsersPage() {
                               key={header.id}
                               className={cn(
                                 isActionsColumn ? "text-center" : "text-left",
-                                isActionsColumn && "sticky right-0 bg-card z-10"
+                                isActionsColumn && "sticky right-0 bg-card z-0 border-l group-hover:bg-muted/50 transition-colors"
                               )}
                             >
                               {header.isPlaceholder
@@ -1034,6 +1034,7 @@ export default function UsersPage() {
                         <TableRow 
                           key={row.id} 
                           data-state={row.getIsSelected() && 'selected'}
+                          className="group"
                         >
                           {row.getVisibleCells().map((cell) => {
                             const isActionsColumn = cell.column.id === 'actions'
@@ -1041,7 +1042,7 @@ export default function UsersPage() {
                               <TableCell 
                                 key={cell.id}
                                 className={cn(
-                                  isActionsColumn && "sticky right-0 bg-card z-10 "
+                                  isActionsColumn && "sticky right-0 bg-card group-hover:bg-muted/50! z-20 border-l transition-colors"
                                 )}
                               >
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1983,7 +1984,7 @@ export default function UsersPage() {
           }
         }}
         title="Delete User"
-        description={`Are you sure you want to delete user "${selectedUser?.userId}"? This action cannot be undone.`}
+        description={`Are you sure you want to delete user "${selectedUser?.email || selectedUser?.userId || 'this user'}"? This action cannot be undone.`}
         isLoading={deleteMutation.isPending}
       />
     </div>

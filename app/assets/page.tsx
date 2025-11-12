@@ -182,7 +182,16 @@ const ALL_COLUMNS = [
   { key: 'images', label: 'Images' },
 ]
 
-async function fetchAssets(page: number = 1, pageSize: number = 10, search?: string, category?: string, status?: string): Promise<{ assets: Asset[], pagination: { total: number, page: number, pageSize: number, totalPages: number } }> {
+async function fetchAssets(page: number = 1, pageSize: number = 10, search?: string, category?: string, status?: string): Promise<{ 
+  assets: Asset[], 
+  pagination: { total: number, page: number, pageSize: number, totalPages: number },
+  summary?: {
+    totalAssets: number
+    totalValue: number
+    availableAssets: number
+    checkedOutAssets: number
+  }
+}> {
   const params = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
@@ -196,7 +205,11 @@ async function fetchAssets(page: number = 1, pageSize: number = 10, search?: str
     throw new Error('Failed to fetch assets')
   }
   const data = await response.json()
-  return { assets: data.assets, pagination: data.pagination }
+  return { 
+    assets: data.assets, 
+    pagination: data.pagination,
+    summary: data.summary
+  }
 }
 
 async function deleteAsset(id: string) {
@@ -1568,7 +1581,8 @@ function AssetActions({ asset }: { asset: Asset }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Edit Dialog */}
+      {/* Edit Dialog - Only render when open to prevent unnecessary query creation */}
+      {isEditOpen && (
       <EditAssetDialog
         asset={asset}
         open={isEditOpen}
@@ -1578,6 +1592,7 @@ function AssetActions({ asset }: { asset: Asset }) {
           setIsPreviewDialogOpen(true)
         }}
       />
+      )}
 
       {/* Image Preview Dialog */}
       <ImagePreviewDialog
@@ -1718,7 +1733,7 @@ export default function AssetsPage() {
   const canViewAssets = hasPermission('canViewAssets')
   
   // Fetch assets with server-side pagination and filtering
-  // Run in parallel with summary query - both start immediately
+  // Summary is now included in the same response, eliminating separate API call
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ['assets', pagination.pageIndex + 1, pagination.pageSize, searchQuery, categoryFilter, statusFilter],
     queryFn: () => fetchAssets(
@@ -1731,54 +1746,31 @@ export default function AssetsPage() {
     enabled: canViewAssets, // Only fetch if user has permission
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
-    // Ensure this query runs in parallel with the summary query
     refetchOnMount: true,
   })
 
   const assets = useMemo(() => data?.assets || [], [data?.assets])
   const totalCount = data?.pagination?.total || 0
 
-  // Fetch summary statistics for all assets (not just paginated)
-  // Define immediately after table query to ensure parallel execution
-  const { data: summaryData, isLoading: isLoadingSummary } = useQuery({
-    queryKey: ['assets', 'summary', searchQuery, categoryFilter, statusFilter],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        summary: 'true',
-      })
-      if (searchQuery) params.append('search', searchQuery)
-      if (categoryFilter && categoryFilter !== 'all') params.append('category', categoryFilter)
-      if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter)
-      
-      const response = await fetch(`/api/assets?${params.toString()}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch summary')
-      }
-      const data = await response.json()
-      return data.summary as {
-        totalAssets: number
-        totalValue: number
-        availableAssets: number
-        checkedOutAssets: number
-      }
-    },
-    enabled: canViewAssets, // Only fetch if user has permission
-    staleTime: 30000, // Cache for 30 seconds
-    placeholderData: (previousData) => previousData, // Keep previous data during refetch to avoid flashing
-    refetchOnMount: true,
-    refetchOnWindowFocus: false,
-  })
+  // Summary is now included in the main assets API response
+  // No need for a separate query - this eliminates the 33-second delay
+  const summaryData = data?.summary
 
-  // Fetch all categories for filter dropdown (not filtered by current selection)
+  // Lazy load categories - only fetch when category dropdown is opened
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
       const response = await fetch('/api/categories')
-      if (!response.ok) throw new Error('Failed to fetch categories')
+      if (!response.ok) {
+        // Return empty array on error instead of throwing
+        return []
+      }
       const data = await response.json()
-      return data.categories as Array<{ id: string; name: string }>
+      // Ensure we always return an array, never undefined
+      return (data.categories || []) as Array<{ id: string; name: string }>
     },
-    enabled: canViewAssets,
+    enabled: canViewAssets && isCategoryDropdownOpen, // Only fetch when dropdown is opened
     staleTime: 10 * 60 * 1000, // Cache for 10 minutes
   })
 
@@ -2460,11 +2452,14 @@ export default function AssetsPage() {
     }
   }
 
-  // Calculate summary statistics from API - use 0 only if no data exists yet
+  // Calculate summary statistics from main assets API response - use 0 only if no data exists yet
   const totalAssets = summaryData?.totalAssets ?? 0
   const availableAssets = summaryData?.availableAssets ?? 0
   const checkedOutAssets = summaryData?.checkedOutAssets ?? 0
   const totalValue = summaryData?.totalValue ?? 0
+  
+  // Summary loading state is now tied to main assets query
+  const isLoadingSummary = isLoading
 
   return (
     <>
@@ -2790,7 +2785,12 @@ export default function AssetsPage() {
                   
                   <div className="flex gap-3 sm:gap-4">
                     {/* Category Filter */}
-                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <Select 
+                      value={categoryFilter} 
+                      onValueChange={setCategoryFilter}
+                      open={isCategoryDropdownOpen}
+                      onOpenChange={setIsCategoryDropdownOpen}
+                    >
                       <SelectTrigger className="w-full sm:w-[180px]" size='sm'>
                         <span className="flex-1 text-left truncate">
                           {categoryFilter === 'all' || !categoryFilter ? 'All Categories' : categoryFilter}
@@ -2801,6 +2801,14 @@ export default function AssetsPage() {
                         {categoriesData?.map(category => (
                           <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
                         ))}
+                        {isCategoryDropdownOpen && !categoriesData && (
+                          <SelectItem value="loading" disabled>
+                            <div className="flex items-center gap-2">
+                              <Spinner className="h-4 w-4" />
+                              <span>Loading categories...</span>
+                            </div>
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
 
@@ -2822,7 +2830,12 @@ export default function AssetsPage() {
                           <SelectItem key={status} value={status}>{status}</SelectItem>
                         ))}
                         {isStatusDropdownOpen && !allStatusesData && (
-                          <SelectItem value="loading" disabled>Loading statuses...</SelectItem>
+                          <SelectItem value="loading" disabled>
+                            <div className="flex items-center gap-2">
+                              <Spinner className="h-4 w-4" />
+                              <span>Loading statuses...</span>
+                            </div>
+                          </SelectItem>
                         )}
                       </SelectContent>
                     </Select>

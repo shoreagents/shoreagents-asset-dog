@@ -449,25 +449,12 @@ model AssetReports {
   includeDepreciableOnly Boolean @map("include_depreciable_only") @default(false)
   depreciationMethod String?   @map("depreciation_method") @db.VarChar(50)
   
-  // Report configuration
-  groupBy           String?   @map("group_by") @db.VarChar(50) // "category", "location", "department", "status", "cost_range", etc.
-  sortBy            String?   @map("sort_by") @db.VarChar(50) // "cost", "purchaseDate", "assetTagId", etc.
-  sortOrder         String?   @map("sort_order") @db.VarChar(10) @default("asc") // "asc" or "desc"
-  
-  // Fields to include in report (JSON array of field names)
-  fieldsToInclude   String?   @map("fields_to_include") @db.Text // JSON array: ["assetTagId", "description", "cost", etc.]
-  
   // Report generation metadata
   userId            String    @map("user_id") @db.VarChar(255) // Reference to Supabase auth.users.id
   generatedAt      DateTime  @map("generated_at") @default(now())
   reportStatus     String    @map("report_status") @db.VarChar(50) @default("draft") // "draft", "saved", "generated", "archived"
   
-  // Report output (optional - can store report data or reference to file)
-  reportData        String?   @map("report_data") @db.Text // JSON data or reference to file
-  filePath          String?   @map("file_path") @db.VarChar(500) // Path to generated report file (PDF, Excel, etc.)
-  fileFormat        String?   @map("file_format") @db.VarChar(20) // "pdf", "excel", "csv", "json"
-  
-  // Summary statistics (cached for quick access)
+  // Summary statistics (calculated when report is generated)
   totalAssets       Int?      @map("total_assets")
   totalValue        Decimal?  @map("total_value") @db.Decimal(12, 2)
   averageCost       Decimal?  @map("average_cost") @db.Decimal(12, 2)

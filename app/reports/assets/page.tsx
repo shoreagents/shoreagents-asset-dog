@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useCallback, useTransition } from 'react'
+import { useState, useCallback, useTransition, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -159,6 +159,76 @@ export default function AssetReportsPage() {
 
   // Watch all form values using useWatch (better for React rendering)
   const formData = useWatch({ control }) as AssetReportFormData
+
+  // Track form changes to show floating buttons - only show when there's actual input
+  const isFormDirty = useMemo(() => {
+    if (!formData) return false
+    
+    // Check if form has any meaningful data (non-empty, non-default values)
+    const hasReportName = formData.reportName && typeof formData.reportName === 'string' && formData.reportName.trim() !== ''
+    const hasReportType = formData.reportType && typeof formData.reportType === 'string' && formData.reportType.trim() !== ''
+    const hasDescription = formData.description && typeof formData.description === 'string' && formData.description.trim() !== ''
+    const hasCategory = formData.categoryId && formData.categoryId !== 'all'
+    const hasSubCategory = formData.subCategoryId && formData.subCategoryId !== 'all'
+    const hasStatus = formData.status && formData.status !== 'all'
+    const hasLocation = formData.location && typeof formData.location === 'string' && formData.location.trim() !== ''
+    const hasDepartment = formData.department && typeof formData.department === 'string' && formData.department.trim() !== ''
+    const hasSite = formData.site && typeof formData.site === 'string' && formData.site.trim() !== ''
+    const hasMinCost = formData.minCost && typeof formData.minCost === 'string' && formData.minCost.trim() !== ''
+    const hasMaxCost = formData.maxCost && typeof formData.maxCost === 'string' && formData.maxCost.trim() !== ''
+    const hasPurchaseDateFrom = formData.purchaseDateFrom && typeof formData.purchaseDateFrom === 'string' && formData.purchaseDateFrom.trim() !== ''
+    const hasPurchaseDateTo = formData.purchaseDateTo && typeof formData.purchaseDateTo === 'string' && formData.purchaseDateTo.trim() !== ''
+    const hasDateAcquiredFrom = formData.dateAcquiredFrom && typeof formData.dateAcquiredFrom === 'string' && formData.dateAcquiredFrom.trim() !== ''
+    const hasDateAcquiredTo = formData.dateAcquiredTo && typeof formData.dateAcquiredTo === 'string' && formData.dateAcquiredTo.trim() !== ''
+    const hasDepreciableOnly = formData.includeDepreciableOnly === true
+    const hasDepreciationMethod = formData.depreciationMethod && formData.depreciationMethod !== 'all'
+    const hasNotes = formData.notes && typeof formData.notes === 'string' && formData.notes.trim() !== ''
+    
+    return !!(
+      hasReportName ||
+      hasReportType ||
+      hasDescription ||
+      hasCategory ||
+      hasSubCategory ||
+      hasStatus ||
+      hasLocation ||
+      hasDepartment ||
+      hasSite ||
+      hasMinCost ||
+      hasMaxCost ||
+      hasPurchaseDateFrom ||
+      hasPurchaseDateTo ||
+      hasDateAcquiredFrom ||
+      hasDateAcquiredTo ||
+      hasDepreciableOnly ||
+      hasDepreciationMethod ||
+      hasNotes
+    )
+  }, [formData])
+
+  // Clear form function
+  const clearForm = () => {
+    reset({
+      reportName: '',
+      reportType: '',
+      description: '',
+      categoryId: 'all',
+      subCategoryId: 'all',
+      status: 'all',
+      location: '',
+      department: '',
+      site: '',
+      minCost: '',
+      maxCost: '',
+      purchaseDateFrom: '',
+      purchaseDateTo: '',
+      dateAcquiredFrom: '',
+      dateAcquiredTo: '',
+      includeDepreciableOnly: false,
+      depreciationMethod: 'all',
+      notes: '',
+    })
+  }
 
 
   // Lazy load categories - only fetch when category dropdown is opened
@@ -445,7 +515,7 @@ export default function AssetReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={isFormDirty ? "space-y-6 pb-16" : "space-y-6"}>
       <div>
         <h1 className="text-3xl font-bold">Asset Reports</h1>
         <p className="text-muted-foreground">
@@ -511,86 +581,86 @@ export default function AssetReportsPage() {
                       <TableHead>Type</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Total Assets</TableHead>
-                      <TableHead>Total Value</TableHead>  
+                      <TableHead>Total Value</TableHead>
                       <TableHead>Generated</TableHead>
                       <TableHead className="w-[70px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                        {reports.map((report) => (
-                          <TableRow key={report.id}>
-                            <TableCell className="font-medium">{report.reportName}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{getReportTypeLabel(report.reportType)}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={getStatusBadge(report.reportStatus)}>
-                                {report.reportStatus}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{report.totalAssets ?? '-'}</TableCell>
-                            <TableCell>{formatCurrency(report.totalValue)}</TableCell>
-                            <TableCell>
-                              {report.generatedAt
-                                ? format(new Date(report.generatedAt), 'MMM dd, yyyy')
-                                : '-'}
-                            </TableCell>
-                            <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      router.push(`/reports/assets/${report.id}`)
-                                    }}
-                                  >
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View Report
-                                  </DropdownMenuItem>
-                                  {(report.reportStatus === 'draft' || report.reportStatus === 'saved') && (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        generateMutation.mutate(report.id)
-                                      }}
-                                      disabled={generateMutation.isPending}
-                                    >
-                                      <Play className="mr-2 h-4 w-4" />
-                                      Generate Report
-                                    </DropdownMenuItem>
-                                  )}
-                                  {report.reportStatus === 'generated' && (
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        generateMutation.mutate(report.id)
-                                      }}
-                                      disabled={generateMutation.isPending}
-                                    >
-                                      <RefreshCw className="mr-2 h-4 w-4" />
-                                      Regenerate Report
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onClick={() => {
-                                      if (confirm(`Delete report "${report.reportName}"?`)) {
-                                        deleteMutation.mutate(report.id)
-                                      }
-                                    }}
-                                    disabled={deleteMutation.isPending}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                    {reports.map((report) => (
+                      <TableRow key={report.id}>
+                        <TableCell className="font-medium">{report.reportName}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{getReportTypeLabel(report.reportType)}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadge(report.reportStatus)}>
+                            {report.reportStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{report.totalAssets ?? '-'}</TableCell>
+                        <TableCell>{formatCurrency(report.totalValue)}</TableCell>
+                        <TableCell>
+                          {report.generatedAt
+                            ? format(new Date(report.generatedAt), 'MMM dd, yyyy')
+                            : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  router.push(`/reports/assets/${report.id}`)
+                                }}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Report
+                              </DropdownMenuItem>
+                              {(report.reportStatus === 'draft' || report.reportStatus === 'saved') && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    generateMutation.mutate(report.id)
+                                  }}
+                                  disabled={generateMutation.isPending}
+                                >
+                                  <Play className="mr-2 h-4 w-4" />
+                                  Generate Report
+                                </DropdownMenuItem>
+                              )}
+                              {report.reportStatus === 'generated' && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    generateMutation.mutate(report.id)
+                                  }}
+                                  disabled={generateMutation.isPending}
+                                >
+                                  <RefreshCw className="mr-2 h-4 w-4" />
+                                  Regenerate Report
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => {
+                                  if (confirm(`Delete report "${report.reportName}"?`)) {
+                                    deleteMutation.mutate(report.id)
+                                  }
+                                }}
+                                disabled={deleteMutation.isPending}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               <ScrollBar orientation="horizontal" className='z-10' />
@@ -1011,22 +1081,45 @@ export default function AssetReportsPage() {
               </FieldContent>
             </Field>
 
-            {/* Submit Button */}
-            <div className="flex justify-end">
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? (
-                  <>
-                    <Spinner className="mr-2 h-4 w-4" />
-                    Creating...
-                  </>
-                ) : (
-                  'Create Report'
-                )}
-              </Button>
-            </div>
           </form>
         </CardContent>
       </Card>
+
+      {/* Floating Action Buttons - Only show when form has changes */}
+      {isFormDirty && canViewAssets && (
+        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={clearForm}
+            className="min-w-[120px] bg-accent!"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => {
+              const form = document.querySelector('form') as HTMLFormElement
+              if (form) {
+                form.requestSubmit()
+              }
+            }}
+            disabled={createMutation.isPending}
+            className="min-w-[120px]"
+          >
+            {createMutation.isPending ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" />
+                Creating...
+              </>
+            ) : (
+              'Create Report'
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { PlusIcon, Sparkles, ImageIcon, Upload, ChevronDown, Info, FileText } from "lucide-react"
 import { usePermissions } from '@/hooks/use-permissions'
+import { useSidebar } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { toast } from 'sonner'
 import { useCategories, useSubCategories, useCreateCategory, useCreateSubCategory, useCreateAsset } from "@/hooks/use-categories"
@@ -46,6 +47,7 @@ import type { Category, SubCategory } from "@/hooks/use-categories"
 export default function AddAssetPage() {
   const router = useRouter()
   const { hasPermission, isLoading } = usePermissions()
+  const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canCreateAssets = hasPermission('canCreateAssets')
   const canManageCategories = hasPermission('canManageCategories')
   
@@ -1471,7 +1473,17 @@ export default function AddAssetPage() {
 
       {/* Floating Action Buttons - Only show when form has changes */}
       {isFormDirty && (
-        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+        <div 
+          className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
+          style={{
+            left: !sidebarOpen 
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
+            transform: 'translateX(-50%)'
+          }}
+        >
           <Button
             type="button"
             variant="outline"

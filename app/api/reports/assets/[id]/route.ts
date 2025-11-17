@@ -3,6 +3,10 @@ import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { retryDbOperation } from '@/lib/db-utils'
 import { requirePermission } from '@/lib/permission-utils'
+import { Prisma } from '@prisma/client'
+
+type AssetWhereInput = Prisma.AssetsWhereInput
+type LocationFilter = { OR: Array<{ location?: { contains: string; mode: 'insensitive' }; department?: { contains: string; mode: 'insensitive' }; site?: { contains: string; mode: 'insensitive' } }> } | null
 
 export async function DELETE(
   request: NextRequest,
@@ -11,8 +15,8 @@ export async function DELETE(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  // Check view permission
-  const permissionCheck = await requirePermission('canViewAssets')
+  // Check manage reports permission
+  const permissionCheck = await requirePermission('canManageReports')
   if (!permissionCheck.allowed) return permissionCheck.error
 
   try {
@@ -58,8 +62,9 @@ export async function DELETE(
 }
 
 // Helper function to build where clause from report filters
-function buildReportWhereClause(report: any) {
-  const baseFilters: any = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildReportWhereClause(report: any): AssetWhereInput {
+  const baseFilters: AssetWhereInput = {
     deletedAt: null, // Only non-deleted assets
   }
 
@@ -79,9 +84,9 @@ function buildReportWhereClause(report: any) {
   }
 
   // Location filters - for location report type, use OR logic so typos in one field don't block results
-  let locationFilter: any = null
+  let locationFilter: LocationFilter = null
   if (report.reportType === 'location') {
-    const locationFilters: any[] = []
+    const locationFilters: Array<{ location?: { contains: string; mode: 'insensitive' }; department?: { contains: string; mode: 'insensitive' }; site?: { contains: string; mode: 'insensitive' } }> = []
     
     if (report.location) {
       locationFilters.push({ location: { contains: report.location, mode: 'insensitive' } })
@@ -167,8 +172,8 @@ export async function GET(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  // Check view permission
-  const permissionCheck = await requirePermission('canViewAssets')
+  // Check manage reports permission (users with canManageReports can view all reports)
+  const permissionCheck = await requirePermission('canManageReports')
   if (!permissionCheck.allowed) return permissionCheck.error
 
   try {
@@ -201,15 +206,32 @@ export async function GET(
       )
     }
 
-    // Verify ownership
-    if (report.userId !== auth.user.id) {
-      return NextResponse.json(
-        { error: 'You do not have permission to view this report' },
-        { status: 403 }
-      )
+    // Note: Removed ownership check - users with canManageReports can view all reports
+
+    interface ReportResponse {
+      report: typeof report
+      assets?: Array<{
+        id: string
+        assetTagId: string
+        description: string | null
+        cost: number | null
+        status: string | null
+        location: string | null
+        department: string | null
+        site: string | null
+        category: { id: string; name: string } | null
+        subCategory: { id: string; name: string } | null
+      }>
+      assetsPagination?: {
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+        hasNextPage: boolean
+      }
     }
 
-    const response: any = { report }
+    const response: ReportResponse = { report }
 
     // If includeAssets is true, fetch matching assets with pagination
     if (includeAssets) {
@@ -256,7 +278,10 @@ export async function GET(
         }),
       ]))
 
-      response.assets = assets
+      response.assets = assets.map(asset => ({
+        ...asset,
+        cost: asset.cost ? Number(asset.cost) : null,
+      }))
       response.assetsPagination = {
         page,
         pageSize,
@@ -286,8 +311,8 @@ export async function PATCH(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  // Check view permission
-  const permissionCheck = await requirePermission('canViewAssets')
+  // Check manage reports permission
+  const permissionCheck = await requirePermission('canManageReports')
   if (!permissionCheck.allowed) return permissionCheck.error
 
   try {
@@ -317,7 +342,7 @@ export async function PATCH(
     const whereClause = buildReportWhereClause(report)
 
     // Query assets matching the filters
-    const [assets, totalValueResult] = await retryDbOperation(() => Promise.all([
+    const [, totalValueResult] = await retryDbOperation(() => Promise.all([
       prisma.assets.findMany({
         where: whereClause,
         select: {

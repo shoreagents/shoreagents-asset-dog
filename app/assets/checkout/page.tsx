@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { useForm, useWatch, type Control } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, Package, CheckCircle2, Users, History, QrCode } from "lucide-react"
 import { usePermissions } from '@/hooks/use-permissions'
+import { useSidebar } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/qr-scanner-dialog'
 import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
@@ -92,7 +94,9 @@ const getStatusBadge = (status: string | null) => {
 
 export default function CheckoutPage() {
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
   const canCheckout = hasPermission('canCheckout')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -104,6 +108,7 @@ export default function CheckoutPage() {
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
   const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
+  const [selectedPurchaseDateForQR, setSelectedPurchaseDateForQR] = useState<string | null>(null)
 
   const form = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutSchema),
@@ -282,6 +287,49 @@ export default function CheckoutPage() {
     toast.success('Asset removed from checkout list')
   }
 
+  // Handle URL query parameters for assetId
+  useEffect(() => {
+    const urlAssetId = searchParams.get('assetId')
+
+    if (urlAssetId && selectedAssets.length === 0) {
+      // Fetch and add the asset from URL
+      const addAssetFromUrl = async () => {
+        try {
+          const response = await fetch(`/api/assets/${urlAssetId}`)
+          if (response.ok) {
+            const data = await response.json()
+            const asset = data.asset as Asset
+            
+            // Check if asset is available
+            if (asset.status && asset.status !== "Available") {
+              toast.error(`Asset "${asset.assetTagId}" is not available. Current status: ${asset.status}`)
+              return
+            }
+
+            // Check if asset is already in the list
+            if (selectedAssets.some(a => a.id === asset.id)) {
+              return
+            }
+
+            setSelectedAssets([
+              {
+                ...asset,
+                newDepartment: asset.department || "",
+                newSite: asset.site || "",
+                newLocation: asset.location || "",
+              },
+            ])
+            setAssetIdInput(asset.assetTagId)
+          }
+        } catch (error) {
+          console.error('Error fetching asset from URL:', error)
+        }
+      }
+      
+      addAssetFromUrl()
+    }
+  }, [searchParams, selectedAssets])
+
   // Track form changes to show floating buttons - only show when assets are selected
   const isFormDirty = useMemo(() => {
     // Only show floating buttons when assets are actually selected
@@ -437,6 +485,7 @@ export default function CheckoutPage() {
         id: string
         assetTagId: string
         description: string
+        purchaseDate: string | null
       }
       employeeUser: {
         id: string
@@ -649,6 +698,7 @@ export default function CheckoutPage() {
                             className="text-xs cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors"
                             onClick={() => {
                               setSelectedAssetTagForQR(checkout.asset.assetTagId)
+                              setSelectedPurchaseDateForQR(checkout.asset.purchaseDate)
                               setQrDisplayDialogOpen(true)
                             }}
                           >
@@ -972,7 +1022,17 @@ export default function CheckoutPage() {
 
       {/* Floating Action Buttons - Only show when form has changes */}
       {isFormDirty && canViewAssets && canCheckout && (
-        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+        <div 
+          className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
+          style={{
+            left: !sidebarOpen 
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
+            transform: 'translateX(-50%)'
+          }}
+        >
           <Button
             type="button"
             variant="outline"
@@ -1019,6 +1079,7 @@ export default function CheckoutPage() {
         open={qrDisplayDialogOpen}
         onOpenChange={setQrDisplayDialogOpen}
         assetTagId={selectedAssetTagForQR}
+        purchaseDate={selectedPurchaseDateForQR}
       />
     </div>
   )

@@ -22,6 +22,11 @@ interface UserPermissions {
   canManageMedia: boolean
   canManageTrash: boolean
   canManageUsers: boolean
+  canManageReturnForms: boolean
+  canViewReturnForms: boolean
+  canManageAccountabilityForms: boolean
+  canViewAccountabilityForms: boolean
+  canManageReports: boolean
 }
 
 export function usePermissions() {

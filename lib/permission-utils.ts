@@ -28,6 +28,11 @@ interface UserPermissions {
   canManageMedia: boolean
   canManageTrash: boolean
   canManageUsers: boolean
+  canManageReturnForms: boolean
+  canViewReturnForms: boolean
+  canManageAccountabilityForms: boolean
+  canViewAccountabilityForms: boolean
+  canManageReports: boolean
 }
 
 interface AssetUser {
@@ -53,6 +58,11 @@ interface AssetUser {
   canManageMedia: boolean
   canManageTrash: boolean
   canManageUsers: boolean
+  canManageReturnForms: boolean
+  canViewReturnForms: boolean
+  canManageAccountabilityForms: boolean
+  canViewAccountabilityForms: boolean
+  canManageReports: boolean
 }
 
 /**
@@ -98,6 +108,11 @@ export async function getUserPermissions(): Promise<{ user: AssetUser | null; er
         canManageMedia: true,
         canManageTrash: true,
         canManageUsers: true,
+        canManageReturnForms: true,
+        canViewReturnForms: true,
+        canManageAccountabilityForms: true,
+        canViewAccountabilityForms: true,
+        canManageReports: true,
       },
     }))
 

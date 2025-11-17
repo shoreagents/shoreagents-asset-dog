@@ -53,12 +53,12 @@ import { cn } from '@/lib/utils'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { employeeSchema, type EmployeeFormData } from '@/lib/validations/employees'
 import { FieldError } from '@/components/ui/field'
+import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
 
 interface Employee {
   id: string
@@ -76,6 +76,7 @@ interface Employee {
       assetTagId: string
       description: string
       status: string | null
+      purchaseDate: string | null
       category: {
         name: string
       } | null
@@ -355,6 +356,7 @@ export default function EmployeesPage() {
   const [isCheckoutsDialogOpen, setIsCheckoutsDialogOpen] = useState(false)
   const [isQRDialogOpen, setIsQRDialogOpen] = useState(false)
   const [selectedAssetTagId, setSelectedAssetTagId] = useState<string>('')
+  const [selectedPurchaseDate, setSelectedPurchaseDate] = useState<string | null>(null)
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [isManualRefresh, setIsManualRefresh] = useState(false)
   const queryClient = useQueryClient()
@@ -1162,6 +1164,7 @@ export default function EmployeesPage() {
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   setSelectedAssetTagId(checkout.asset.assetTagId)
+                                  setSelectedPurchaseDate(checkout.asset.purchaseDate)
                                   setIsQRDialogOpen(true)
                                 }}
                               >
@@ -1265,6 +1268,7 @@ export default function EmployeesPage() {
         open={isQRDialogOpen}
         onOpenChange={setIsQRDialogOpen}
         assetTagId={selectedAssetTagId}
+        purchaseDate={selectedPurchaseDate}
       />
     </div>
   )

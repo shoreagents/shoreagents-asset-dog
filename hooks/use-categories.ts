@@ -40,6 +40,8 @@ export const useCategories = (enabled: boolean = true) => {
     },
     enabled,
     staleTime: 10 * 60 * 1000, // Cache for 10 minutes to reduce API calls
+    retry: 2, // Retry up to 2 times on failure
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   })
 }
 
@@ -60,6 +62,8 @@ export const useSubCategories = (categoryId: string | null) => {
     },
     enabled: !!categoryId,
     staleTime: 10 * 60 * 1000, // Cache for 10 minutes to reduce API calls
+    retry: 2, // Retry up to 2 times on failure
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   })
 }
 
@@ -169,7 +173,7 @@ export const useUpdateSubCategory = () => {
       }
       return response.json()
     },
-    onSuccess: (_data: unknown, variables: CreateSubCategoryData & { id: string }) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["subcategories"] })
       queryClient.invalidateQueries({ queryKey: ["categories"] })
     },

@@ -61,7 +61,6 @@ import { BulkDeleteDialog } from '@/components/bulk-delete-dialog'
 import { ManagerDialog } from '@/components/manager-dialog'
 import { AuditHistoryManager } from '@/components/audit-history-manager'
 import { CheckoutManager } from '@/components/checkout-manager'
-import { EditAssetDialog } from '@/components/edit-asset-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1398,6 +1397,7 @@ function AssetTagCell({ asset }: { asset: Asset }) {
         assetTagId={asset.assetTagId}
         status={asset.status}
         statusBadge={getStatusBadge(asset.status)}
+        purchaseDate={asset.purchaseDate}
       />
     </>
   )
@@ -1405,9 +1405,9 @@ function AssetTagCell({ asset }: { asset: Asset }) {
 
 function AssetActions({ asset }: { asset: Asset }) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const { hasPermission } = usePermissions()
   
-  const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [isAuditOpen, setIsAuditOpen] = useState(false)
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
@@ -1435,7 +1435,7 @@ function AssetActions({ asset }: { asset: Asset }) {
       toast.error('You do not have permission to edit assets')
       return
     }
-    setIsEditOpen(true)
+    router.push(`/assets/${asset.id}`)
   }
 
   const handleAudit = () => {
@@ -1497,19 +1497,6 @@ function AssetActions({ asset }: { asset: Asset }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Edit Dialog - Only render when open to prevent unnecessary query creation */}
-      {isEditOpen && (
-      <EditAssetDialog
-        asset={asset}
-        open={isEditOpen}
-        onOpenChange={setIsEditOpen}
-        onPreviewImage={(imageUrl) => {
-          setPreviewImageUrl(imageUrl)
-          setIsPreviewDialogOpen(true)
-        }}
-      />
-      )}
 
       {/* Image Preview Dialog */}
       <ImagePreviewDialog

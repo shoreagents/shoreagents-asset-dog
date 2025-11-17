@@ -18,17 +18,12 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get('pageSize') || '10', 10)
     const skip = (page - 1) * pageSize
 
-    // Get current user ID
-    const userId = auth.user.id
-
     // Build where clause for filtering
+    // Note: Reports are not filtered by userId - all users with canViewAssets can see all reports
     const whereClause: {
-      userId: string
       reportStatus?: string
       reportType?: string
-    } = {
-      userId,
-    }
+    } = {}
 
     const reportStatus = searchParams.get('status')
     if (reportStatus && reportStatus !== 'all') {
@@ -96,8 +91,8 @@ export async function POST(request: NextRequest) {
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  // Check view permission (users need to view assets to create reports)
-  const permissionCheck = await requirePermission('canViewAssets')
+  // Check manage reports permission
+  const permissionCheck = await requirePermission('canManageReports')
   if (!permissionCheck.allowed) return permissionCheck.error
 
   try {

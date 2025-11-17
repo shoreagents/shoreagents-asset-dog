@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, History, QrCode } from "lucide-react"
 import { usePermissions } from '@/hooks/use-permissions'
+import { useSidebar } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/qr-scanner-dialog'
 import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
@@ -79,7 +81,9 @@ interface LeaseReturnAsset extends Asset {
 
 export default function LeaseReturnPage() {
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
   const canLease = hasPermission('canLease')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -445,6 +449,57 @@ export default function LeaseReturnPage() {
     })
     toast.success('Asset removed')
   }
+
+  // Handle URL query parameters for assetId
+  useEffect(() => {
+    const urlAssetId = searchParams.get('assetId')
+
+    if (urlAssetId && selectedAssets.length === 0) {
+      // Fetch and add the asset from URL
+      const addAssetFromUrl = async () => {
+        try {
+          const response = await fetch(`/api/assets/${urlAssetId}`)
+          if (response.ok) {
+            const data = await response.json()
+            const asset = data.asset as Asset
+            
+            // Check if asset has an active lease
+            const activeLease = asset.leases?.[0]
+            if (!activeLease || activeLease.endDate) {
+              toast.error(`Asset "${asset.assetTagId}" does not have an active lease`)
+              return
+            }
+
+            // Check if asset is already in the list
+            if (selectedAssets.some(a => a.id === asset.id)) {
+              return
+            }
+
+            const leaseReturnAsset: LeaseReturnAsset = {
+              ...asset,
+              condition: "",
+              notes: "",
+            }
+
+            setSelectedAssets([leaseReturnAsset])
+            setAssetIdInput(asset.assetTagId)
+            
+            // Update form state
+            form.setValue('assetIds', [asset.id])
+            form.setValue('assetUpdates', [{
+              assetId: asset.id,
+              condition: "",
+              notes: "",
+            }])
+          }
+        } catch (error) {
+          console.error('Error fetching asset from URL:', error)
+        }
+      }
+      
+      addAssetFromUrl()
+    }
+  }, [searchParams, selectedAssets, form])
 
   // Track form changes to show floating buttons - only show when asset is selected
   const isFormDirty = useMemo(() => {
@@ -864,7 +919,17 @@ export default function LeaseReturnPage() {
 
       {/* Floating Action Buttons - Only show when form has changes */}
       {isFormDirty && canViewAssets && canLease && (
-        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+        <div 
+          className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
+          style={{
+            left: !sidebarOpen 
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
+            transform: 'translateX(-50%)'
+          }}
+        >
               <Button
                 type="button"
                 variant="outline"

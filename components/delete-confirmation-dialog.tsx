@@ -80,10 +80,10 @@ export function DeleteConfirmationDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
             {cancelLabel}
           </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isLoading}>
+          <Button type="button" variant="destructive" onClick={onConfirm} disabled={isLoading}>
             {isLoading ? (
               <>
                 <Spinner className="mr-2 h-4 w-4" />

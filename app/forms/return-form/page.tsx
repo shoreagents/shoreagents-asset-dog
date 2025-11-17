@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react"
 import { XIcon, QrCode, RefreshCw, Download } from "lucide-react"
 import Image from "next/image"
 import { usePermissions } from '@/hooks/use-permissions'
+import { useSidebar } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/qr-scanner-dialog'
 import { toast } from 'sonner'
@@ -101,7 +102,9 @@ const RESIGNED_STAFF_ITEMS = [
 
 export default function ReturnFormPage() {
   const { hasPermission } = usePermissions()
-  const canViewAssets = hasPermission('canViewAssets')
+  const { state: sidebarState, open: sidebarOpen } = useSidebar()
+  const canViewReturnForms = hasPermission('canViewReturnForms')
+  const canManageReturnForms = hasPermission('canManageReturnForms')
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
   const [assetIdInput, setAssetIdInput] = useState("")
@@ -123,7 +126,7 @@ export default function ReturnFormPage() {
   const [itDate, setItDate] = useState("")
 
   // Fetch selected employee details
-  const { data: selectedEmployee } = useQuery<EmployeeUser | null>({
+  const { data: selectedEmployee, isLoading: isLoadingEmployee } = useQuery<EmployeeUser | null>({
     queryKey: ["employee", selectedEmployeeId],
     queryFn: async () => {
       if (!selectedEmployeeId) return null
@@ -203,7 +206,7 @@ export default function ReturnFormPage() {
       
       return filtered.slice(0, 10)
     },
-    enabled: showSuggestions && canViewAssets,
+    enabled: showSuggestions && canViewReturnForms,
     staleTime: 300,
   })
 
@@ -395,6 +398,11 @@ export default function ReturnFormPage() {
   // Generate control number
   // Handle PDF download using Puppeteer
   const handleDownloadPDF = async () => {
+    if (!canManageReturnForms) {
+      toast.error('You do not have permission to download return forms')
+      return
+    }
+
     if (!selectedEmployee) {
       toast.error('Please select an employee first')
       return
@@ -716,6 +724,53 @@ export default function ReturnFormPage() {
       window.URL.revokeObjectURL(url)
 
       toast.success('PDF downloaded successfully', { id: 'pdf-generation' })
+
+      // Save form data to database
+      try {
+        const returnType = resignedStaff ? 'Resigned Staff' : 'Return to Office'
+        const formData = {
+          returnDate,
+          position,
+          returnToOffice,
+          resignedStaff,
+          controlNumber,
+          returnerSignature,
+          returnerDate,
+          itSignature,
+          itDate,
+          selectedAssets: selectedAssets.map(asset => ({
+            id: asset.id,
+            assetTagId: asset.assetTagId,
+            description: asset.description,
+            quantity: asset.quantity,
+            condition: asset.condition,
+          })),
+        }
+
+        const saveResponse = await fetch('/api/forms/return-form', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            employeeUserId: selectedEmployeeId,
+            dateReturned: returnDate,
+            department: selectedEmployee?.department || null,
+            ctrlNo: controlNumber || null,
+            returnType,
+            formData,
+          }),
+        })
+
+        if (!saveResponse.ok) {
+          const error = await saveResponse.json()
+          console.error('Failed to save return form:', error)
+          // Don't show error to user since PDF was already downloaded successfully
+        }
+      } catch (saveError) {
+        console.error('Error saving return form:', saveError)
+        // Don't show error to user since PDF was already downloaded successfully
+      }
     } catch (error) {
       console.error('Error generating PDF:', error)
       toast.error(`Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'pdf-generation' })
@@ -785,6 +840,13 @@ export default function ReturnFormPage() {
     return groups
   }, [selectedAssets, resignedStaff])
 
+  // Show toast notification if user doesn't have view permission
+  useEffect(() => {
+    if (!canViewReturnForms) {
+      toast.error('You do not have permission to view return forms')
+    }
+  }, [canViewReturnForms])
+
   return (
     <div className="w-full max-w-full overflow-x-hidden">
       <div className="mb-4 md:mb-6">
@@ -808,14 +870,14 @@ export default function ReturnFormPage() {
             onValueChange={setSelectedEmployeeId}
             label="Employee"
             required
-            disabled={!canViewAssets}
+            disabled={!canViewReturnForms}
             placeholder="Select an employee"
           />
         </CardContent>
       </Card>
 
-      {/* Form Details - Only show when employee is selected */}
-      {selectedEmployee && (
+      {/* Form Details - Show when employee is selected or loading */}
+      {(selectedEmployeeId && (selectedEmployee || isLoadingEmployee)) && (
         <>
           {/* Form Details Card */}
           <Card className="mb-6">
@@ -826,6 +888,14 @@ export default function ReturnFormPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-2 pb-4 space-y-4">
+              {isLoadingEmployee ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="flex flex-col items-center gap-3">
+                    <Spinner className="h-8 w-8" />
+                    <p className="text-sm text-muted-foreground">Loading employee details...</p>
+                  </div>
+                </div>
+              ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Field>
                   <FieldLabel htmlFor="employeeName">NAME OF THE EMPLOYEE:</FieldLabel>
@@ -925,6 +995,7 @@ export default function ReturnFormPage() {
                   </div>
                 </div>
               </div>
+              )}
             </CardContent>
           </Card>
 
@@ -937,6 +1008,15 @@ export default function ReturnFormPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-2 pb-4 space-y-4">
+              {isLoadingEmployee ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="flex flex-col items-center gap-3">
+                    <Spinner className="h-8 w-8" />
+                    <p className="text-sm text-muted-foreground">Loading employee details...</p>
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Input
@@ -948,7 +1028,7 @@ export default function ReturnFormPage() {
                     onFocus={() => setShowSuggestions(true)}
                     className="w-full"
                     autoComplete="off"
-                    disabled={!canViewAssets}
+                    disabled={!canViewReturnForms}
                   />
                   
                   {/* Suggestions dropdown */}
@@ -996,7 +1076,7 @@ export default function ReturnFormPage() {
                     </div>
                   )}
                 </div>
-                {canViewAssets && (
+                {canViewReturnForms && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1051,6 +1131,8 @@ export default function ReturnFormPage() {
                   </div>
                 </div>
               )}
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -1063,18 +1145,6 @@ export default function ReturnFormPage() {
                   <CardDescription className="text-xs">
                     Review the forms (IT Department Copy & Admin Copy)
                   </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleDownloadPDF}
-                    className="w-full sm:w-auto"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    <span className="hidden sm:inline">Download PDF</span>
-                    <span className="sm:hidden">Download PDF</span>
-                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -1841,8 +1911,11 @@ export default function ReturnFormPage() {
               </div>
             </CardContent>
           </Card>
+          </>
+        )}
 
           {/* Signature Inputs - Only visible when not printing */}
+          {selectedEmployeeId && (
           <Card className="print:hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Signatures</CardTitle>
@@ -1903,7 +1976,6 @@ export default function ReturnFormPage() {
               </div>
             </CardContent>
           </Card>
-        </>
       )}
 
       {/* QR Code Scanner Dialog */}
@@ -1922,6 +1994,31 @@ export default function ReturnFormPage() {
           ? `Scan a ${targetRowItem} asset to add to this row`
           : "Scan or upload a QR code to add an asset"}
       />
+
+      {/* Floating Download PDF Button */}
+      {selectedEmployee && !isLoadingEmployee && (
+        <div 
+          className="fixed bottom-6 z-50 flex items-center justify-center"
+          style={{
+            left: !sidebarOpen 
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
+            transform: 'translateX(-50%)'
+          }}
+        >
+          <Button
+            type="button"
+            size="lg"
+            onClick={handleDownloadPDF}
+            className="min-w-[140px] shadow-lg"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Download PDF
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

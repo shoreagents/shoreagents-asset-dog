@@ -16,9 +16,10 @@ import type { AuditFormData } from '@/lib/validations/audit'
 interface AuditHistoryManagerProps {
   assetId: string
   assetTagId: string
+  readOnly?: boolean // If true, disable add/delete functionality
 }
 
-export function AuditHistoryManager({ assetId }: AuditHistoryManagerProps) {
+export function AuditHistoryManager({ assetId, readOnly = false }: AuditHistoryManagerProps) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -102,14 +103,17 @@ export function AuditHistoryManager({ assetId }: AuditHistoryManagerProps) {
           <div className="text-sm text-muted-foreground">
             {audits.length} audit record{audits.length !== 1 ? 's' : ''}
           </div>
-          <Button 
-            onClick={() => setIsDialogOpen(true)} 
-            size="sm" 
-            className="gap-2 focus-visible:ring-0"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            Add Audit Record
-          </Button>
+          {!readOnly && (
+            <Button 
+              type="button"
+              onClick={() => setIsDialogOpen(true)} 
+              size="sm" 
+              className="gap-2 focus-visible:ring-0"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Add Audit Record
+            </Button>
+          )}
         </div>
 
         {/* Audit List */}
@@ -188,18 +192,21 @@ export function AuditHistoryManager({ assetId }: AuditHistoryManagerProps) {
                         </div>
                       </div>
                       
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setAuditToDelete({ id: audit.id, auditType: audit.auditType })
-                          setDeleteDialogOpen(true)
-                        }}
-                        disabled={deleteMutation.isPending}
-                        className="shrink-0 text-muted-foreground hover:text-destructive h-7 w-7"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {!readOnly && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setAuditToDelete({ id: audit.id, auditType: audit.auditType })
+                            setDeleteDialogOpen(true)
+                          }}
+                          disabled={deleteMutation.isPending}
+                          className="shrink-0 text-muted-foreground hover:text-destructive h-7 w-7"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

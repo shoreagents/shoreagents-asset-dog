@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, Package, CheckCircle2, DollarSign, History, QrCode } from "lucide-react"
 import { usePermissions } from '@/hooks/use-permissions'
+import { useSidebar } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/qr-scanner-dialog'
 import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
@@ -98,7 +100,9 @@ const getStatusBadge = (status: string | null) => {
 
 export default function CheckinPage() {
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
   const canCheckin = hasPermission('canCheckin')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -306,6 +310,68 @@ export default function CheckinPage() {
     form.setValue('assetUpdates', currentUpdates.filter(update => update.assetId !== assetId))
     toast.success('Asset removed from check-in list')
   }
+
+  // Handle URL query parameters for assetId
+  useEffect(() => {
+    const urlAssetId = searchParams.get('assetId')
+
+    if (urlAssetId && selectedAssets.length === 0) {
+      // Fetch and add the asset from URL
+      const addAssetFromUrl = async () => {
+        try {
+          const response = await fetch(`/api/assets/${urlAssetId}`)
+          if (response.ok) {
+            const data = await response.json()
+            const asset = data.asset as Asset
+            
+            // Check if asset is checked out
+            if (asset.status !== "Checked out") {
+              toast.error(`Asset "${asset.assetTagId}" is not checked out. Current status: ${asset.status || 'Unknown'}`)
+              return
+            }
+
+            // Check if asset has an active checkout
+            const activeCheckout = asset.checkouts?.[0]
+            if (!activeCheckout) {
+              toast.error(`No active checkout found for asset "${asset.assetTagId}"`)
+              return
+            }
+
+            // Check if asset is already in the list
+            if (selectedAssets.some(a => a.id === asset.id)) {
+              return
+            }
+
+            const checkinAsset: CheckinAsset = {
+              ...asset,
+              condition: "",
+              returnLocation: "",
+              notes: "",
+            }
+
+            setSelectedAssets([checkinAsset])
+            setAssetIdInput(asset.assetTagId)
+            
+            // Update form assetUpdates
+            const currentUpdates = form.getValues('assetUpdates') || []
+            form.setValue('assetUpdates', [
+              ...currentUpdates,
+              {
+                assetId: asset.id,
+                condition: "",
+                returnLocation: "",
+                notes: "",
+              },
+            ])
+          }
+        } catch (error) {
+          console.error('Error fetching asset from URL:', error)
+        }
+      }
+      
+      addAssetFromUrl()
+    }
+  }, [searchParams, selectedAssets, form])
 
   // Track form changes to show floating buttons - only show when assets are selected
   const isFormDirty = useMemo(() => {
@@ -958,9 +1024,7 @@ export default function CheckinPage() {
                                 {fieldState.error && (
                                   <FieldError>{fieldState.error.message}</FieldError>
                                 )}
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  This will update the asset&apos;s location in the assets table
-                                </p>
+                                
                               </>
                             )}
                           />
@@ -1049,7 +1113,17 @@ export default function CheckinPage() {
 
       {/* Floating Action Buttons - Only show when form has changes */}
       {isFormDirty && canViewAssets && canCheckin && (
-        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+        <div 
+          className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
+          style={{
+            left: !sidebarOpen 
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
+            transform: 'translateX(-50%)'
+          }}
+        >
           <Button
             type="button"
             variant="outline"

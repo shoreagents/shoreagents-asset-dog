@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useSidebar } from '@/components/ui/sidebar'
 import { useSubCategories } from '@/hooks/use-categories'
 import { assetReportSchema, type AssetReportFormData } from '@/lib/validations/reports'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -116,7 +117,9 @@ export default function AssetReportsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
+  const canManageReports = hasPermission('canManageReports')
   const queryClient = useQueryClient()
   const [, startTransition] = useTransition()
 
@@ -320,12 +323,12 @@ export default function AssetReportsPage() {
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['asset-reports', page, pageSize, statusFilter, typeFilter],
     queryFn: () => fetchReports(page, pageSize, statusFilter !== 'all' ? statusFilter : undefined, typeFilter !== 'all' ? typeFilter : undefined),
-    enabled: canViewAssets,
+    enabled: canViewAssets && canManageReports,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 
-  const reports = data?.reports || []
+  const reports = (canViewAssets && canManageReports) ? (data?.reports || []) : []
   const pagination = data?.pagination
 
   // Create report mutation
@@ -394,6 +397,9 @@ export default function AssetReportsPage() {
   // Generate report mutation
   const generateMutation = useMutation({
     mutationFn: async (reportId: string) => {
+      if (!canManageReports) {
+        throw new Error('You do not have permission to generate reports')
+      }
       const response = await fetch(`/api/reports/assets/${reportId}`, {
         method: 'PATCH',
       })
@@ -415,6 +421,9 @@ export default function AssetReportsPage() {
   // Delete report mutation
   const deleteMutation = useMutation({
     mutationFn: async (reportId: string) => {
+      if (!canManageReports) {
+        throw new Error('You do not have permission to delete reports')
+      }
       const response = await fetch(`/api/reports/assets/${reportId}`, {
         method: 'DELETE',
       })
@@ -434,6 +443,10 @@ export default function AssetReportsPage() {
   })
 
   const onSubmit = (data: AssetReportFormData) => {
+    if (!canManageReports) {
+      toast.error('You do not have permission to create reports')
+      return
+    }
     createMutation.mutate({
       reportName: data.reportName,
       reportType: data.reportType,
@@ -493,28 +506,6 @@ export default function AssetReportsPage() {
     }).format(value)
   }
 
-  if (permissionsLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Spinner className="h-8 w-8" />
-      </div>
-    )
-  }
-
-  if (!canViewAssets) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <FileText className="h-12 w-12 text-muted-foreground opacity-50" />
-          <p className="text-lg font-medium">Access Denied</p>
-          <p className="text-sm text-muted-foreground">
-            You do not have permission to view asset reports. Please contact your administrator.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className={isFormDirty ? "space-y-6 pb-16" : "space-y-6"}>
       <div>
@@ -531,9 +522,10 @@ export default function AssetReportsPage() {
             <div>
               <CardTitle>Report History</CardTitle>
               <CardDescription>
-                {pagination?.total || 0} report{pagination?.total !== 1 ? 's' : ''} found
+                {canManageReports ? `${pagination?.total || 0} report${pagination?.total !== 1 ? 's' : ''} found` : 'View report history'}
               </CardDescription>
             </div>
+            {canManageReports && (
             <Button
               variant="outline"
               size="icon"
@@ -544,15 +536,32 @@ export default function AssetReportsPage() {
             >
               <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
             </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="px-0">
-          {isLoading ? (
+          {permissionsLoading || (isLoading && !data) ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
                 <Spinner className="h-8 w-8" />
-                <p className="text-sm text-muted-foreground">Loading reports...</p>
+                <p className="text-sm text-muted-foreground">Loading...</p>
               </div>
+            </div>
+          ) : !canManageReports ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <FileText className="h-12 w-12 text-muted-foreground opacity-50 mb-4" />
+              <p className="text-lg font-medium">Access Denied</p>
+              <p className="text-sm text-muted-foreground">
+                You do not have permission to view reports history.
+              </p>
+            </div>
+          ) : !canViewAssets ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <FileText className="h-12 w-12 text-muted-foreground opacity-50 mb-4" />
+              <p className="text-lg font-medium">Access Denied</p>
+              <p className="text-sm text-muted-foreground">
+                You do not have permission to view reports.
+              </p>
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-12">
@@ -622,7 +631,7 @@ export default function AssetReportsPage() {
                                 <Eye className="mr-2 h-4 w-4" />
                                 View Report
                               </DropdownMenuItem>
-                              {(report.reportStatus === 'draft' || report.reportStatus === 'saved') && (
+                              {canManageReports && (report.reportStatus === 'draft' || report.reportStatus === 'saved') && (
                                 <DropdownMenuItem
                                   onClick={() => {
                                     generateMutation.mutate(report.id)
@@ -633,7 +642,7 @@ export default function AssetReportsPage() {
                                   Generate Report
                                 </DropdownMenuItem>
                               )}
-                              {report.reportStatus === 'generated' && (
+                              {canManageReports && report.reportStatus === 'generated' && (
                                 <DropdownMenuItem
                                   onClick={() => {
                                     generateMutation.mutate(report.id)
@@ -644,6 +653,8 @@ export default function AssetReportsPage() {
                                   Regenerate Report
                                 </DropdownMenuItem>
                               )}
+                              {canManageReports && (
+                                <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
@@ -657,6 +668,8 @@ export default function AssetReportsPage() {
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
                               </DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -668,7 +681,7 @@ export default function AssetReportsPage() {
               </ScrollArea>
 
               {/* Pagination */}
-              {pagination && pagination.totalPages > 1 && (
+              {pagination && pagination.totalPages > 1 && canManageReports && (
                 <div className="flex items-center justify-between px-4 py-4 border-t">
                   <div className="flex items-center gap-2">
                     <Button
@@ -713,15 +726,20 @@ export default function AssetReportsPage() {
       </Card>
 
       {/* Create Report Form */}
-      <Card>
+      <Card className={!canManageReports ? "opacity-50" : ""}>
         <CardHeader>
           <CardTitle>Create New Report</CardTitle>
           <CardDescription>
             Configure your asset report with filters and options
+            {!canManageReports && (
+              <span className="block mt-2 text-sm text-muted-foreground">
+                You do not have permission to create reports
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleFormSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleFormSubmit(onSubmit)} className="space-y-6" style={{ pointerEvents: canManageReports ? 'auto' : 'none' }}>
             {/* Basic Information */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Basic Information</h3>
@@ -1092,8 +1110,18 @@ export default function AssetReportsPage() {
       </Card>
 
       {/* Floating Action Buttons - Only show when form has changes */}
-      {isFormDirty && canViewAssets && (
-        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+      {isFormDirty && canViewAssets && canManageReports && (
+        <div 
+          className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
+          style={{
+            left: !sidebarOpen 
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
+            transform: 'translateX(-50%)'
+          }}
+        >
           <Button
             type="button"
             variant="outline"

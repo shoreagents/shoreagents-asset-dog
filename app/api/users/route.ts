@@ -263,6 +263,11 @@ export async function POST(request: NextRequest) {
       canManageMedia: permissions?.canManageMedia ?? true,
       canManageTrash: permissions?.canManageTrash ?? true,
       canManageUsers: permissions?.canManageUsers ?? false,
+      canManageReturnForms: permissions?.canManageReturnForms ?? false,
+      canViewReturnForms: permissions?.canViewReturnForms ?? true,
+      canManageAccountabilityForms: permissions?.canManageAccountabilityForms ?? false,
+      canViewAccountabilityForms: permissions?.canViewAccountabilityForms ?? true,
+      canManageReports: permissions?.canManageReports ?? false,
     } : {}
 
     // Create asset_users record

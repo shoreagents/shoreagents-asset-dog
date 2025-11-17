@@ -139,6 +139,11 @@ export async function PUT(
       updateData.canManageMedia = permissions.canManageMedia !== undefined ? permissions.canManageMedia : true
       updateData.canManageTrash = permissions.canManageTrash !== undefined ? permissions.canManageTrash : true
       updateData.canManageUsers = permissions.canManageUsers !== undefined ? permissions.canManageUsers : false
+      updateData.canManageReturnForms = permissions.canManageReturnForms !== undefined ? permissions.canManageReturnForms : false
+      updateData.canViewReturnForms = permissions.canViewReturnForms !== undefined ? permissions.canViewReturnForms : true
+      updateData.canManageAccountabilityForms = permissions.canManageAccountabilityForms !== undefined ? permissions.canManageAccountabilityForms : false
+      updateData.canViewAccountabilityForms = permissions.canViewAccountabilityForms !== undefined ? permissions.canViewAccountabilityForms : true
+      updateData.canManageReports = permissions.canManageReports !== undefined ? permissions.canManageReports : false
     }
 
     const user = await retryDbOperation(() => prisma.assetUser.update({

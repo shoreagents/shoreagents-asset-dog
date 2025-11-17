@@ -28,9 +28,10 @@ interface CheckoutManagerProps {
   assetId: string
   assetTagId: string
   invalidateQueryKey?: string[] // Optional query key to invalidate after updates
+  readOnly?: boolean // If true, disable editing functionality
 }
 
-export function CheckoutManager({ assetId, invalidateQueryKey = ['assets'] }: CheckoutManagerProps) {
+export function CheckoutManager({ assetId, invalidateQueryKey = ['assets'], readOnly = false }: CheckoutManagerProps) {
   const queryClient = useQueryClient()
   const [editingCheckoutId, setEditingCheckoutId] = useState<string | null>(null)
   const [openPopovers, setOpenPopovers] = useState<Record<string, boolean>>({})
@@ -184,7 +185,7 @@ export function CheckoutManager({ assetId, invalidateQueryKey = ['assets'] }: Ch
                               Needs Assignment
                             </Badge>
                           )}
-                        {!isCheckedIn && !isEditing && checkout.employeeUser && (
+                        {!readOnly && !isCheckedIn && !isEditing && checkout.employeeUser && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -198,7 +199,7 @@ export function CheckoutManager({ assetId, invalidateQueryKey = ['assets'] }: Ch
                             <Edit2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
-                        {isEditing && checkout.employeeUser && (
+                        {!readOnly && isEditing && checkout.employeeUser && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -259,7 +260,7 @@ export function CheckoutManager({ assetId, invalidateQueryKey = ['assets'] }: Ch
                                   </div>
                                 </div>
                               </>
-                            ) : (
+                            ) : !readOnly ? (
                               <>
                                 <div className="text-xs text-muted-foreground mb-2">
                                   {checkout.employeeUser ? 'Change assignment' : 'Assign employee'}
@@ -350,10 +351,14 @@ export function CheckoutManager({ assetId, invalidateQueryKey = ['assets'] }: Ch
                                         </CommandGroup>
                                       </CommandList>
                                     </Command>
-                                  </PopoverContent>
-                                </Popover>
-                              </>
-                            )}
+                                    </PopoverContent>
+                                  </Popover>
+                                </>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">
+                                  No employee assigned
+                                </div>
+                              )}
                           </div>
                         </div>
                       </div>

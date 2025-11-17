@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, History, QrCode } from "lucide-react"
 import { usePermissions } from '@/hooks/use-permissions'
+import { useSidebar } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/qr-scanner-dialog'
 import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
@@ -106,7 +108,9 @@ const getStatusBadge = (status: string | null) => {
 
 export default function MoveAssetPage() {
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
   const canMove = hasPermission('canMove')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -388,6 +392,42 @@ export default function MoveAssetPage() {
     setAssetIdInput("")
     toast.success('Asset cleared')
   }
+
+  // Handle URL query parameters for assetId
+  useEffect(() => {
+    const urlAssetId = searchParams.get('assetId')
+
+    if (urlAssetId && !selectedAsset) {
+      // Fetch and select the asset from URL
+      const selectAssetFromUrl = async () => {
+        try {
+          const response = await fetch(`/api/assets/${urlAssetId}`)
+          if (response.ok) {
+            const data = await response.json()
+            const asset = data.asset as Asset
+            
+            // Check if asset is eligible for move (not leased)
+            const hasActiveLease = asset.leases?.some(
+              (lease: { endDate: string | null }) => !lease.endDate
+            )
+            
+            if (hasActiveLease) {
+              toast.error(`Asset "${asset.assetTagId}" is currently leased and cannot be moved`)
+              return
+            }
+
+            setSelectedAsset(asset)
+            form.setValue('assetId', asset.id)
+            setAssetIdInput(asset.assetTagId)
+          }
+        } catch (error) {
+          console.error('Error fetching asset from URL:', error)
+        }
+      }
+      
+      selectAssetFromUrl()
+    }
+  }, [searchParams, selectedAsset, form])
 
   // Track form changes to show floating buttons - only show when asset is selected
   const isFormDirty = useMemo(() => {
@@ -956,7 +996,17 @@ export default function MoveAssetPage() {
 
       {/* Floating Action Buttons - Only show when form has changes */}
       {isFormDirty && canViewAssets && canMove && (
-        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+        <div 
+          className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
+          style={{
+            left: !sidebarOpen 
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
+            transform: 'translateX(-50%)'
+          }}
+        >
               <Button
                 type="button"
                 variant="outline"

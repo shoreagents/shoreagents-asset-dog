@@ -4,7 +4,7 @@ import * as React from "react"
 import { useState, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { QrCode, Upload } from "lucide-react"
+import { QrCode, Upload, MoreHorizontal, Edit, CheckCircle2, ArrowRight, ArrowLeft, Trash2, Move, Package, FileText, Wrench, ImageIcon, ClipboardCheck, User } from "lucide-react"
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { Html5Qrcode } from 'html5-qrcode'
 import { Separator } from "@/components/ui/separator"
@@ -31,6 +31,24 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { toast } from 'sonner'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRouter } from 'next/navigation'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu"
+import { ScrollArea, ScrollBar } from "./ui/scroll-area"
+import { useQuery } from "@tanstack/react-query"
+import { CheckoutManager } from "@/components/checkout-manager"
+import { AuditHistoryManager } from "@/components/audit-history-manager"
+import { ImagePreviewDialog } from "@/components/image-preview-dialog"
+import { DownloadConfirmationDialog } from "@/components/download-confirmation-dialog"
+import Image from "next/image"
 
 const routeLabels: Record<string, string> = {
   '/': 'Home',
@@ -47,6 +65,10 @@ const routeLabels: Record<string, string> = {
   '/assets/lease-return': 'Lease Return',
   '/assets/dispose': 'Dispose Asset',
   '/assets/maintenance': 'Maintenance',
+  '/forms': 'Forms',
+  '/forms/return-form': 'Return Forms',
+  '/forms/accountability-form': 'Accountability Form',
+  '/forms/history': 'Forms History',
   '/lists': 'Lists',
   '/lists/assets': 'Assets List',
   '/lists/maintenances': 'Maintenances List',
@@ -64,6 +86,7 @@ const routeLabels: Record<string, string> = {
   '/employees': 'Employees',
   '/reports': 'Reports',
   '/reports/assets': 'Asset Reports',
+  '/account': 'Account Settings',
 }
 
 function generateBreadcrumbs(pathname: string) {
@@ -75,7 +98,23 @@ function generateBreadcrumbs(pathname: string) {
   paths.forEach((segment, index) => {
     currentPath += `/${segment}`
     const isLast = index === paths.length - 1
-    const label = routeLabels[currentPath] || segment.charAt(0).toUpperCase() + segment.slice(1)
+    
+    // Handle dynamic routes
+    let label = routeLabels[currentPath]
+    if (!label) {
+      // Check if this is an asset edit page (/assets/[id])
+      if (currentPath.startsWith('/assets/') && paths.length === 2 && paths[0] === 'assets' && isLast) {
+        // Check if segment looks like a UUID (basic check)
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (uuidPattern.test(segment)) {
+          label = 'Edit Asset'
+        } else {
+          label = segment.charAt(0).toUpperCase() + segment.slice(1)
+        }
+      } else {
+        label = segment.charAt(0).toUpperCase() + segment.slice(1)
+      }
+    }
     
     breadcrumbs.push({
       label,
@@ -94,6 +133,264 @@ function generateBreadcrumbs(pathname: string) {
   }
 
   return breadcrumbs
+}
+
+// Asset Media Tab Content Component
+function AssetMediaTabContent({ assetTagId }: { assetTagId: string }) {
+  const [activeMediaTab, setActiveMediaTab] = useState<'images' | 'documents'>('images')
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [previewImageIndex, setPreviewImageIndex] = useState(0)
+  const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false)
+  const [documentToDownload, setDocumentToDownload] = useState<{ id: string; documentUrl: string; fileName?: string; documentSize?: number | null } | null>(null)
+  
+  const { data: imagesData, isLoading: loadingImages } = useQuery({
+    queryKey: ['asset-images', assetTagId],
+    queryFn: async () => {
+      const response = await fetch(`/api/assets/images/${assetTagId}`)
+      if (!response.ok) return { images: [] }
+      const data = await response.json()
+      return { images: data.images || [] }
+    },
+    enabled: !!assetTagId,
+  })
+
+  const { data: documentsData, isLoading: loadingDocuments } = useQuery({
+    queryKey: ['asset-documents', assetTagId],
+    queryFn: async () => {
+      const response = await fetch(`/api/assets/documents/${assetTagId}`)
+      if (!response.ok) return { documents: [] }
+      const data = await response.json()
+      return { documents: data.documents || [] }
+    },
+    enabled: !!assetTagId,
+  })
+
+  const images = imagesData?.images || []
+  const documents = documentsData?.documents || []
+
+  const handleImageClick = (index: number) => {
+    setPreviewImageIndex(index)
+    setIsPreviewOpen(true)
+  }
+
+  const handleDocumentClick = (doc: { id: string; documentUrl: string; fileName?: string; documentSize?: number | null; mimeType?: string | null }) => {
+    // Check if it's an image document
+    const isImage = doc.mimeType?.startsWith('image/') || 
+      /\.(jpg|jpeg|png|gif|webp)$/i.test(doc.fileName || '')
+    
+    // Check if it's a PDF
+    const isPdf = doc.mimeType === 'application/pdf' || 
+      /\.pdf$/i.test(doc.fileName || '')
+    
+    if (isImage) {
+      // For image documents, show them in preview but only include documents
+      const imageDocs = documents.filter((d: { mimeType?: string | null; fileName?: string }) => {
+        const docIsImage = d.mimeType?.startsWith('image/') || 
+          /\.(jpg|jpeg|png|gif|webp)$/i.test(d.fileName || '')
+        return docIsImage
+      })
+      const imageDocIndex = imageDocs.findIndex((d: { id: string }) => d.id === doc.id)
+      setPreviewImageIndex(imageDocIndex)
+      setIsPreviewOpen(true)
+    } else if (isPdf) {
+      // For PDFs, open directly in a new tab
+      window.open(doc.documentUrl, '_blank', 'noopener,noreferrer')
+    } else {
+      // Show download confirmation for other non-image documents
+      setDocumentToDownload(doc)
+      setIsDownloadDialogOpen(true)
+    }
+  }
+
+  return (
+    <div className="space-y-4 h-[300px] flex flex-col">
+      <div className="flex items-center gap-2 border-b">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveMediaTab('images')}
+          className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+            activeMediaTab === 'images'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Images ({images.length})
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveMediaTab('documents')}
+          className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+            activeMediaTab === 'documents'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Documents ({documents.length})
+        </Button>
+      </div>
+
+      <ScrollArea className="h-[300px]">
+        {activeMediaTab === 'images' ? (
+          loadingImages ? (
+            <div className="flex items-center justify-center py-8">
+              <Spinner className="h-6 w-6" />
+            </div>
+          ) : images.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <ImageIcon className="h-12 w-12 text-muted-foreground opacity-50 mb-2" />
+              <p className="text-sm font-medium">No images found</p>
+              <p className="text-xs text-muted-foreground">Images will appear here when uploaded</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-2">
+              {images.map((img: { id: string; imageUrl: string; fileName?: string }, index: number) => (
+                <div
+                  key={img.id}
+                  className="relative aspect-square rounded-lg overflow-hidden border border-border hover:border-primary transition-colors cursor-pointer group"
+                  onClick={() => handleImageClick(index)}
+                >
+                  <Image
+                    src={img.imageUrl}
+                    alt={img.fileName || 'Asset image'}
+                    fill
+                    className="object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center z-10">
+                    <div className="bg-white/50 rounded-full p-3 shadow-lg">
+                      <ImageIcon className="h-6 w-6 text-black" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          loadingDocuments ? (
+            <div className="flex items-center justify-center py-8">
+              <Spinner className="h-6 w-6" />
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <FileText className="h-12 w-12 text-muted-foreground opacity-50 mb-2" />
+              <p className="text-sm font-medium">No documents found</p>
+              <p className="text-xs text-muted-foreground">Documents will appear here when uploaded</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-2">
+              {documents.map((doc: { id: string; documentUrl: string; fileName?: string; documentSize?: number | null; mimeType?: string | null }) => {
+                const isImage = doc.mimeType?.startsWith('image/') || 
+                  /\.(jpg|jpeg|png|gif|webp)$/i.test(doc.fileName || '')
+                
+                return (
+                  <div
+                    key={doc.id}
+                    onClick={() => handleDocumentClick(doc)}
+                    className="relative aspect-square rounded-lg overflow-hidden border border-border hover:border-primary transition-colors cursor-pointer group bg-muted flex flex-col"
+                  >
+                    {isImage ? (
+                      <>
+                        <div className="relative flex-1 overflow-hidden">
+                          <Image
+                            src={doc.documentUrl}
+                            alt={doc.fileName || 'Document image'}
+                            fill
+                            className="object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center z-10">
+                            <div className="bg-white/50 rounded-full p-3 shadow-lg">
+                              <ImageIcon className="h-6 w-6 text-black" />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="p-2 bg-background">
+                          <p className="text-xs font-medium truncate">{doc.fileName || 'Document'}</p>
+                          {doc.documentSize && (
+                            <p className="text-xs text-muted-foreground">
+                              {(doc.documentSize / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex-1 flex items-center justify-center p-4">
+                          <FileText className="h-12 w-12 text-muted-foreground" />
+                        </div>
+                        <div className="p-2 bg-background border-t">
+                          <p className="text-xs font-medium truncate">{doc.fileName || 'Document'}</p>
+                          {doc.documentSize && (
+                            <p className="text-xs text-muted-foreground">
+                              {(doc.documentSize / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        )}
+      </ScrollArea>
+
+      {/* Image Preview Dialog */}
+      <ImagePreviewDialog
+        open={isPreviewOpen}
+        onOpenChange={setIsPreviewOpen}
+        existingImages={
+          activeMediaTab === 'images'
+            ? // Images tab: only show actual images
+              images.map((img: { id: string; imageUrl: string; fileName?: string }) => ({
+                id: img.id,
+                imageUrl: img.imageUrl,
+                fileName: img.fileName || 'Image',
+              }))
+            : // Documents tab: only show image documents
+              documents
+                .filter((doc: { mimeType?: string | null; fileName?: string }) => {
+                  const isImage = doc.mimeType?.startsWith('image/') || 
+                    /\.(jpg|jpeg|png|gif|webp)$/i.test(doc.fileName || '')
+                  return isImage
+                })
+                .map((doc: { id: string; documentUrl: string; fileName?: string }) => ({
+                  id: doc.id,
+                  imageUrl: doc.documentUrl,
+                  fileName: doc.fileName || 'Image',
+                }))
+        }
+        title={activeMediaTab === 'images' ? `Asset Images - ${assetTagId}` : `Asset Documents - ${assetTagId}`}
+        maxHeight="h-[70vh] max-h-[600px]"
+        initialIndex={previewImageIndex}
+      />
+
+      {/* Download Confirmation Dialog */}
+      <DownloadConfirmationDialog
+        open={isDownloadDialogOpen}
+        onOpenChange={setIsDownloadDialogOpen}
+        fileName={documentToDownload?.fileName || null}
+        fileSize={documentToDownload?.documentSize || null}
+        onConfirm={() => {
+          if (documentToDownload) {
+            // Create a temporary anchor element to trigger download
+            const link = document.createElement('a')
+            link.href = documentToDownload.documentUrl
+            link.download = documentToDownload.fileName || 'download'
+            link.target = '_blank'
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+          }
+          setDocumentToDownload(null)
+        }}
+        onCancel={() => {
+          setDocumentToDownload(null)
+        }}
+      />
+    </div>
+  )
 }
 
 interface Asset {
@@ -120,6 +417,15 @@ interface Asset {
   site?: string | null
   owner?: string | null
   issuedTo?: string | null
+  checkouts?: Array<{
+    id: string
+    checkoutDate: string | null
+    employeeUser?: {
+      id: string
+      name: string
+      email: string
+    } | null
+  }>
 }
 
 // Helper function to get status badge with colors
@@ -171,12 +477,24 @@ const getStatusBadge = (status: string | null | undefined) => {
 
 export function AppHeader() {
   const pathname = usePathname()
+  const router = useRouter()
   const { hasPermission } = usePermissions()
   const canViewAssets = hasPermission('canViewAssets')
+  const canEditAssets = hasPermission('canEditAssets')
+  const canAudit = hasPermission('canAudit')
+  const canCheckout = hasPermission('canCheckout')
+  const canCheckin = hasPermission('canCheckin')
+  const canMove = hasPermission('canMove')
+  const canReserve = hasPermission('canReserve')
+  const canLease = hasPermission('canLease')
+  const canDispose = hasPermission('canDispose')
+  const canManageMaintenance = hasPermission('canManageMaintenance')
+  const canDeleteAssets = hasPermission('canDeleteAssets')
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [scannedAsset, setScannedAsset] = useState<Asset | null>(null)
   const [isLoadingAsset, setIsLoadingAsset] = useState(false)
   const [scanMode, setScanMode] = useState<'camera' | 'upload'>('camera')
+  const [activeTab, setActiveTab] = useState<'details' | 'media' | 'checkout' | 'audit'>('details')
   const qrScanContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastScannedCodeRef = useRef<string | null>(null)
@@ -406,7 +724,7 @@ export function AppHeader() {
           }
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl! max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Scan QR Code to View Asset Details</DialogTitle>
             <DialogDescription>
@@ -528,7 +846,7 @@ export function AppHeader() {
               </div>
             )}
 
-            {/* Asset Details */}
+            {/* Asset Details with Tabs */}
             {scannedAsset && !isLoadingAsset && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between border-b pb-3">
@@ -536,66 +854,356 @@ export function AppHeader() {
                     <h3 className="text-lg font-semibold">{scannedAsset.assetTagId}</h3>
                     <p className="text-sm text-muted-foreground">{scannedAsset.description}</p>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8"
+                        title="More Actions"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {canEditAssets && (
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            router.push(`/assets/${scannedAsset.id}`)
+                            setQrDialogOpen(false)
+                          }}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit Asset
+                        </DropdownMenuItem>
+                      )}
+                      {canAudit && (
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            router.push(`/tools/audit?assetId=${scannedAsset.id}`)
+                            setQrDialogOpen(false)
+                          }}
+                        >
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                          Manage Audits
+                        </DropdownMenuItem>
+                      )}
+                      {canCheckout && (
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            router.push(`/assets/checkout?assetId=${scannedAsset.id}`)
+                            setQrDialogOpen(false)
+                          }}
+                        >
+                          <ArrowRight className="mr-2 h-4 w-4" />
+                          Checkout
+                        </DropdownMenuItem>
+                      )}
+                      {canCheckin && (
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            router.push(`/assets/checkin?assetId=${scannedAsset.id}`)
+                            setQrDialogOpen(false)
+                          }}
+                        >
+                          <ArrowLeft className="mr-2 h-4 w-4" />
+                          Checkin
+                        </DropdownMenuItem>
+                      )}
+                      {canMove && (
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            router.push(`/assets/move?assetId=${scannedAsset.id}`)
+                            setQrDialogOpen(false)
+                          }}
+                        >
+                          <Move className="mr-2 h-4 w-4" />
+                          Move
+                        </DropdownMenuItem>
+                      )}
+                      {canReserve && (
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            router.push(`/assets/reserve?assetId=${scannedAsset.id}`)
+                            setQrDialogOpen(false)
+                          }}
+                        >
+                          <Package className="mr-2 h-4 w-4" />
+                          Reserve
+                        </DropdownMenuItem>
+                      )}
+                      {canLease && (
+                        <>
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              router.push(`/assets/lease?assetId=${scannedAsset.id}`)
+                              setQrDialogOpen(false)
+                            }}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            Lease
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              router.push(`/assets/lease-return?assetId=${scannedAsset.id}`)
+                              setQrDialogOpen(false)
+                            }}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            Lease Return
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {canDispose && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Dispose
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Sold`)
+                                setQrDialogOpen(false)
+                              }}
+                            >
+                              Sold
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Donated`)
+                                setQrDialogOpen(false)
+                              }}
+                            >
+                              Donated
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Scrapped`)
+                                setQrDialogOpen(false)
+                              }}
+                            >
+                              Scrapped
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Lost/Missing`)
+                                setQrDialogOpen(false)
+                              }}
+                            >
+                              Lost/Missing
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Destroyed`)
+                                setQrDialogOpen(false)
+                              }}
+                            >
+                              Destroyed
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      )}
+                      {canManageMaintenance && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Wrench className="mr-2 h-4 w-4" />
+                            Maintenance
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                router.push(`/assets/maintenance?assetId=${scannedAsset.id}&status=Scheduled`)
+                                setQrDialogOpen(false)
+                              }}
+                            >
+                              Scheduled
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                router.push(`/assets/maintenance?assetId=${scannedAsset.id}&status=In progress`)
+                                setQrDialogOpen(false)
+                              }}
+                            >
+                              In Progress
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      )}
+                      {canDeleteAssets && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => {
+                              router.push(`/assets?delete=${scannedAsset.id}`)
+                              setQrDialogOpen(false)
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Move to Trash
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Category</p>
-                    <p className="text-sm">
-                      {scannedAsset.category?.name || 'N/A'}
-                      {scannedAsset.subCategory?.name && ` - ${scannedAsset.subCategory.name}`}
-                    </p>
+                {/* Tabs */}
+                <ScrollArea className="w-full border-b">
+                  <div className="flex items-center gap-2  max-w-sm">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setActiveTab('details')}
+                      className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+                        activeTab === 'details'
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Asset Details
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setActiveTab('media')}
+                      className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+                        activeTab === 'media'
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <ImageIcon className="h-4 w-4" />
+                        Media
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setActiveTab('checkout')}
+                      className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+                        activeTab === 'checkout'
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        Check-Out
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setActiveTab('audit')}
+                      className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+                        activeTab === 'audit'
+                          ? 'border-primary text-primary'
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <ClipboardCheck className="h-4 w-4" />
+                        Audit
+                      </span>
+                    </Button>
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
-                    <div className="flex items-center">
-                      {getStatusBadge(scannedAsset.status) || <span className="text-sm">N/A</span>}
+                <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+
+                {/* Tab Content */}
+                <div className="min-h-[300px]">
+                  {activeTab === 'details' && (
+                    <ScrollArea className="h-[300px]">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Category</p>
+                          <p className="text-sm">
+                            {scannedAsset.category?.name || 'N/A'}
+                            {scannedAsset.subCategory?.name && ` - ${scannedAsset.subCategory.name}`}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
+                          <div className="flex items-center">
+                            {getStatusBadge(scannedAsset.status) || <span className="text-sm">N/A</span>}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Location</p>
+                          <p className="text-sm">{scannedAsset.location || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Department</p>
+                          <p className="text-sm">{scannedAsset.department || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Site</p>
+                          <p className="text-sm">{scannedAsset.site || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Cost</p>
+                          <p className="text-sm">{formatCurrency(scannedAsset.cost)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Brand</p>
+                          <p className="text-sm">{scannedAsset.brand || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Model</p>
+                          <p className="text-sm">{scannedAsset.model || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Serial No</p>
+                          <p className="text-sm">{scannedAsset.serialNo || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Purchased From</p>
+                          <p className="text-sm">{scannedAsset.purchasedFrom || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Purchase Date</p>
+                          <p className="text-sm">{formatDate(scannedAsset.purchaseDate || null)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Owner</p>
+                          <p className="text-sm">{scannedAsset.owner || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Issued To</p>
+                          <p className="text-sm">{scannedAsset.issuedTo || 'N/A'}</p>
+                        </div>
+                      </div>
+                      <ScrollArea/>
+                    </ScrollArea>
+                  )}
+
+                  {activeTab === 'media' && scannedAsset && (
+                    <AssetMediaTabContent assetTagId={scannedAsset.assetTagId} />
+                  )}
+
+                  {activeTab === 'checkout' && scannedAsset && (
+                    <div className="h-[300px]">
+                      <CheckoutManager 
+                        assetId={scannedAsset.id} 
+                        assetTagId={scannedAsset.assetTagId}
+                        invalidateQueryKey={[]}
+                        readOnly={true}
+                      />
                     </div>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Location</p>
-                    <p className="text-sm">{scannedAsset.location || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Department</p>
-                    <p className="text-sm">{scannedAsset.department || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Site</p>
-                    <p className="text-sm">{scannedAsset.site || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Cost</p>
-                    <p className="text-sm">{formatCurrency(scannedAsset.cost)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Brand</p>
-                    <p className="text-sm">{scannedAsset.brand || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Model</p>
-                    <p className="text-sm">{scannedAsset.model || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Serial No</p>
-                    <p className="text-sm">{scannedAsset.serialNo || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Purchased From</p>
-                    <p className="text-sm">{scannedAsset.purchasedFrom || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Purchase Date</p>
-                    <p className="text-sm">{formatDate(scannedAsset.purchaseDate || null)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Owner</p>
-                    <p className="text-sm">{scannedAsset.owner || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Issued To</p>
-                    <p className="text-sm">{scannedAsset.issuedTo || 'N/A'}</p>
-                  </div>
+                  )}
+
+                  {activeTab === 'audit' && scannedAsset && (
+                    <div className="h-[300px]">
+                      <AuditHistoryManager 
+                        assetId={scannedAsset.id} 
+                        assetTagId={scannedAsset.assetTagId}
+                        readOnly={true}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -607,6 +1215,7 @@ export function AppHeader() {
                 variant="outline"
                 onClick={() => {
                   setScannedAsset(null)
+                  setActiveTab('details')
                   lastScannedCodeRef.current = null
                   if (scanTimeoutRef.current) {
                     clearTimeout(scanTimeoutRef.current)
@@ -618,6 +1227,8 @@ export function AppHeader() {
             )}
             <Button variant="outline" onClick={() => {
               setQrDialogOpen(false)
+              setScannedAsset(null)
+              setActiveTab('details')
               lastScannedCodeRef.current = null
               if (scanTimeoutRef.current) {
                 clearTimeout(scanTimeoutRef.current)

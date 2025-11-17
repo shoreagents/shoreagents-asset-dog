@@ -85,6 +85,11 @@ interface AssetUser {
   canManageMedia: boolean
   canManageTrash: boolean
   canManageUsers: boolean
+  canManageReturnForms: boolean
+  canViewReturnForms: boolean
+  canManageAccountabilityForms: boolean
+  canViewAccountabilityForms: boolean
+  canManageReports: boolean
   isActive: boolean
   isApproved: boolean
   createdAt: string
@@ -120,6 +125,11 @@ interface UserPermissions {
   canManageMedia: boolean
   canManageTrash: boolean
   canManageUsers: boolean
+  canManageReturnForms: boolean
+  canViewReturnForms: boolean
+  canManageAccountabilityForms: boolean
+  canViewAccountabilityForms: boolean
+  canManageReports: boolean
 }
 
 async function fetchUsers(search?: string, searchType: string = 'unified', page: number = 1, pageSize: number = 100): Promise<{ users: AssetUser[], pagination: PaginationInfo }> {
@@ -447,12 +457,24 @@ export default function UsersPage() {
         canManageMedia: true,
         canManageTrash: true,
         canManageUsers: false,
+        canManageReturnForms: false,
+        canViewReturnForms: true,
+        canManageAccountabilityForms: false,
+        canViewAccountabilityForms: true,
+        canManageReports: false,
       },
     },
   })
 
   // Keep formData state for edit dialog (not using react-hook-form for edit yet)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    email: string
+    password: string
+    role: string
+    isActive: boolean
+    isApproved: boolean
+    permissions: UserPermissions
+  }>({
     email: '',
     password: '',
     role: 'user',
@@ -478,6 +500,11 @@ export default function UsersPage() {
       canManageMedia: true,
       canManageTrash: true,
       canManageUsers: false,
+      canManageReturnForms: false,
+      canViewReturnForms: true,
+      canManageAccountabilityForms: false,
+      canViewAccountabilityForms: true,
+      canManageReports: false,
     },
   })
   const queryClient = useQueryClient()
@@ -672,6 +699,11 @@ export default function UsersPage() {
           canManageMedia: true,
           canManageTrash: true,
           canManageUsers: false,
+        canManageReturnForms: false,
+        canViewReturnForms: true,
+        canManageAccountabilityForms: false,
+        canViewAccountabilityForms: true,
+        canManageReports: false,
         },
       })
       if (wasApproving) {
@@ -762,6 +794,11 @@ export default function UsersPage() {
         canManageMedia: user.canManageMedia ?? true,
         canManageTrash: user.canManageTrash ?? true,
         canManageUsers: user.canManageUsers ?? false,
+        canManageReturnForms: user.canManageReturnForms ?? false,
+        canViewReturnForms: user.canViewReturnForms ?? true,
+        canManageAccountabilityForms: user.canManageAccountabilityForms ?? false,
+        canViewAccountabilityForms: user.canViewAccountabilityForms ?? true,
+        canManageReports: user.canManageReports ?? false,
       },
     })
     setIsEditDialogOpen(true)
@@ -817,7 +854,7 @@ export default function UsersPage() {
     // Open edit dialog with default permissions for admin to review and adjust
     // Admin can set permissions before approving the account
     setSelectedUser(user)
-    const defaultPermissions = {
+    const defaultPermissions: UserPermissions = {
       canDeleteAssets: false,
       canManageImport: false,
       canManageExport: true,
@@ -837,6 +874,11 @@ export default function UsersPage() {
       canManageMedia: true,
       canManageTrash: true,
       canManageUsers: false,
+      canManageReturnForms: false,
+      canViewReturnForms: true,
+      canManageAccountabilityForms: false,
+      canViewAccountabilityForms: true,
+      canManageReports: false,
     }
     setFormData({
       email: '', // Email is not editable, only shown in display
@@ -881,7 +923,11 @@ export default function UsersPage() {
       formData.permissions.canAudit &&
       formData.permissions.canManageMedia &&
       formData.permissions.canManageTrash &&
-      formData.permissions.canManageUsers
+      formData.permissions.canManageUsers &&
+      formData.permissions.canManageReturnForms &&
+      formData.permissions.canViewReturnForms &&
+      formData.permissions.canManageAccountabilityForms &&
+      formData.permissions.canViewAccountabilityForms
 
     setFormData({
       ...formData,
@@ -905,6 +951,11 @@ export default function UsersPage() {
         canManageMedia: !allSelected,
         canManageTrash: !allSelected,
         canManageUsers: !allSelected,
+        canManageReturnForms: !allSelected,
+        canViewReturnForms: !allSelected,
+        canManageAccountabilityForms: !allSelected,
+        canViewAccountabilityForms: !allSelected,
+        canManageReports: !allSelected,
       },
     })
   }, [formData])
@@ -1387,6 +1438,10 @@ export default function UsersPage() {
                           { key: 'canManageMedia', label: 'Manage Media' },
                           { key: 'canManageTrash', label: 'Manage Trash' },
                           { key: 'canManageUsers', label: 'Manage Users' },
+                          { key: 'canManageReturnForms', label: 'Manage Return Forms' },
+                          { key: 'canViewReturnForms', label: 'View Return Forms' },
+                          { key: 'canManageAccountabilityForms', label: 'Manage Accountability Forms' },
+                          { key: 'canViewAccountabilityForms', label: 'View Accountability Forms' },
                         ].map(({ key, label }) => (
                           <div key={key} className="flex items-center space-x-2">
                             <Checkbox
@@ -1864,6 +1919,71 @@ export default function UsersPage() {
                       }
                     />
                     <Label htmlFor="edit-canManageUsers" className="cursor-pointer">Manage Users</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-canManageReturnForms"
+                      checked={formData.permissions.canManageReturnForms}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          permissions: { ...formData.permissions, canManageReturnForms: checked as boolean },
+                        })
+                      }
+                    />
+                    <Label htmlFor="edit-canManageReturnForms" className="cursor-pointer">Manage Return Forms</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-canViewReturnForms"
+                      checked={formData.permissions.canViewReturnForms}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          permissions: { ...formData.permissions, canViewReturnForms: checked as boolean },
+                        })
+                      }
+                    />
+                    <Label htmlFor="edit-canViewReturnForms" className="cursor-pointer">View Return Forms</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-canManageAccountabilityForms"
+                      checked={formData.permissions.canManageAccountabilityForms}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          permissions: { ...formData.permissions, canManageAccountabilityForms: checked as boolean },
+                        })
+                      }
+                    />
+                    <Label htmlFor="edit-canManageAccountabilityForms" className="cursor-pointer">Manage Accountability Forms</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-canViewAccountabilityForms"
+                      checked={formData.permissions.canViewAccountabilityForms}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          permissions: { ...formData.permissions, canViewAccountabilityForms: checked as boolean },
+                        })
+                      }
+                    />
+                    <Label htmlFor="edit-canViewAccountabilityForms" className="cursor-pointer">View Accountability Forms</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-canManageReports"
+                      checked={formData.permissions.canManageReports}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          permissions: { ...formData.permissions, canManageReports: checked as boolean },
+                        })
+                      }
+                    />
+                    <Label htmlFor="edit-canManageReports" className="cursor-pointer">Manage Reports</Label>
                   </div>
                 </div>
               </div>

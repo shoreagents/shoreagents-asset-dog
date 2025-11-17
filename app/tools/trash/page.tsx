@@ -149,6 +149,7 @@ export default function TrashPage() {
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
   const [sorting, setSorting] = useState<SortingState>([])
   const [isManualRefresh, setIsManualRefresh] = useState(false)
+  const [isEmptyTrashDialogOpen, setIsEmptyTrashDialogOpen] = useState(false)
 
   // Update URL parameters
   const updateURL = useCallback((updates: { page?: number; pageSize?: number; search?: string; searchType?: string }) => {
@@ -288,6 +289,29 @@ export default function TrashPage() {
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to permanently delete asset')
+    },
+  })
+
+  // Empty trash mutation
+  const emptyTrashMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/assets/trash/empty', {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to empty trash')
+      }
+      return response.json()
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['deletedAssets'] })
+      toast.success(data.message || 'Trash emptied successfully')
+      setIsEmptyTrashDialogOpen(false)
+      setRowSelection({})
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to empty trash')
     },
   })
 
@@ -810,6 +834,23 @@ export default function TrashPage() {
                   </Button>
                 </>
               )}
+              {selectedAssets.size === 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (!canManageTrash) {
+                      toast.error('You do not have permission to empty trash')
+                      return
+                    }
+                    setIsEmptyTrashDialogOpen(true)
+                  }}
+                  disabled={!pagination?.total || pagination.total === 0}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Empty
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="icon"
@@ -1053,6 +1094,19 @@ export default function TrashPage() {
         loadingLabel="Deleting assets permanently, please wait..."
         progressTitle={`Deleting Assets... ${bulkProgress.current}/${bulkProgress.total}`}
         variant="delete"
+      />
+
+      {/* Empty Trash Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={isEmptyTrashDialogOpen}
+        onOpenChange={setIsEmptyTrashDialogOpen}
+        onConfirm={() => emptyTrashMutation.mutate()}
+        itemName={`all ${pagination?.total || 0} trash item(s)`}
+        isLoading={emptyTrashMutation.isPending}
+        title="Empty Trash"
+        description={`Are you sure you want to permanently delete all ${pagination?.total || 0} item(s) in trash? This action cannot be undone.`}
+        confirmLabel="Empty Trash"
+        loadingLabel="Emptying trash..."
       />
     </div>
   )

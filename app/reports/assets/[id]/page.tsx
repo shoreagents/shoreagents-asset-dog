@@ -1,8 +1,8 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useRef, useTransition, memo } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect, useRef, useTransition, memo, useCallback } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ArrowLeft, FileText, Calendar, Tag, MapPin, Building, DollarSign, TrendingUp, Package } from 'lucide-react'
+import { ArrowLeft, FileText, Calendar, MapPin, Building, DollarSign, TrendingUp, Package } from 'lucide-react'
 import { format } from 'date-fns'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 
@@ -152,9 +152,11 @@ AssetTableRow.displayName = 'AssetTableRow'
 export default function ViewReportPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const canViewAssets = hasPermission('canViewAssets')
+  const canManageReports = hasPermission('canManageReports')
   const reportId = params.id as string
 
   const [assetsPage, setAssetsPage] = useState(1)
@@ -163,12 +165,39 @@ export default function ViewReportPage() {
   const previousReportIdRef = useRef<string | null>(null)
   const assetsCacheRef = useRef<Map<number, Asset[]>>(new Map())
   const [, startTransition] = useTransition()
+  
+  // Tab state from URL
+  const activeTab = (searchParams.get('tab') as 'details' | 'assets') || 'details'
+
+  // Update URL parameters
+  const updateURL = useCallback(
+    (updates: { tab?: 'details' | 'assets' }) => {
+      const params = new URLSearchParams(searchParams.toString())
+
+      if (updates.tab !== undefined) {
+        if (updates.tab === 'details') {
+          params.delete('tab')
+        } else {
+          params.set('tab', updates.tab)
+        }
+      }
+
+      startTransition(() => {
+        router.replace(`/reports/assets/${reportId}?${params.toString()}`, { scroll: false })
+      })
+    },
+    [searchParams, router, reportId, startTransition]
+  )
+
+  const handleTabChange = (tab: 'details' | 'assets') => {
+    updateURL({ tab })
+  }
 
   // Fetch report (without assets initially)
   const { data: reportData, isLoading: reportLoading, error: reportError } = useQuery({
     queryKey: ['asset-report', reportId],
     queryFn: () => fetchReport(reportId, false),
-    enabled: canViewAssets && !!reportId,
+    enabled: canViewAssets && canManageReports && !!reportId,
     staleTime: 5 * 60 * 1000,
   })
 
@@ -182,7 +211,7 @@ export default function ViewReportPage() {
   } = useQuery({
     queryKey: ['asset-report-assets', reportId, assetsPage],
     queryFn: () => fetchReport(reportId, true, assetsPage),
-    enabled: canViewAssets && !!reportId && !!report && report.reportStatus === 'generated',
+    enabled: canViewAssets && canManageReports && !!reportId && !!report && report.reportStatus === 'generated',
     staleTime: 5 * 60 * 1000,
   })
 
@@ -376,21 +405,35 @@ export default function ViewReportPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b">
+        <button
+          type="button"
+          onClick={() => handleTabChange('details')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+            activeTab === 'details'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Report Details
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTabChange('assets')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+            activeTab === 'assets'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Affected Assets
+        </button>
+      </div>
+
       {/* Report Statistics - Only show for generated reports */}
-      {report.reportStatus === 'generated' && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card className="border-2">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Tag className="h-5 w-5 text-primary" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{report.totalAssets ?? 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">Assets in report</p>
-            </CardContent>
-          </Card>
+      {activeTab === 'details' && report.reportStatus === 'generated' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className="border-2">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Value</CardTitle>
@@ -419,6 +462,7 @@ export default function ViewReportPage() {
       )}
 
       {/* Main Content Grid */}
+      {activeTab === 'details' && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 ">
         {/* Left Column - Report Information */}
         <div className="lg:col-span-2 space-y-6">
@@ -595,8 +639,10 @@ export default function ViewReportPage() {
           </Card>
         </div>
       </div>
+      )}
 
       {/* Affected Assets List */}
+      {activeTab === 'assets' && (
       <Card className='pb-2'>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -695,6 +741,7 @@ export default function ViewReportPage() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

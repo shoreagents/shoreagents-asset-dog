@@ -46,7 +46,6 @@ import { cn } from '@/lib/utils'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
-import { EditAssetDialog } from '@/components/edit-asset-dialog'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { ManagerDialog } from '@/components/manager-dialog'
 import { AuditHistoryManager } from '@/components/audit-history-manager'
@@ -1318,9 +1317,9 @@ function AssetImagesCell({ asset }: { asset: Asset }) {
 // Asset Actions Component
 function AssetActions({ asset }: { asset: Asset }) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const { hasPermission } = usePermissions()
   
-  const [isEditOpen, setIsEditOpen] = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [isAuditOpen, setIsAuditOpen] = useState(false)
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
@@ -1357,7 +1356,7 @@ function AssetActions({ asset }: { asset: Asset }) {
       toast.error('You do not have permission to edit assets')
       return
     }
-    setIsEditOpen(true)
+    router.push(`/assets/${asset.id}`)
   }
 
   const handleAudit = () => {
@@ -1421,15 +1420,6 @@ function AssetActions({ asset }: { asset: Asset }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-
-      {/* Edit Dialog - Only render when open to prevent unnecessary query creation */}
-      {isEditOpen && (
-      <EditAssetDialog
-        asset={asset}
-        open={isEditOpen}
-        onOpenChange={setIsEditOpen}
-      />
-      )}
 
       {/* Delete Dialog */}
       <DeleteConfirmationDialog

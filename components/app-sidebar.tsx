@@ -10,8 +10,9 @@ import {
   Settings,
   Wrench,
   FileText,
+  ClipboardList,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 
 import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
@@ -70,10 +71,6 @@ const data = {
         {
           title: "Check In",
           url: "/assets/checkin",
-        },
-        {
-          title: "Return Form",
-          url: "/assets/return-form",
         },
         {
           title: "Move Asset",
@@ -159,6 +156,25 @@ const data = {
       ],
     },
     {
+      title: "Forms",
+      url: "/forms",
+      icon: ClipboardList,
+      items: [
+        {
+          title: "Return Forms",
+          url: "/forms/return-form",
+        },
+        {
+          title: "Accountability Form",
+          url: "/forms/accountability-form",
+        },
+        {
+          title: "History",
+          url: "/forms/history",
+        },
+      ],
+    },
+    {
       title: "Reports",
       url: "/reports",
       icon: FileText,
@@ -182,10 +198,6 @@ const data = {
           title: "Categories",
           url: "/settings/categories",
         },
-        {
-          title: "Password",
-          url: "/settings/password",
-        },
       ],
     },
   ],
@@ -193,36 +205,27 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [user, setUser] = useState<{
-    name: string
-    email: string
-    avatar: string
-    role: string | null
-  } | null>(null)
-
-  useEffect(() => {
-    // Fetch current user
-    const fetchUser = async () => {
-      try {
+  // Use React Query to fetch user data so it updates when cache is invalidated
+  const { data: userData } = useQuery({
+    queryKey: ['sidebar-user'],
+    queryFn: async () => {
         const response = await fetch('/api/auth/me')
-        if (response.ok) {
-          const data = await response.json()
-          if (data.user) {
-            setUser({
-              name: data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'User',
-              email: data.user.email || '',
-              avatar: data.user.user_metadata?.avatar_url || '',
-              role: data.role || null,
-            })
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch user:', error)
+      if (!response.ok) {
+        throw new Error('Failed to fetch user')
       }
-    }
+          const data = await response.json()
+      return {
+        name: data.user?.name || data.user?.user_metadata?.name || '',
+        email: data.user?.email || '',
+        avatar: data.user?.user_metadata?.avatar_url || '',
+              role: data.role || null,
+      }
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    retry: false,
+  })
 
-    fetchUser()
-  }, [])
+  const user = userData || null
 
   return (
     <Sidebar collapsible="icon" {...props}>

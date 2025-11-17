@@ -148,6 +148,8 @@ model EmployeeUser {
   checkins  AssetsCheckin[]
   moves     AssetsMove[]
   reservations AssetsReserve[]
+  returnForms ReturnForm[]
+  accountabilityForms AccountabilityForm[]
 
   @@map("employee_users")
 }
@@ -385,6 +387,11 @@ model AssetUser {
   canManageMedia    Boolean   @map("can_manage_media") @default(true)
   canManageTrash    Boolean   @map("can_manage_trash") @default(true)
   canManageUsers    Boolean   @map("can_manage_users") @default(false)
+  canManageReturnForms Boolean @map("can_manage_return_forms") @default(false)
+  canViewReturnForms Boolean   @map("can_view_return_forms") @default(true)
+  canManageAccountabilityForms Boolean @map("can_manage_accountability_forms") @default(false)
+  canViewAccountabilityForms Boolean   @map("can_view_accountability_forms") @default(true)
+  canManageReports           Boolean   @map("can_manage_reports") @default(false)
   
   isActive          Boolean   @map("is_active") @default(true)
   isApproved        Boolean   @map("is_approved") @default(false)
@@ -487,6 +494,49 @@ model AssetReports {
   @@index([reportStatus])
   @@index([generatedAt])
   @@index([createdAt])
+}
+
+model ReturnForm {
+  id                String    @id @default(uuid())
+  employeeUserId    String    @map("employee_user_id")
+  employeeUser      EmployeeUser @relation(fields: [employeeUserId], references: [id], onDelete: Cascade)
+  
+  dateReturned      DateTime  @map("date_returned") @db.Date
+  department        String?   @map("department") @db.VarChar(100)
+  ctrlNo            String?   @map("ctrl_no") @db.VarChar(100)
+  returnType        String    @map("return_type") @db.VarChar(50) // "Return to Office" or "Resigned Staff"
+  
+  // Form data stored as JSON
+  formData          String    @map("form_data") @db.Text // JSON string containing all form fields
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("return_forms")
+  @@index([employeeUserId])
+  @@index([dateReturned])
+  @@index([returnType])
+}
+
+model AccountabilityForm {
+  id                String    @id @default(uuid())
+  employeeUserId    String    @map("employee_user_id")
+  employeeUser      EmployeeUser @relation(fields: [employeeUserId], references: [id], onDelete: Cascade)
+  
+  dateIssued        DateTime  @map("date_issued") @db.Date
+  department        String?   @map("department") @db.VarChar(100)
+  accountabilityFormNo String? @map("accountability_form_no") @db.VarChar(100) // AF No
+  
+  // Form data stored as JSON
+  formData          String    @map("form_data") @db.Text // JSON string containing all form fields
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("accountability_forms")
+  @@index([employeeUserId])
+  @@index([dateIssued])
+  @@index([accountabilityFormNo])
 }
 
 

@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, History, Edit2, QrCode } from "lucide-react"
 import { usePermissions } from '@/hooks/use-permissions'
+import { useSidebar } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/qr-scanner-dialog'
 import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
@@ -117,7 +119,9 @@ const getMaintenanceStatusBadgeClass = (status: string): string => {
 
 export default function MaintenancePage() {
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const { state: sidebarState, open: sidebarOpen } = useSidebar()
   
   const canViewAssets = hasPermission('canViewAssets')
   const canManageMaintenance = hasPermission('canManageMaintenance')
@@ -377,6 +381,61 @@ export default function MaintenancePage() {
       }
     }
   }
+
+  // Handle URL query parameters for assetId and status
+  useEffect(() => {
+    const urlAssetId = searchParams.get('assetId')
+    const urlStatus = searchParams.get('status')
+
+    if (urlAssetId && !selectedAsset) {
+      // Fetch and select the asset from URL
+      const selectAssetFromUrl = async () => {
+        try {
+          const response = await fetch(`/api/assets/${urlAssetId}`)
+          if (response.ok) {
+            const data = await response.json()
+            const asset = data.asset as Asset
+            
+            // Check if asset is eligible for maintenance
+            const assetStatus = (asset.status || '').toLowerCase()
+            const isEligible = assetStatus === 'available' || assetStatus === 'checked out'
+            
+            if (isEligible) {
+              setSelectedAsset(asset)
+              form.setValue('assetId', asset.id)
+              setAssetIdInput(asset.assetTagId)
+            } else {
+              toast.error(`Asset "${asset.assetTagId}" is not available for maintenance. Current status: ${asset.status}`)
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching asset from URL:', error)
+        }
+      }
+      
+      selectAssetFromUrl()
+    }
+
+    // Set status from URL parameter
+    if (urlStatus) {
+      // Map URL status to form status values (exact match required for Select component)
+      const statusMap: Record<string, string> = {
+        'Scheduled': 'Scheduled',
+        'In Progress': 'In progress', // URL might have capital P
+        'In progress': 'In progress', // Form uses lowercase p
+        'Completed': 'Completed',
+        'Cancelled': 'Cancelled',
+      }
+      
+      const mappedStatus = statusMap[urlStatus] || urlStatus
+      const currentStatus = form.getValues('status')
+      
+      // Only set if different from current value
+      if (currentStatus !== mappedStatus) {
+        form.setValue('status', mappedStatus)
+      }
+    }
+  }, [searchParams, selectedAsset, form])
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1119,7 +1178,17 @@ export default function MaintenancePage() {
 
       {/* Floating Action Buttons - Only show when form has changes */}
       {isFormDirty && canViewAssets && canManageMaintenance && (
-        <div className="fixed bottom-6 z-50 flex items-center justify-center gap-3 left-1/2 -translate-x-1/2 md:left-[calc(var(--sidebar-width,16rem)+((100vw-var(--sidebar-width,16rem))/2))] md:translate-x-[-50%]">
+        <div 
+          className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
+          style={{
+            left: !sidebarOpen 
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
+            transform: 'translateX(-50%)'
+          }}
+        >
           <Button
             type="button"
             variant="outline"

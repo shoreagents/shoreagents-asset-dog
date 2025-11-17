@@ -14,11 +14,12 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldContent,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
-export default function ChangePasswordPage() {
+export default function PasswordAndSecurity() {
   const router = useRouter()
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -65,20 +66,19 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Change Password</h1>
-        <p className="text-muted-foreground">
+    <Card>
+      <CardHeader>
+        <CardTitle>Password and Security</CardTitle>
+        <CardDescription>
           Update your password to keep your account secure
-        </p>
-      </div>
-
-      <Card>
-        <CardContent>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="currentPassword">Current Password</FieldLabel>
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="currentPassword">Current Password</FieldLabel>
+              <FieldContent>
                 <div className="relative">
                   <Input
                     id="currentPassword"
@@ -107,10 +107,12 @@ export default function ChangePasswordPage() {
                 {form.formState.errors.currentPassword && (
                   <FieldError>{form.formState.errors.currentPassword.message}</FieldError>
                 )}
-              </Field>
+              </FieldContent>
+            </Field>
 
-              <Field>
-                <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
+            <Field>
+              <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
+              <FieldContent>
                 <div className="relative">
                   <Input
                     id="newPassword"
@@ -139,10 +141,12 @@ export default function ChangePasswordPage() {
                 {form.formState.errors.newPassword && (
                   <FieldError>{form.formState.errors.newPassword.message}</FieldError>
                 )}
-              </Field>
+              </FieldContent>
+            </Field>
 
-              <Field>
-                <FieldLabel htmlFor="confirmPassword">Confirm New Password</FieldLabel>
+            <Field>
+              <FieldLabel htmlFor="confirmPassword">Confirm New Password</FieldLabel>
+              <FieldContent>
                 <div className="relative">
                   <Input
                     id="confirmPassword"
@@ -171,18 +175,18 @@ export default function ChangePasswordPage() {
                 {form.formState.errors.confirmPassword && (
                   <FieldError>{form.formState.errors.confirmPassword.message}</FieldError>
                 )}
-              </Field>
+              </FieldContent>
+            </Field>
 
-              <Field>
-                <Button type="submit" disabled={isLoading} className="w-full" size="lg">
-                  {isLoading ? 'Changing Password...' : 'Change Password'}
-                </Button>
-              </Field>
-            </FieldGroup>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+            <Field>
+              <Button type="submit" disabled={isLoading} className="w-full" size="lg">
+                {isLoading ? 'Changing Password...' : 'Change Password'}
+              </Button>
+            </Field>
+          </FieldGroup>
+        </form>
+      </CardContent>
+    </Card>
   )
 }
 

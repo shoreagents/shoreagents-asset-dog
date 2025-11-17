@@ -24,6 +24,11 @@ export const userPermissionsSchema = z.object({
   canManageMedia: z.boolean(),
   canManageTrash: z.boolean(),
   canManageUsers: z.boolean(),
+  canManageReturnForms: z.boolean(),
+  canViewReturnForms: z.boolean(),
+  canManageAccountabilityForms: z.boolean(),
+  canViewAccountabilityForms: z.boolean(),
+  canManageReports: z.boolean(),
 })
 
 /**

@@ -23,6 +23,7 @@ interface QRCodeDisplayDialogProps {
   assetTagId: string
   status?: string | null
   statusBadge?: React.ReactNode
+  purchaseDate?: string | null
 }
 
 export function QRCodeDisplayDialog({
@@ -31,6 +32,7 @@ export function QRCodeDisplayDialog({
   assetTagId,
   status,
   statusBadge,
+  purchaseDate,
 }: QRCodeDisplayDialogProps) {
   const qrCodeRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
@@ -124,14 +126,49 @@ export function QRCodeDisplayDialog({
         const logoX = padding + (img.width / 2) - (logoSize / 2)
         const logoY = qrY + (img.height / 2) - (logoSize / 2)
 
-        // Draw white circle background for logo
+        // Draw white square background for logo
+        const logoPadding = 2
         ctx.fillStyle = 'white'
-        ctx.beginPath()
-        ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 + 2, 0, 2 * Math.PI)
-        ctx.fill()
+        ctx.fillRect(logoX - logoPadding, logoY - logoPadding, logoSize + (logoPadding * 2), logoSize + (logoPadding * 2))
 
         // Draw logo
         ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize)
+        
+        // Convert logo to black and white (matching preview: grayscale + contrast + brightness(0))
+        const logoImageData = ctx.getImageData(logoX, logoY, logoSize, logoSize)
+        const logoData = logoImageData.data
+        
+        for (let i = 0; i < logoData.length; i += 4) {
+          const r = logoData[i]
+          const g = logoData[i + 1]
+          const b = logoData[i + 2]
+          const a = logoData[i + 3]
+          
+          // Skip transparent pixels
+          if (a < 50) {
+            continue
+          }
+          
+          // Check if pixel is very white (background) - preserve it as white
+          // If all RGB channels are very high (close to white), keep it white
+          const isWhite = r > 240 && g > 240 && b > 240
+          
+          if (isWhite) {
+            // Keep white background
+            logoData[i] = 255     // R
+            logoData[i + 1] = 255 // G
+            logoData[i + 2] = 255 // B
+          } else {
+            // Apply brightness(0) effect - make non-white pixels black
+            // Since we've already filtered out white pixels, make everything else black
+            // This ensures the logo (which is not white) becomes visible as black
+            logoData[i] = 0     // R - black
+            logoData[i + 1] = 0 // G - black
+            logoData[i + 2] = 0 // B - black
+          }
+          // Alpha channel stays the same
+        }
+        ctx.putImageData(logoImageData, logoX, logoY)
 
         // Draw "SHORE AGENTS" text at the top with underline
         ctx.fillStyle = 'black'
@@ -153,6 +190,19 @@ export function QRCodeDisplayDialog({
         const textY = qrY + img.height + textGap + 20 // Position text closer to QR code
         ctx.font = 'bold 24px Arial'
         ctx.fillText(assetTagId, canvas.width / 2, textY)
+        
+        // Draw "PD:" with purchase date on the next line
+        const pdY = textY + 30 // Position below asset tag ID
+        ctx.font = 'bold 24px Arial'
+        let pdText = 'PD: N/A'
+        if (purchaseDate) {
+          const date = new Date(purchaseDate)
+          const month = date.getMonth() + 1
+          const day = date.getDate()
+          const year = date.getFullYear()
+          pdText = `PD: ${month}/${day}/${year}`
+        }
+        ctx.fillText(pdText, canvas.width / 2, pdY)
 
         URL.revokeObjectURL(svgUrl)
         callback(canvas)
@@ -179,6 +229,19 @@ export function QRCodeDisplayDialog({
         const textY = qrY + img.height + textGap + 20 // Position text closer to QR code
         ctx.font = 'bold 24px Arial'
         ctx.fillText(assetTagId, canvas.width / 2, textY)
+        
+        // Draw "PD:" with purchase date on the next line
+        const pdY = textY + 30 // Position below asset tag ID
+        ctx.font = 'bold 24px Arial'
+        let pdText = 'PD: N/A'
+        if (purchaseDate) {
+          const date = new Date(purchaseDate)
+          const month = date.getMonth() + 1
+          const day = date.getDate()
+          const year = date.getFullYear()
+          pdText = `PD: ${month}/${day}/${year}`
+        }
+        ctx.fillText(pdText, canvas.width / 2, pdY)
 
         URL.revokeObjectURL(svgUrl)
         callback(canvas)
@@ -453,7 +516,7 @@ export function QRCodeDisplayDialog({
               viewBox={`0 0 256 256`}
             />
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10">
-              <div className="bg-white rounded-lg p-1 shadow-lg">
+              <div className="bg-white p-1 shadow-lg">
                 <Image
                   src="/shoreagents.ico"
                   alt="Shore Agents Logo"
@@ -468,23 +531,34 @@ export function QRCodeDisplayDialog({
               </div>
             </div>
           </div>
-          <Tooltip open={textTooltipOpen} onOpenChange={(open) => {
-            if (open !== undefined) {
-              setTextTooltipOpen(open)
-            }
-          }}>
-            <TooltipTrigger asChild>
-              <p 
-                className="mt-4 text-sm text-muted-foreground text-center cursor-pointer hover:text-primary transition-colors"
-                onClick={() => handleCopyToClipboard('text')}
-              >
-            <span className="font-medium">{assetTagId}</span>
-          </p>
-            </TooltipTrigger>
-            <TooltipContent>
-              {copied ? 'Copied' : 'Copy'}
-            </TooltipContent>
-          </Tooltip>
+          <div className="mt-4 text-sm text-muted-foreground text-center">
+            <Tooltip open={textTooltipOpen} onOpenChange={(open) => {
+              if (open !== undefined) {
+                setTextTooltipOpen(open)
+              }
+            }}>
+              <TooltipTrigger asChild>
+                <p 
+                  className="font-medium cursor-pointer hover:text-primary transition-colors"
+                  onClick={() => handleCopyToClipboard('text')}
+                >
+                  {assetTagId}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent>
+                {copied ? 'Copied' : 'Copy'}
+              </TooltipContent>
+            </Tooltip>
+            <p className="font-medium mt-1">
+              PD: {purchaseDate ? (() => {
+                const date = new Date(purchaseDate)
+                const month = date.getMonth() + 1
+                const day = date.getDate()
+                const year = date.getFullYear()
+                return `${month}/${day}/${year}`
+              })() : 'N/A'}
+            </p>
+          </div>
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={handleDownloadQR}>

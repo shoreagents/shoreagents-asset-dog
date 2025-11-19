@@ -125,7 +125,9 @@ export default function DashboardPage() {
   const { data, isLoading, error } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: fetchDashboardStats,
-    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes (reduced from 30 seconds)
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
   })
 
   // Prepare chart data and config dynamically based on categories

@@ -303,6 +303,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   fill
                   className="object-contain p-2"
                   unoptimized
+                  priority
                 />
               </div>
             </div>

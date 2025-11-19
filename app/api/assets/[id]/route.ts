@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { parseDate } from '@/lib/date-utils'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
+import { clearCache } from '@/lib/cache-utils'
 
 export async function DELETE(
   request: NextRequest,
@@ -29,6 +30,10 @@ export async function DELETE(
           id,
         },
       })
+      
+      // Invalidate dashboard cache when asset is deleted
+      clearCache('dashboard-stats')
+      
       return NextResponse.json({ success: true, message: 'Asset permanently deleted' })
     } else {
       // Soft delete
@@ -41,6 +46,10 @@ export async function DELETE(
           isDeleted: true,
         },
       })
+      
+      // Invalidate dashboard cache when asset is archived
+      clearCache('dashboard-stats')
+      
       return NextResponse.json({ success: true, message: 'Asset archived. It will be permanently deleted after 30 days.' })
     }
   } catch (error) {
@@ -190,6 +199,10 @@ export async function PUT(
         },
       },
     })
+
+    // Invalidate dashboard cache when asset is updated
+    // Especially important if status or cost changed
+    clearCache('dashboard-stats')
 
     return NextResponse.json({ asset })
   } catch (error) {

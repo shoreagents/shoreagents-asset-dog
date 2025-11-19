@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
 import { retryDbOperation } from '@/lib/db-utils'
+import { getCached, setCached, clearCache } from '@/lib/cache-utils'
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAuth()
@@ -12,6 +13,15 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
+    
+    // Only cache when no search filter
+    if (!search) {
+      const cacheKey = 'sites-list'
+      const cached = getCached<{ sites: unknown[] }>(cacheKey)
+      if (cached) {
+        return NextResponse.json(cached)
+      }
+    }
     
     const where = search
       ? {
@@ -31,7 +41,14 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    return NextResponse.json({ sites })
+    const result = { sites }
+    
+    // Cache for 10 minutes if no search filter
+    if (!search) {
+      setCached('sites-list', result, 600000)
+    }
+
+    return NextResponse.json(result)
   } catch (error: unknown) {
     const prismaError = error as { code?: string; message?: string }
     if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
@@ -76,6 +93,9 @@ export async function POST(request: NextRequest) {
         },
       })
     )
+
+    // Invalidate sites cache
+    clearCache('sites-list')
 
     return NextResponse.json({ site }, { status: 201 })
   } catch (error: any) {

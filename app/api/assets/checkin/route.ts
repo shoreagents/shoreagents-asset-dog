@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { parseDate } from '@/lib/date-utils'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
+import { clearCache } from '@/lib/cache-utils'
 
 export async function POST(request: NextRequest) {
   const auth = await verifyAuth()
@@ -112,6 +113,10 @@ export async function POST(request: NextRequest) {
 
       return checkinRecords
     })
+
+    // Invalidate dashboard and activities cache when checkin is created
+    clearCache('dashboard-stats')
+    clearCache('activities-')
 
     return NextResponse.json({ 
       success: true,

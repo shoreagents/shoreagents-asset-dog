@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
 import { retryDbOperation } from '@/lib/db-utils'
+import { getCached, setCached } from '@/lib/cache-utils'
 
 export async function GET() {
   const auth = await verifyAuth()
@@ -11,6 +12,14 @@ export async function GET() {
   const permissionCheck = await requirePermission('canViewAssets')
   if (!permissionCheck.allowed && permissionCheck.error) {
     return permissionCheck.error
+  }
+
+  // Check cache first (5 minute TTL for dashboard stats)
+  // This dramatically reduces database load for frequently accessed data
+  const cacheKey = 'dashboard-stats'
+  const cached = getCached<Record<string, unknown>>(cacheKey)
+  if (cached) {
+    return NextResponse.json(cached)
   }
 
   try {
@@ -226,7 +235,7 @@ export async function GET() {
     const checkedOutAndAvailable = checkedOutCount + availableCount
     const totalValue = totalValueResult._sum.cost ? Number(totalValueResult._sum.cost) : 0
 
-    return NextResponse.json({
+    const result = {
       assetValueByCategory,
       activeCheckouts,
       recentCheckins,
@@ -248,7 +257,13 @@ export async function GET() {
         leasesExpiring,
         maintenanceDue,
       },
-    })
+    }
+
+    // Cache for 5 minutes (300000 ms)
+    // Subsequent requests will be instant until cache expires
+    setCached(cacheKey, result, 300000)
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Error fetching dashboard stats:', error)
     return NextResponse.json(

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { retryDbOperation } from '@/lib/db-utils'
 import { requirePermission } from '@/lib/permission-utils'
+import { getCached, setCached } from '@/lib/cache-utils'
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const auth = await verifyAuth()
@@ -19,6 +20,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const page = parseInt(searchParams.get('page') || '1', 10)
     const pageSize = Math.min(Math.max(parseInt(searchParams.get('pageSize') || '100', 10), 100), 500) // Clamp between 100-500
     const activityType = searchParams.get('type') // Optional filter: checkout, checkin, move, reserve, lease, leaseReturn, dispose, maintenance
+    
+    // Check cache first (2 minute TTL for activities)
+    // Cache key includes pagination and filter params for correct cache hits
+    const cacheKey = `activities-${activityType || 'all'}-${page}-${pageSize}`
+    const cached = getCached<{ activities: unknown[]; pagination: unknown }>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
     
     // Get total count and fetch data in parallel
     let totalActivities = 0
@@ -73,7 +82,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
           }))
           
-          return NextResponse.json({
+          const result = {
             activities,
             pagination: {
               page,
@@ -83,7 +92,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               hasNextPage: page < Math.ceil(totalActivities / pageSize),
               hasPreviousPage: page > 1,
             }
-          })
+          }
+          
+          // Cache for 2 minutes
+          setCached(cacheKey, result, 120000)
+          
+          return NextResponse.json(result)
         }
         case 'checkin': {
           const [count, checkins] = await retryDbOperation(() =>
@@ -129,7 +143,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
           }))
           
-          return NextResponse.json({
+          const result = {
             activities,
             pagination: {
               page,
@@ -139,7 +153,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               hasNextPage: page < Math.ceil(totalActivities / pageSize),
               hasPreviousPage: page > 1,
             }
-          })
+          }
+          
+          // Cache for 2 minutes
+          setCached(cacheKey, result, 120000)
+          
+          return NextResponse.json(result)
         }
         case 'move': {
           const [count, moves] = await retryDbOperation(() =>
@@ -185,7 +204,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
           }))
           
-          return NextResponse.json({
+          const result = {
             activities,
             pagination: {
               page,
@@ -195,7 +214,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               hasNextPage: page < Math.ceil(totalActivities / pageSize),
               hasPreviousPage: page > 1,
             }
-          })
+          }
+          
+          setCached(cacheKey, result, 120000)
+          return NextResponse.json(result)
         }
         case 'reserve': {
           const [count, reserves] = await retryDbOperation(() =>
@@ -242,7 +264,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
           }))
           
-          return NextResponse.json({
+          const result = {
             activities,
             pagination: {
               page,
@@ -252,7 +274,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               hasNextPage: page < Math.ceil(totalActivities / pageSize),
               hasPreviousPage: page > 1,
             }
-          })
+          }
+          
+          setCached(cacheKey, result, 120000)
+          return NextResponse.json(result)
         }
         case 'lease': {
           const [count, leases] = await retryDbOperation(() =>
@@ -290,7 +315,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
           }))
           
-          return NextResponse.json({
+          const result = {
             activities,
             pagination: {
               page,
@@ -300,7 +325,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               hasNextPage: page < Math.ceil(totalActivities / pageSize),
               hasPreviousPage: page > 1,
             }
-          })
+          }
+          
+          setCached(cacheKey, result, 120000)
+          return NextResponse.json(result)
         }
         case 'leaseReturn': {
           const [count, leaseReturns] = await retryDbOperation(() =>
@@ -343,7 +371,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
           }))
           
-          return NextResponse.json({
+          const result = {
             activities,
             pagination: {
               page,
@@ -353,7 +381,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               hasNextPage: page < Math.ceil(totalActivities / pageSize),
               hasPreviousPage: page > 1,
             }
-          })
+          }
+          
+          setCached(cacheKey, result, 120000)
+          return NextResponse.json(result)
         }
         case 'dispose': {
           const [count, disposals] = await retryDbOperation(() =>
@@ -392,7 +423,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
           }))
           
-          return NextResponse.json({
+          const result = {
             activities,
             pagination: {
               page,
@@ -402,8 +433,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               hasNextPage: page < Math.ceil(totalActivities / pageSize),
               hasPreviousPage: page > 1,
             }
-      })
-    }
+          }
+          
+          setCached(cacheKey, result, 120000)
+          return NextResponse.json(result)
+        }
         case 'maintenance': {
           const [count, maintenances] = await retryDbOperation(() =>
             prisma.$transaction([
@@ -443,7 +477,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             }
           }))
           
-          return NextResponse.json({
+          const result = {
             activities,
             pagination: {
               page,
@@ -453,7 +487,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               hasNextPage: page < Math.ceil(totalActivities / pageSize),
               hasPreviousPage: page > 1,
             }
-          })
+          }
+          
+          setCached(cacheKey, result, 120000)
+          return NextResponse.json(result)
         }
       }
     }
@@ -801,7 +838,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const endIndex = startIndex + pageSize
     const paginatedActivities = activities.slice(startIndex, endIndex)
 
-    return NextResponse.json({ 
+    const result = { 
       activities: paginatedActivities,
       pagination: {
         page,
@@ -811,7 +848,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         hasNextPage: page < totalPages,
         hasPreviousPage: page > 1,
       }
-    })
+    }
+    
+    // Cache for 2 minutes
+    setCached(cacheKey, result, 120000)
+    
+    return NextResponse.json(result)
   } catch (error: unknown) {
     console.error('Error fetching activities:', error)
     return NextResponse.json(

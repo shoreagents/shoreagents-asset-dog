@@ -36,8 +36,10 @@ function makeConnectionUrl() {
     // Add connection pool settings for better handling of concurrent requests
     // These help Prisma manage connections more efficiently with Supabase pooler
     if (!urlObj.searchParams.has('connection_limit')) {
-      // Conservative limit to work with Supabase pooler (typically 15-20 connections)
-      urlObj.searchParams.set('connection_limit', '10')
+      // Increase limit for production workloads
+      // Supabase pooler supports 15-20 connections, use 15 for production, 10 for dev
+      const limit = process.env.NODE_ENV === 'production' ? '15' : '10'
+      urlObj.searchParams.set('connection_limit', limit)
     }
     
     return urlObj.toString()

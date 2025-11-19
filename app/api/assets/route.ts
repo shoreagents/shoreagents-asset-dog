@@ -4,6 +4,7 @@ import { parseDate } from '@/lib/date-utils'
 import { verifyAuth } from '@/lib/auth-utils'
 import { retryDbOperation } from '@/lib/db-utils'
 import { requirePermission, getUserPermissions, hasPermission } from '@/lib/permission-utils'
+import { clearCache } from '@/lib/cache-utils'
 import { Prisma } from '@prisma/client'
 
 export async function GET(request: NextRequest) {
@@ -476,6 +477,9 @@ export async function POST(request: NextRequest) {
         },
       },
     }))
+
+    // Invalidate dashboard cache when new asset is created
+    clearCache('dashboard-stats')
 
     return NextResponse.json({ asset }, { status: 201 })
   } catch (error: unknown) {

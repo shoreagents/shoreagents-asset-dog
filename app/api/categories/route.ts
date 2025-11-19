@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
 import { retryDbOperation } from '@/lib/db-utils'
+import { getCached, setCached, clearCache } from '@/lib/cache-utils'
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAuth()
@@ -12,6 +13,13 @@ export async function GET(request: NextRequest) {
   const permissionCheck = await requirePermission('canViewAssets')
   if (!permissionCheck.allowed && permissionCheck.error) {
     return permissionCheck.error
+  }
+
+  // Check cache first (10 minute TTL - categories rarely change)
+  const cacheKey = 'categories-list'
+  const cached = getCached<{ categories: unknown[] }>(cacheKey)
+  if (cached) {
+    return NextResponse.json(cached)
   }
 
   try {
@@ -28,7 +36,12 @@ export async function GET(request: NextRequest) {
       },
     }))
 
-    return NextResponse.json({ categories })
+    const result = { categories }
+    
+    // Cache for 10 minutes (600000 ms) - categories rarely change
+    setCached(cacheKey, result, 600000)
+
+    return NextResponse.json(result)
   } catch (error: unknown) {
     // Handle connection pool errors specifically
     const prismaError = error as { code?: string; message?: string }
@@ -64,6 +77,9 @@ export async function POST(request: NextRequest) {
         description: body.description,
       },
     }))
+
+    // Invalidate categories cache when new category is created
+    clearCache('categories-list')
 
     return NextResponse.json({ category }, { status: 201 })
   } catch (error: unknown) {

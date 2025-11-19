@@ -13,9 +13,9 @@ function ActivityLoading() {
           Track all asset-related activities and transactions
         </p>
       </div>
-      <div className="flex items-center justify-center py-12">
-        <div className="flex flex-col items-center gap-3">
-          <Spinner className="h-8 w-8" />
+            <div className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center gap-3">
+                <Spinner className="h-8 w-8" />
           <p className="text-sm text-muted-foreground">Loading activities...</p>
         </div>
       </div>
@@ -31,7 +31,7 @@ interface ActivityPageProps {
 export default async function ActivityPage({ searchParams }: ActivityPageProps) {
   const params = await searchParams
   const page = parseInt(params.page || '1', 10)
-  const pageSize = parseInt(params.pageSize || '100', 10)
+  const pageSize = parseInt(params.pageSize || '50', 10)
   const activityType = params.type || 'all'
   
   // Fetch data directly on server - FAST, no HTTP roundtrip, cached

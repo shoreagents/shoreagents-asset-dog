@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+// Chart imports removed - using direct PieChart to avoid ResponsiveContainer dimension issues
 import { PieChart, Pie, Cell } from 'recharts'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
@@ -135,32 +135,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     refetchOnWindowFocus: false, // Don't refetch when window regains focus
   })
 
-  // Prepare chart data and config dynamically based on categories
+  // Prepare chart data dynamically based on categories
   const chartData = data?.assetValueByCategory.map((item, index) => {
-    const categoryKey = item.name.toLowerCase().replace(/\s+/g, '-')
     const color = chartColors[index % chartColors.length]
     return {
       category: item.name,
       value: item.value,
       fill: color,
-      [categoryKey]: item.value,
     }
   }) || []
-
-  // Build dynamic chart config
-  const chartConfig: ChartConfig = {
-    value: {
-      label: 'Value',
-    },
-    ...chartData.reduce((acc, item, index) => {
-      const categoryKey = item.category.toLowerCase().replace(/\s+/g, '-')
-      acc[categoryKey] = {
-        label: item.category,
-        color: chartColors[index % chartColors.length],
-      }
-      return acc
-    }, {} as Record<string, { label: string; color: string }>),
-  } satisfies ChartConfig
 
   return (
     <div className="space-y-6">
@@ -270,35 +253,25 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               </div>
             ) : chartData.length > 0 ? (
               <>
-                <ChartContainer config={chartConfig} className="mx-auto aspect-square max-h-[400px]">
-                  <PieChart>
-                    <ChartTooltip
-                      cursor={false}
-                      content={
-                        <ChartTooltipContent 
-                          hideLabel 
-                          formatter={(value: unknown) => {
-                            const numValue = typeof value === 'number' ? value : Number(value) || 0
-                            return `₱${numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          }}
-                        />
-                      }
-                    />
-                    <Pie 
-                      data={chartData} 
-                      dataKey="value" 
-                      nameKey="category"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={120}
-                      label={false}
-                    >
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ChartContainer>
+                <div className="w-full h-[400px] flex items-center justify-center">
+                  <div className="w-[400px] h-[400px]">
+                    <PieChart width={400} height={400}>
+                      <Pie 
+                        data={chartData} 
+                        dataKey="value" 
+                        nameKey="category"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={120}
+                        label={false}
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </div>
+                </div>
                 {/* Category Legend */}
                 <div className="mt-6 space-y-2">
                   <h3 className="text-sm font-medium mb-3">Categories</h3>

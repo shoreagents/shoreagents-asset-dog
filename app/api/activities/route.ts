@@ -16,7 +16,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1', 10)
-    const pageSize = parseInt(searchParams.get('pageSize') || '100', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
     const activityType = searchParams.get('type')
     
     const result = await getActivities({ page, pageSize, activityType })

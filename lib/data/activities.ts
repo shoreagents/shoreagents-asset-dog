@@ -39,7 +39,7 @@ export interface GetActivitiesParams {
  */
 export async function getActivities(params: GetActivitiesParams = {}): Promise<ActivitiesResult> {
   const page = params.page || 1
-  const pageSize = Math.min(Math.max(params.pageSize || 100, 100), 500) // Clamp between 100-500
+  const pageSize = Math.min(Math.max(params.pageSize || 50, 25), 500) // Clamp between 25-500
   const activityType = params.activityType
   
   // Check cache first (2 minute TTL for activities)

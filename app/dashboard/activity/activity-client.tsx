@@ -258,7 +258,7 @@ export function ActivityClient({ initialData, initialPage, initialPageSize, init
   const [selectedAssetTag, setSelectedAssetTag] = useState<string>('')
   const [, startTransition] = useTransition()
   
-  // Get page, pageSize, and type from URL
+  // Get page, pageSize, and type from URL (default to 50 rows)
   const page = parseInt(searchParams.get('page') || String(initialPage), 10)
   const pageSize = parseInt(searchParams.get('pageSize') || String(initialPageSize), 10)
   const selectedType = searchParams.get('type') || initialType
@@ -276,7 +276,7 @@ export function ActivityClient({ initialData, initialPage, initialPageSize, init
     }
     
     if (updates.pageSize !== undefined) {
-      if (updates.pageSize === 100) {
+      if (updates.pageSize === 50) {
         params.delete('pageSize')
       } else {
         params.set('pageSize', updates.pageSize.toString())
@@ -579,10 +579,10 @@ export function ActivityClient({ initialData, initialPage, initialPageSize, init
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="25">25 rows</SelectItem>
+                  <SelectItem value="50">50 rows</SelectItem>
                   <SelectItem value="100">100 rows</SelectItem>
                   <SelectItem value="200">200 rows</SelectItem>
-                  <SelectItem value="300">300 rows</SelectItem>
-                  <SelectItem value="400">400 rows</SelectItem>
                   <SelectItem value="500">500 rows</SelectItem>
                 </SelectContent>
               </Select>

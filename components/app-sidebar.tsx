@@ -215,7 +215,7 @@ const data = {
       icon: Settings,
       items: [
         {
-          title: "Account",
+          title: "Account Details",
           url: "/account",
         },
         {

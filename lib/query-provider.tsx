@@ -21,7 +21,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       {children}
       {/* React Query Devtools */}
-      <ReactQueryDevtools initialIsOpen={false} position="bottom" />
+      <ReactQueryDevtools  initialIsOpen={false} position="bottom" />
     </QueryClientProvider>
   )
 }

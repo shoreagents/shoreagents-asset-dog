@@ -20,94 +20,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const pageSize = Math.min(Math.max(parseInt(searchParams.get('pageSize') || '100', 10), 100), 500) // Clamp between 100-500
     const activityType = searchParams.get('type') // Optional filter: checkout, checkin, move, reserve, lease, leaseReturn, dispose, maintenance
     
-    // Get total count FIRST to determine how many records we actually need to fetch
+    // Get total count and fetch data in parallel
     let totalActivities = 0
     
+    // For single activity type, use efficient database pagination
     if (activityType) {
-      // Count only the selected activity type
-      switch (activityType) {
-        case 'checkout':
-          totalActivities = await retryDbOperation(() => prisma.assetsCheckout.count())
-          break
-        case 'checkin':
-          totalActivities = await retryDbOperation(() => prisma.assetsCheckin.count())
-          break
-        case 'move':
-          totalActivities = await retryDbOperation(() => prisma.assetsMove.count())
-          break
-        case 'reserve':
-          totalActivities = await retryDbOperation(() => prisma.assetsReserve.count())
-          break
-        case 'lease':
-          totalActivities = await retryDbOperation(() => prisma.assetsLease.count())
-          break
-        case 'leaseReturn':
-          totalActivities = await retryDbOperation(() => prisma.assetsLeaseReturn.count())
-          break
-        case 'dispose':
-          totalActivities = await retryDbOperation(() => prisma.assetsDispose.count())
-          break
-        case 'maintenance':
-          totalActivities = await retryDbOperation(() => prisma.assetsMaintenance.count())
-          break
-      }
-    } else {
-      // Count all activity types - run sequentially to avoid connection pool exhaustion
-      const checkoutCount = await retryDbOperation(() => prisma.assetsCheckout.count())
-      const checkinCount = await retryDbOperation(() => prisma.assetsCheckin.count())
-      const moveCount = await retryDbOperation(() => prisma.assetsMove.count())
-      const reserveCount = await retryDbOperation(() => prisma.assetsReserve.count())
-      const leaseCount = await retryDbOperation(() => prisma.assetsLease.count())
-      const leaseReturnCount = await retryDbOperation(() => prisma.assetsLeaseReturn.count())
-      const disposeCount = await retryDbOperation(() => prisma.assetsDispose.count())
-      const maintenanceCount = await retryDbOperation(() => prisma.assetsMaintenance.count())
+      // Count and fetch only the selected activity type with proper pagination
+      const skip = (page - 1) * pageSize
       
-      totalActivities = checkoutCount + checkinCount + moveCount + reserveCount + 
-                        leaseCount + leaseReturnCount + disposeCount + maintenanceCount
-    }
+      switch (activityType) {
+        case 'checkout': {
+          const [count, checkouts] = await retryDbOperation(() =>
+            prisma.$transaction([
+              prisma.assetsCheckout.count(),
+              prisma.assetsCheckout.findMany({
+                skip,
+                take: pageSize,
+                include: {
+                  asset: {
+                    select: {
+                      id: true,
+                      assetTagId: true,
+                      description: true,
+                    }
+                  },
+                  employeeUser: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+            ])
+          )
+          totalActivities = count
 
-    // Calculate how many records to fetch per activity type
-    // For single type: fetch enough to cover current page, but if total is less, fetch all
-    // For all types: fetch enough to ensure we have enough data after sorting across all types
-    const fetchLimit = activityType 
-      ? Math.max(pageSize * page + 100, totalActivities) // For single type, fetch enough for current page or all if total is less
-      : Math.max((pageSize * page + 100) * 3, totalActivities) // For all types, fetch 3x page size or all if total is less
-
-    const activities: Array<{
-      id: string
-      type: string
-      assetId: string
-      assetTagId: string
-      assetDescription: string
-      timestamp: Date
-      details: Record<string, unknown>
-    }> = []
-
-    // Fetch checkouts
-    if (!activityType || activityType === 'checkout') {
-      const checkouts = await retryDbOperation(() => prisma.assetsCheckout.findMany({
-        take: activityType ? fetchLimit : fetchLimit,
-        include: {
-          asset: {
-            select: {
-              id: true,
-              assetTagId: true,
-              description: true,
-            }
-          },
-          employeeUser: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-      }))
-
-      checkouts.forEach(checkout => {
-        activities.push({
+          const activities = checkouts.map(checkout => ({
           id: checkout.id,
           type: 'checkout',
           assetId: checkout.assetId,
@@ -120,35 +71,50 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             checkoutDate: checkout.checkoutDate,
             expectedReturnDate: checkout.expectedReturnDate,
           }
-        })
-      })
-    }
-
-    // Fetch checkins
-    if (!activityType || activityType === 'checkin') {
-      const checkins = await retryDbOperation(() => prisma.assetsCheckin.findMany({
-        take: activityType ? fetchLimit : fetchLimit,
-        include: {
-          asset: {
-            select: {
-              id: true,
-              assetTagId: true,
-              description: true,
+          }))
+          
+          return NextResponse.json({
+            activities,
+            pagination: {
+              page,
+              pageSize,
+              total: totalActivities,
+              totalPages: Math.ceil(totalActivities / pageSize),
+              hasNextPage: page < Math.ceil(totalActivities / pageSize),
+              hasPreviousPage: page > 1,
             }
-          },
-          employeeUser: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-      }))
+          })
+        }
+        case 'checkin': {
+          const [count, checkins] = await retryDbOperation(() =>
+            prisma.$transaction([
+              prisma.assetsCheckin.count(),
+              prisma.assetsCheckin.findMany({
+                skip,
+                take: pageSize,
+                include: {
+                  asset: {
+                    select: {
+                      id: true,
+                      assetTagId: true,
+                      description: true,
+                    }
+                  },
+                  employeeUser: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+            ])
+          )
+          totalActivities = count
 
-      checkins.forEach(checkin => {
-        activities.push({
+          const activities = checkins.map(checkin => ({
           id: checkin.id,
           type: 'checkin',
           assetId: checkin.assetId,
@@ -161,35 +127,50 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             checkinDate: checkin.checkinDate,
             condition: checkin.condition,
           }
-        })
-      })
-    }
-
-    // Fetch moves
-    if (!activityType || activityType === 'move') {
-      const moves = await retryDbOperation(() => prisma.assetsMove.findMany({
-        take: activityType ? fetchLimit : fetchLimit,
-        include: {
-          asset: {
-            select: {
-              id: true,
-              assetTagId: true,
-              description: true,
+          }))
+          
+          return NextResponse.json({
+            activities,
+            pagination: {
+              page,
+              pageSize,
+              total: totalActivities,
+              totalPages: Math.ceil(totalActivities / pageSize),
+              hasNextPage: page < Math.ceil(totalActivities / pageSize),
+              hasPreviousPage: page > 1,
             }
-          },
-          employeeUser: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-      }))
+          })
+        }
+        case 'move': {
+          const [count, moves] = await retryDbOperation(() =>
+            prisma.$transaction([
+              prisma.assetsMove.count(),
+              prisma.assetsMove.findMany({
+                skip,
+                take: pageSize,
+                include: {
+                  asset: {
+                    select: {
+                      id: true,
+                      assetTagId: true,
+                      description: true,
+                    }
+                  },
+                  employeeUser: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+            ])
+          )
+          totalActivities = count
 
-      moves.forEach(move => {
-        activities.push({
+          const activities = moves.map(move => ({
           id: move.id,
           type: 'move',
           assetId: move.assetId,
@@ -202,35 +183,50 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             employeeName: move.employeeUser?.name || null,
             reason: move.reason,
           }
-        })
-      })
-    }
-
-    // Fetch reserves
-    if (!activityType || activityType === 'reserve') {
-      const reserves = await retryDbOperation(() => prisma.assetsReserve.findMany({
-        take: activityType ? fetchLimit : fetchLimit,
-        include: {
-          asset: {
-            select: {
-              id: true,
-              assetTagId: true,
-              description: true,
+          }))
+          
+          return NextResponse.json({
+            activities,
+            pagination: {
+              page,
+              pageSize,
+              total: totalActivities,
+              totalPages: Math.ceil(totalActivities / pageSize),
+              hasNextPage: page < Math.ceil(totalActivities / pageSize),
+              hasPreviousPage: page > 1,
             }
-          },
-          employeeUser: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-      }))
+          })
+        }
+        case 'reserve': {
+          const [count, reserves] = await retryDbOperation(() =>
+            prisma.$transaction([
+              prisma.assetsReserve.count(),
+              prisma.assetsReserve.findMany({
+                skip,
+                take: pageSize,
+                include: {
+                  asset: {
+                    select: {
+                      id: true,
+                      assetTagId: true,
+                      description: true,
+                    }
+                  },
+                  employeeUser: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+            ])
+          )
+          totalActivities = count
 
-      reserves.forEach(reserve => {
-        activities.push({
+          const activities = reserves.map(reserve => ({
           id: reserve.id,
           type: 'reserve',
           assetId: reserve.assetId,
@@ -244,28 +240,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             department: reserve.department,
             purpose: reserve.purpose,
           }
-        })
-      })
-    }
-
-    // Fetch leases
-    if (!activityType || activityType === 'lease') {
-      const leases = await retryDbOperation(() => prisma.assetsLease.findMany({
-        take: activityType ? fetchLimit : fetchLimit,
-        include: {
-          asset: {
-            select: {
-              id: true,
-              assetTagId: true,
-              description: true,
+          }))
+          
+          return NextResponse.json({
+            activities,
+            pagination: {
+              page,
+              pageSize,
+              total: totalActivities,
+              totalPages: Math.ceil(totalActivities / pageSize),
+              hasNextPage: page < Math.ceil(totalActivities / pageSize),
+              hasPreviousPage: page > 1,
             }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-      }))
+          })
+        }
+        case 'lease': {
+          const [count, leases] = await retryDbOperation(() =>
+            prisma.$transaction([
+              prisma.assetsLease.count(),
+              prisma.assetsLease.findMany({
+                skip,
+                take: pageSize,
+                include: {
+                  asset: {
+                    select: {
+                      id: true,
+                      assetTagId: true,
+                      description: true,
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+            ])
+          )
+          totalActivities = count
 
-      leases.forEach(lease => {
-        activities.push({
+          const activities = leases.map(lease => ({
           id: lease.id,
           type: 'lease',
           assetId: lease.assetId,
@@ -277,33 +288,48 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             leaseStartDate: lease.leaseStartDate,
             leaseEndDate: lease.leaseEndDate,
           }
-        })
-      })
-    }
-
-    // Fetch lease returns
-    if (!activityType || activityType === 'leaseReturn') {
-      const leaseReturns = await retryDbOperation(() => prisma.assetsLeaseReturn.findMany({
-        take: activityType ? fetchLimit : fetchLimit,
-        include: {
-          asset: {
-            select: {
-              id: true,
-              assetTagId: true,
-              description: true,
+          }))
+          
+          return NextResponse.json({
+            activities,
+            pagination: {
+              page,
+              pageSize,
+              total: totalActivities,
+              totalPages: Math.ceil(totalActivities / pageSize),
+              hasNextPage: page < Math.ceil(totalActivities / pageSize),
+              hasPreviousPage: page > 1,
             }
-          },
-          lease: {
-            select: {
-              lessee: true,
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-      }))
+          })
+        }
+        case 'leaseReturn': {
+          const [count, leaseReturns] = await retryDbOperation(() =>
+            prisma.$transaction([
+              prisma.assetsLeaseReturn.count(),
+              prisma.assetsLeaseReturn.findMany({
+                skip,
+                take: pageSize,
+                include: {
+                  asset: {
+                    select: {
+                      id: true,
+                      assetTagId: true,
+                      description: true,
+                    }
+                  },
+                  lease: {
+                    select: {
+                      lessee: true,
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+            ])
+          )
+          totalActivities = count
 
-      leaseReturns.forEach(leaseReturn => {
-        activities.push({
+          const activities = leaseReturns.map(leaseReturn => ({
           id: leaseReturn.id,
           type: 'leaseReturn',
           assetId: leaseReturn.assetId,
@@ -315,28 +341,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             returnDate: leaseReturn.returnDate,
             condition: leaseReturn.condition,
           }
-        })
-      })
-    }
-
-    // Fetch disposals
-    if (!activityType || activityType === 'dispose') {
-      const disposals = await retryDbOperation(() => prisma.assetsDispose.findMany({
-        take: activityType ? fetchLimit : fetchLimit,
-        include: {
-          asset: {
-            select: {
-              id: true,
-              assetTagId: true,
-              description: true,
+          }))
+          
+          return NextResponse.json({
+            activities,
+            pagination: {
+              page,
+              pageSize,
+              total: totalActivities,
+              totalPages: Math.ceil(totalActivities / pageSize),
+              hasNextPage: page < Math.ceil(totalActivities / pageSize),
+              hasPreviousPage: page > 1,
             }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-      }))
+          })
+        }
+        case 'dispose': {
+          const [count, disposals] = await retryDbOperation(() =>
+            prisma.$transaction([
+              prisma.assetsDispose.count(),
+              prisma.assetsDispose.findMany({
+                skip,
+                take: pageSize,
+                include: {
+                  asset: {
+                    select: {
+                      id: true,
+                      assetTagId: true,
+                      description: true,
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+            ])
+          )
+          totalActivities = count
 
-      disposals.forEach(disposal => {
-        activities.push({
+          const activities = disposals.map(disposal => ({
           id: disposal.id,
           type: 'dispose',
           assetId: disposal.assetId,
@@ -349,26 +390,389 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             disposeValue: disposal.disposeValue,
             disposeReason: disposal.disposeReason,
           }
-        })
+          }))
+          
+          return NextResponse.json({
+            activities,
+            pagination: {
+              page,
+              pageSize,
+              total: totalActivities,
+              totalPages: Math.ceil(totalActivities / pageSize),
+              hasNextPage: page < Math.ceil(totalActivities / pageSize),
+              hasPreviousPage: page > 1,
+            }
       })
     }
-
-    // Fetch maintenances
-    if (!activityType || activityType === 'maintenance') {
-      const maintenances = await retryDbOperation(() => prisma.assetsMaintenance.findMany({
-        take: activityType ? fetchLimit : fetchLimit,
-        include: {
-          asset: {
-            select: {
-              id: true,
-              assetTagId: true,
-              description: true,
+        case 'maintenance': {
+          const [count, maintenances] = await retryDbOperation(() =>
+            prisma.$transaction([
+              prisma.assetsMaintenance.count(),
+              prisma.assetsMaintenance.findMany({
+                skip,
+                take: pageSize,
+                include: {
+                  asset: {
+                    select: {
+                      id: true,
+                      assetTagId: true,
+                      description: true,
+                    }
+                  }
+                },
+                orderBy: { createdAt: 'desc' },
+              })
+            ])
+          )
+          totalActivities = count
+          
+          const activities = maintenances.map(maintenance => ({
+            id: maintenance.id,
+            type: 'maintenance',
+            assetId: maintenance.assetId,
+            assetTagId: maintenance.asset.assetTagId,
+            assetDescription: maintenance.asset.description,
+            timestamp: maintenance.createdAt,
+            details: {
+              title: maintenance.title,
+              status: maintenance.status,
+              dueDate: maintenance.dueDate,
+              dateCompleted: maintenance.dateCompleted,
+              maintenanceBy: maintenance.maintenanceBy,
+              cost: maintenance.cost,
             }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-      }))
+          }))
+          
+          return NextResponse.json({
+            activities,
+            pagination: {
+              page,
+              pageSize,
+              total: totalActivities,
+              totalPages: Math.ceil(totalActivities / pageSize),
+              hasNextPage: page < Math.ceil(totalActivities / pageSize),
+              hasPreviousPage: page > 1,
+            }
+          })
+        }
+      }
+    }
+    
+    // For all activity types, use a single transaction to avoid connection pool exhaustion
+    // Fetch a reasonable amount from each type (enough to cover pagination, but not excessive)
+    // Fetch pageSize items per type to ensure we have enough for pagination across all types
+    const itemsPerType = Math.min(pageSize, 100) // Cap at 100 per type to avoid fetching too much
+    
+    // Use a single transaction for all queries to minimize connection usage
+    const [
+      checkoutCount,
+      checkinCount,
+      moveCount,
+      reserveCount,
+      leaseCount,
+      leaseReturnCount,
+      disposeCount,
+      maintenanceCount,
+      checkouts,
+      checkins,
+      moves,
+      reserves,
+      leases,
+      leaseReturns,
+      disposals,
+      maintenances,
+    ] = await retryDbOperation(() =>
+      prisma.$transaction([
+        // Counts
+        prisma.assetsCheckout.count(),
+        prisma.assetsCheckin.count(),
+        prisma.assetsMove.count(),
+        prisma.assetsReserve.count(),
+        prisma.assetsLease.count(),
+        prisma.assetsLeaseReturn.count(),
+        prisma.assetsDispose.count(),
+        prisma.assetsMaintenance.count(),
+        // Data
+        prisma.assetsCheckout.findMany({
+          take: itemsPerType,
+          include: {
+            asset: {
+              select: {
+                id: true,
+                assetTagId: true,
+                description: true,
+              }
+            },
+            employeeUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.assetsCheckin.findMany({
+          take: itemsPerType,
+          include: {
+            asset: {
+              select: {
+                id: true,
+                assetTagId: true,
+                description: true,
+              }
+            },
+            employeeUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.assetsMove.findMany({
+          take: itemsPerType,
+          include: {
+            asset: {
+              select: {
+                id: true,
+                assetTagId: true,
+                description: true,
+              }
+            },
+            employeeUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.assetsReserve.findMany({
+          take: itemsPerType,
+          include: {
+            asset: {
+              select: {
+                id: true,
+                assetTagId: true,
+                description: true,
+              }
+            },
+            employeeUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.assetsLease.findMany({
+          take: itemsPerType,
+          include: {
+            asset: {
+              select: {
+                id: true,
+                assetTagId: true,
+                description: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.assetsLeaseReturn.findMany({
+          take: itemsPerType,
+          include: {
+            asset: {
+              select: {
+                id: true,
+                assetTagId: true,
+                description: true,
+              }
+            },
+            lease: {
+              select: {
+                lessee: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.assetsDispose.findMany({
+          take: itemsPerType,
+          include: {
+            asset: {
+              select: {
+                id: true,
+                assetTagId: true,
+                description: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.assetsMaintenance.findMany({
+          take: itemsPerType,
+          include: {
+            asset: {
+              select: {
+                id: true,
+                assetTagId: true,
+                description: true,
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ])
+    )
+    
+    totalActivities = checkoutCount + checkinCount + moveCount + reserveCount + 
+                      leaseCount + leaseReturnCount + disposeCount + maintenanceCount
 
+    // Process all activity types into a unified array
+    const activities: Array<{
+      id: string
+      type: string
+      assetId: string
+      assetTagId: string
+      assetDescription: string
+      timestamp: Date
+      details: Record<string, unknown>
+    }> = []
+
+    // Process checkouts
+    checkouts.forEach(checkout => {
+      activities.push({
+        id: checkout.id,
+        type: 'checkout',
+        assetId: checkout.assetId,
+        assetTagId: checkout.asset.assetTagId,
+        assetDescription: checkout.asset.description,
+        timestamp: checkout.createdAt,
+        details: {
+          employeeName: checkout.employeeUser?.name || null,
+          employeeEmail: checkout.employeeUser?.email || null,
+          checkoutDate: checkout.checkoutDate,
+          expectedReturnDate: checkout.expectedReturnDate,
+        }
+      })
+    })
+
+    // Process checkins
+    checkins.forEach(checkin => {
+      activities.push({
+        id: checkin.id,
+        type: 'checkin',
+        assetId: checkin.assetId,
+        assetTagId: checkin.asset.assetTagId,
+        assetDescription: checkin.asset.description,
+        timestamp: checkin.createdAt,
+        details: {
+          employeeName: checkin.employeeUser?.name || null,
+          employeeEmail: checkin.employeeUser?.email || null,
+          checkinDate: checkin.checkinDate,
+          condition: checkin.condition,
+        }
+      })
+    })
+
+    // Process moves
+    moves.forEach(move => {
+      activities.push({
+        id: move.id,
+        type: 'move',
+        assetId: move.assetId,
+        assetTagId: move.asset.assetTagId,
+        assetDescription: move.asset.description,
+        timestamp: move.createdAt,
+        details: {
+          moveType: move.moveType,
+          moveDate: move.moveDate,
+          employeeName: move.employeeUser?.name || null,
+          reason: move.reason,
+        }
+      })
+    })
+
+    // Process reserves
+    reserves.forEach(reserve => {
+      activities.push({
+        id: reserve.id,
+        type: 'reserve',
+        assetId: reserve.assetId,
+        assetTagId: reserve.asset.assetTagId,
+        assetDescription: reserve.asset.description,
+        timestamp: reserve.createdAt,
+        details: {
+          reservationType: reserve.reservationType,
+          reservationDate: reserve.reservationDate,
+          employeeName: reserve.employeeUser?.name || null,
+          department: reserve.department,
+          purpose: reserve.purpose,
+        }
+      })
+    })
+
+    // Process leases
+    leases.forEach(lease => {
+      activities.push({
+        id: lease.id,
+        type: 'lease',
+        assetId: lease.assetId,
+        assetTagId: lease.asset.assetTagId,
+        assetDescription: lease.asset.description,
+        timestamp: lease.createdAt,
+        details: {
+          lessee: lease.lessee,
+          leaseStartDate: lease.leaseStartDate,
+          leaseEndDate: lease.leaseEndDate,
+        }
+      })
+    })
+
+    // Process lease returns
+    leaseReturns.forEach(leaseReturn => {
+      activities.push({
+        id: leaseReturn.id,
+        type: 'leaseReturn',
+        assetId: leaseReturn.assetId,
+        assetTagId: leaseReturn.asset.assetTagId,
+        assetDescription: leaseReturn.asset.description,
+        timestamp: leaseReturn.createdAt,
+        details: {
+          lessee: leaseReturn.lease.lessee,
+          returnDate: leaseReturn.returnDate,
+          condition: leaseReturn.condition,
+        }
+      })
+    })
+
+    // Process disposals
+    disposals.forEach(disposal => {
+      activities.push({
+        id: disposal.id,
+        type: 'dispose',
+        assetId: disposal.assetId,
+        assetTagId: disposal.asset.assetTagId,
+        assetDescription: disposal.asset.description,
+        timestamp: disposal.createdAt,
+        details: {
+          disposeDate: disposal.disposeDate,
+          disposalMethod: disposal.disposalMethod,
+          disposeValue: disposal.disposeValue,
+          disposeReason: disposal.disposeReason,
+        }
+      })
+    })
+
+    // Process maintenances
       maintenances.forEach(maintenance => {
         activities.push({
           id: maintenance.id,
@@ -387,7 +791,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
         })
       })
-    }
 
     // Sort all activities by timestamp (most recent first)
     activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())

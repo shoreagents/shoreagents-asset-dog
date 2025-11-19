@@ -261,7 +261,7 @@ interface PaginationInfo {
 function ActivityPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { hasPermission } = usePermissions()
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   
   const canViewAssets = hasPermission('canViewAssets')
   
@@ -407,7 +407,14 @@ function ActivityPageContent() {
         </CardHeader>
         <CardContent className="flex-1 px-0">
           <div className="h-120">
-          {!canViewAssets ? (
+          {permissionsLoading || isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center gap-3">
+                <Spinner className="h-8 w-8" />
+                <p className="text-sm text-muted-foreground">Loading...</p>
+              </div>
+            </div>
+          ) : !canViewAssets ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3 text-center">
                 <Activity className="h-12 w-12 text-muted-foreground opacity-50" />
@@ -415,13 +422,6 @@ function ActivityPageContent() {
                 <p className="text-sm text-muted-foreground">
                   You do not have permission to view assets. Please contact your administrator.
                 </p>
-              </div>
-            </div>
-          ) : isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="flex flex-col items-center gap-3">
-                <Spinner className="h-8 w-8" />
-                <p className="text-sm text-muted-foreground">Loading activities...</p>
               </div>
             </div>
           ) : error ? (

@@ -1632,6 +1632,9 @@ function AssetsPageContent() {
   // Check if user has permission to view assets
   const canViewAssets = hasPermission('canViewAssets')
   
+  // Track initial mount to prevent unnecessary refetches
+  const hasInitialized = useRef(false)
+  
   // Fetch assets with server-side pagination and filtering
   // Summary is now included in the same response, eliminating separate API call
   const { data, isLoading, isFetching, error } = useQuery({
@@ -1646,7 +1649,7 @@ function AssetsPageContent() {
     enabled: canViewAssets, // Only fetch if user has permission
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    refetchOnMount: false, // Prevent refetch on mount - query will run once based on queryKey
   })
 
   const assets = useMemo(() => data?.assets || [], [data?.assets])
@@ -1717,8 +1720,15 @@ function AssetsPageContent() {
       },
   })
 
-  // Sync URL params with state changes
+  // Mark as initialized after first render
   useEffect(() => {
+    hasInitialized.current = true
+  }, [])
+  
+  // Sync URL params with state changes (skip on initial mount to prevent unnecessary updates)
+  useEffect(() => {
+    if (!hasInitialized.current) return
+    
     const params = new URLSearchParams()
     
     if (pagination.pageIndex > 0) {
@@ -1743,9 +1753,15 @@ function AssetsPageContent() {
     })
   }, [pagination, searchQuery, categoryFilter, statusFilter, router, startTransition])
   
-  // Reset to first page when filters change
+  // Reset to first page when filters change (skip on initial mount)
   useEffect(() => {
-    setPagination(prev => ({ ...prev, pageIndex: 0 }))
+    if (!hasInitialized.current) return
+    
+    setPagination(prev => {
+      // Only reset if pageIndex is not already 0
+      if (prev.pageIndex === 0) return prev
+      return { ...prev, pageIndex: 0 }
+    })
   }, [searchQuery, categoryFilter, statusFilter])
 
   // Debounce search input - update searchQuery after user stops typing

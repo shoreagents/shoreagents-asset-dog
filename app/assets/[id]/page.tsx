@@ -6,7 +6,7 @@ import { use } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ArrowLeft, Sparkles, ImageIcon, Upload, FileText, PlusIcon, Eye, X, ArrowRight, ClipboardCheck } from "lucide-react"
+import { ArrowLeft, Sparkles, ImageIcon, Upload, FileText, PlusIcon, Eye, X, ArrowRight, ClipboardCheck, Scroll } from "lucide-react"
 import Image from "next/image"
 import { usePermissions } from '@/hooks/use-permissions'
 import { useSidebar } from '@/components/ui/sidebar'
@@ -52,6 +52,7 @@ import { DownloadConfirmationDialog } from "@/components/download-confirmation-d
 import { CheckoutManager } from "@/components/checkout-manager"
 import { AuditHistoryManager } from "@/components/audit-history-manager"
 import type { Category, SubCategory } from "@/hooks/use-categories"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 
 async function fetchAsset(id: string) {
   const response = await fetch(`/api/assets/${id}`)
@@ -101,7 +102,10 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
   const asset = assetData?.asset
 
-  // Fetch existing images when asset is loaded
+  // Tab state from URL - moved up to use in queries
+  const activeTab = (searchParams.get('tab') as 'basic' | 'media' | 'purchase' | 'checkout' | 'audit') || 'basic'
+
+  // Fetch existing images only when media tab is active
   // Add retry logic to reduce connection pool pressure
   const { data: existingImagesData, isLoading: loadingExistingImages } = useQuery({
     queryKey: ['assets', 'images', asset?.assetTagId],
@@ -115,7 +119,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
         return { images: [] }
       }
     },
-    enabled: !!asset?.assetTagId,
+    enabled: !!asset?.assetTagId && activeTab === 'media', // Only fetch when media tab is active
     staleTime: 0, // Always refetch when component mounts to get latest data
     gcTime: 10 * 60 * 1000,
     retry: 2, // Retry up to 2 times on failure
@@ -124,7 +128,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
   const existingImages = existingImagesData?.images || []
 
-  // Fetch documents after images are loaded to reduce concurrent connections
+  // Fetch documents only when media tab is active (after images are loaded to reduce concurrent connections)
   const { data: existingDocumentsData, isLoading: loadingExistingDocuments } = useQuery({
     queryKey: ['assets', 'documents', asset?.assetTagId],
     queryFn: async () => {
@@ -137,7 +141,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
         return { documents: [] }
       }
     },
-    enabled: !!asset?.assetTagId && !loadingExistingImages, // Wait for images to finish loading
+    enabled: !!asset?.assetTagId && activeTab === 'media' && !loadingExistingImages, // Only fetch when media tab is active and images are loaded
     staleTime: 0, // Always refetch when component mounts to get latest data
     gcTime: 10 * 60 * 1000,
     retry: 2, // Retry up to 2 times on failure
@@ -153,9 +157,6 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
   // Lazy load categories and subcategories - only fetch when dropdowns are opened
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
   const [isSubCategoryDropdownOpen, setIsSubCategoryDropdownOpen] = useState(false)
-  
-  // Tab state from URL
-  const activeTab = (searchParams.get('tab') as 'basic' | 'media' | 'purchase' | 'checkout' | 'audit') || 'basic'
 
   // Update URL parameters
   const updateURL = useCallback(
@@ -933,7 +934,8 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b">
+      <ScrollArea className="max-w-sm sm:max-w-full border-b">
+      <div className="flex items-center gap-2 ">
         <Button
           type="button"
           variant="ghost"
@@ -1003,6 +1005,8 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
           </span>
         </Button>
       </div>
+      <ScrollBar orientation="horizontal" />
+      </ScrollArea>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
         <div className="grid gap-2.5 md:grid-cols-2 mt-6">
@@ -1975,11 +1979,13 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-2 pb-4">
-                <CheckoutManager 
-                  assetId={asset.id} 
-                  assetTagId={asset.assetTagId}
-                  invalidateQueryKey={['asset', asset.id]}
-                />
+                <ScrollArea className="max-h-[450px]">
+                    <CheckoutManager 
+                    assetId={asset.id} 
+                    assetTagId={asset.assetTagId}
+                    invalidateQueryKey={['asset', asset.id]}
+                    />
+                </ScrollArea>
               </CardContent>
             </Card>
           )}
@@ -1994,10 +2000,12 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-2 pb-4">
-                <AuditHistoryManager 
-                  assetId={asset.id} 
-                  assetTagId={asset.assetTagId}
-                />
+                <ScrollArea className="max-h-[450px]">
+                    <AuditHistoryManager 
+                    assetId={asset.id} 
+                    assetTagId={asset.assetTagId}
+                    />
+                </ScrollArea>
               </CardContent>
             </Card>
           )}

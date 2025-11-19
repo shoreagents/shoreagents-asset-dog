@@ -101,7 +101,7 @@ export function NavUser({
               <DropdownMenuItem asChild>
                 <Link href="/account">
                   <BadgeCheck />
-                  Account
+                  Account Details
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>

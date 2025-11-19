@@ -69,6 +69,11 @@ model Assets {
   maintenances           AssetsMaintenance[]
   auditHistory           AssetsAuditHistory[]
 
+  @@index([isDeleted])
+  @@index([status])
+  @@index([createdAt])
+  @@index([categoryId])
+  @@index([isDeleted, status])
   @@map("assets")
 }
 
@@ -150,6 +155,9 @@ model EmployeeUser {
   accountabilityForms AccountabilityForm[]
 
   @@map("employee_users")
+  @@index([name])
+  @@index([email])
+  @@index([department])
 }
 
 model AssetsCheckout {
@@ -172,6 +180,8 @@ model AssetsCheckout {
   @@index([assetId])
   @@index([employeeUserId])
   @@index([checkoutDate])
+  @@index([createdAt])
+  @@index([assetId, createdAt])
 }
 
 model AssetsCheckin {
@@ -197,6 +207,7 @@ model AssetsCheckin {
   @@index([employeeUserId])
   @@index([checkoutId])
   @@index([checkinDate])
+  @@index([createdAt])
 }
 
 model AssetsMove {
@@ -222,6 +233,7 @@ model AssetsMove {
   @@index([employeeUserId])
   @@index([moveDate])
   @@index([moveType])
+  @@index([createdAt])
 }
 
 model AssetsReserve {
@@ -249,6 +261,7 @@ model AssetsReserve {
   @@index([employeeUserId])
   @@index([reservationDate])
   @@index([reservationType])
+  @@index([createdAt])
 }
 
 model AssetsLease {
@@ -271,6 +284,8 @@ model AssetsLease {
   @@index([assetId])
   @@index([leaseStartDate])
   @@index([leaseEndDate])
+  @@index([createdAt])
+  @@index([leaseEndDate, createdAt])
 }
 
 model AssetsLeaseReturn {
@@ -292,6 +307,7 @@ model AssetsLeaseReturn {
   @@index([assetId])
   @@index([leaseId])
   @@index([returnDate])
+  @@index([createdAt])
 }
 
 model AssetsDispose {
@@ -312,6 +328,7 @@ model AssetsDispose {
   @@index([assetId])
   @@index([disposeDate])
   @@index([disposalMethod])
+  @@index([createdAt])
 }
 
 model AssetsMaintenance {
@@ -336,6 +353,8 @@ model AssetsMaintenance {
   @@index([assetId])
   @@index([dueDate])
   @@index([status])
+  @@index([createdAt])
+  @@index([status, dueDate])
 }
 
 model AssetsAuditHistory {
@@ -356,6 +375,7 @@ model AssetsAuditHistory {
   @@index([assetId])
   @@index([auditDate])
   @@index([auditType])
+  @@index([createdAt])
 }
 
 model AssetUser {
@@ -400,6 +420,8 @@ model AssetUser {
   @@map("asset_users")
   @@index([userId])
   @@index([role])
+  @@index([isActive])
+  @@index([isActive, isApproved])
 }
 
 model FileHistory {

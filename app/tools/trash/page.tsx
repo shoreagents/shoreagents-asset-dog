@@ -739,7 +739,7 @@ function TrashPageContent() {
         </p>
       </div>
 
-      <Card className="gap-0">
+      <Card className="gap-0 pb-0">
         <CardHeader className="shrink-0 pb-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-center w-full md:flex-1 md:max-w-md border rounded-md overflow-hidden">
@@ -874,7 +874,7 @@ function TrashPageContent() {
             </div>
           )}
           {permissionsLoading || isLoading ? (
-            <div className="h-[calc(100vh-25rem)] min-h-[500px] flex items-center justify-center py-12">
+            <div className="h-140 pt-12 flex items-center justify-center">
               <div className="flex flex-col items-center gap-3">
                 <Spinner className="h-8 w-8" />
                 <p className="text-sm text-muted-foreground">Loading...</p>
@@ -882,7 +882,7 @@ function TrashPageContent() {
             </div>
           ) : deletedAssets.length === 0 ? (
             <div className="min-w-full">
-              <ScrollArea className="h-[calc(100vh-25rem)] min-h-[500px]">
+              <ScrollArea className="h-140">
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center py-8 text-muted-foreground">
                     <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -896,7 +896,7 @@ function TrashPageContent() {
             </div>
           ) : (
             <div className="min-w-full">
-              <ScrollArea className="h-[calc(100vh-25rem)] min-h-[500px] relative">
+              <ScrollArea className="h-140">
                 <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
                 <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
                   <Table className="border-b">

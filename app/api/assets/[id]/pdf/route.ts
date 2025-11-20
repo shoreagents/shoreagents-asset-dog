@@ -100,7 +100,6 @@ export async function POST(
         },
         orderBy: { reservationDate: 'asc' },
       }),
-      // @ts-expect-error - Prisma model name mapping
       prisma.assetsHistoryLogs.findMany({
         where: { assetId: asset.id },
         orderBy: { eventDate: 'desc' },

@@ -58,7 +58,7 @@ interface DeletedAsset {
   deletedAt: string
 }
 
-async function fetchDeletedAssets(page: number = 1, pageSize: number = 100, search?: string, searchType: string = 'unified') {
+async function fetchDeletedAssets(page: number = 1, pageSize: number = 50, search?: string, searchType: string = 'unified') {
   // Fetch all deleted assets with a large page size to get accurate count
   const response = await fetch(`/api/assets?includeDeleted=true&page=1&pageSize=10000`)
   if (!response.ok) throw new Error('Failed to fetch deleted assets')
@@ -127,7 +127,7 @@ function TrashPageContent() {
   
   // Get page, pageSize, and search from URL
   const page = parseInt(searchParams.get('page') || '1', 10)
-  const pageSize = parseInt(searchParams.get('pageSize') || '100', 10)
+  const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
   
   // Separate states for search input (immediate UI) and search query (debounced API calls)
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
@@ -164,7 +164,7 @@ function TrashPageContent() {
     }
     
     if (updates.pageSize !== undefined) {
-      if (updates.pageSize === 100) {
+      if (updates.pageSize === 50) {
         params.delete('pageSize')
       } else {
         params.set('pageSize', updates.pageSize.toString())
@@ -1015,10 +1015,10 @@ function TrashPageContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="25">25 rows</SelectItem>
                   <SelectItem value="50">50 rows</SelectItem>
                   <SelectItem value="100">100 rows</SelectItem>
                   <SelectItem value="200">200 rows</SelectItem>
-                  <SelectItem value="300">300 rows</SelectItem>
                   <SelectItem value="500">500 rows</SelectItem>
                 </SelectContent>
               </Select>

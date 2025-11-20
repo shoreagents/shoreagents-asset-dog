@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const searchType = searchParams.get('searchType') || 'unified'
     const role = searchParams.get('role')
     const page = parseInt(searchParams.get('page') || '1', 10)
-    const pageSize = parseInt(searchParams.get('pageSize') || '100', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
     const skip = (page - 1) * pageSize
     
     const supabaseAdmin = createAdminSupabaseClient()

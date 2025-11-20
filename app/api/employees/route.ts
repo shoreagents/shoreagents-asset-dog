@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const searchType = searchParams.get('searchType') || 'unified' // unified, name, email, department
     const excludeWithCheckedOutAssets = searchParams.get('excludeWithCheckedOutAssets') === 'true'
     const page = parseInt(searchParams.get('page') || '1', 10)
-    const pageSize = parseInt(searchParams.get('pageSize') || '100', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
     const skip = (page - 1) * pageSize
     
     let whereClause = {}

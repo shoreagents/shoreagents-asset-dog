@@ -3,9 +3,8 @@ import { ActivityClient } from './activity-client'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { getActivities } from '@/lib/data/activities'
 
-// Force dynamic rendering - don't pre-render at build time
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// Revalidate every 30 seconds - allows caching and prefetching while keeping data fresh
+export const revalidate = 30 // Cache for 30 seconds, then revalidate
 
 // Loading fallback component
 function ActivityLoading() {

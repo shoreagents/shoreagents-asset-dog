@@ -161,7 +161,7 @@ const COLUMN_TO_SEARCH_FIELD: Record<string, string[]> = {
   'images': [], // Not searchable
 }
 
-async function fetchAssets(search?: string, searchFields?: string[], page: number = 1, pageSize: number = 100): Promise<{ assets: Asset[], pagination: PaginationInfo }> {
+async function fetchAssets(search?: string, searchFields?: string[], page: number = 1, pageSize: number = 50): Promise<{ assets: Asset[], pagination: PaginationInfo }> {
   const params = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
@@ -1525,7 +1525,7 @@ function ListOfAssetsPageContent() {
   
   // Get page, pageSize, and search from URL
   const page = parseInt(searchParams.get('page') || '1', 10)
-  const pageSize = parseInt(searchParams.get('pageSize') || '100', 10)
+  const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
   
   // Separate states for search input (immediate UI) and search query (debounced API calls)
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
@@ -1550,7 +1550,7 @@ function ListOfAssetsPageContent() {
     }
     
     if (updates.pageSize !== undefined) {
-      if (updates.pageSize === 100) {
+      if (updates.pageSize === 50) {
         params.delete('pageSize')
       } else {
         params.set('pageSize', updates.pageSize.toString())
@@ -2077,10 +2077,10 @@ function ListOfAssetsPageContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="25">25 rows</SelectItem>
+                  <SelectItem value="50">50 rows</SelectItem>
                   <SelectItem value="100">100 rows</SelectItem>
                   <SelectItem value="200">200 rows</SelectItem>
-                  <SelectItem value="300">300 rows</SelectItem>
-                  <SelectItem value="400">400 rows</SelectItem>
                   <SelectItem value="500">500 rows</SelectItem>
                 </SelectContent>
               </Select>

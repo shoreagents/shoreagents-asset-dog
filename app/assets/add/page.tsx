@@ -55,7 +55,7 @@ export default function AddAssetPage() {
   const canManageSetup = hasPermission('canManageSetup')
   
   // React Query hooks - will be set up after form initialization
-  const { data: categories = [] } = useCategories()
+  const { data: categories = [], isLoading: isCategoriesLoading } = useCategories()
   const createCategoryMutation = useCreateCategory()
   const createSubCategoryMutation = useCreateSubCategory()
   const createAssetMutation = useCreateAsset()
@@ -65,6 +65,8 @@ export default function AddAssetPage() {
   // Dialog states
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [subCategoryDialogOpen, setSubCategoryDialogOpen] = useState(false)
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
+  const [isSubCategoryDropdownOpen, setIsSubCategoryDropdownOpen] = useState(false)
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [selectedExistingImages, setSelectedExistingImages] = useState<Array<{ id: string; imageUrl: string; fileName: string }>>([])
   const [selectedDocuments, setSelectedDocuments] = useState<File[]>([])
@@ -126,7 +128,7 @@ export default function AddAssetPage() {
   // Watch categoryId to sync with selectedCategory state
   const categoryId = form.watch("categoryId")
   const selectedCategory = categoryId || ""
-  const { data: subCategories = [] } = useSubCategories(selectedCategory || null)
+  const { data: subCategories = [], isLoading: isSubCategoriesLoading } = useSubCategories(selectedCategory || null)
 
   // Reset subcategory when category changes
   const handleCategoryChange = (value: string) => {
@@ -715,6 +717,7 @@ export default function AddAssetPage() {
                               field.onChange(value)
                               handleCategoryChange(value)
                             }}
+                            onOpenChange={setIsCategoryDropdownOpen}
                       >
                         <SelectTrigger className="w-full" aria-invalid={form.formState.errors.categoryId ? "true" : "false"}>
                           <SelectValue placeholder="Select a category" />
@@ -725,6 +728,14 @@ export default function AddAssetPage() {
                               {category.name}
                             </SelectItem>
                           ))}
+                          {isCategoryDropdownOpen && isCategoriesLoading && (
+                            <SelectItem value="loading" disabled>
+                              <div className="flex items-center gap-2">
+                                <Spinner className="h-4 w-4" />
+                                <span>Loading categories...</span>
+                              </div>
+                            </SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                         )}
@@ -773,6 +784,7 @@ export default function AddAssetPage() {
                             value={field.value || ""}
                             onValueChange={field.onChange}
                         disabled={!selectedCategory}
+                            onOpenChange={setIsSubCategoryDropdownOpen}
                       >
                         <SelectTrigger className="w-full" disabled={!selectedCategory} aria-invalid={form.formState.errors.subCategoryId ? "true" : "false"}>
                           <SelectValue 
@@ -789,6 +801,14 @@ export default function AddAssetPage() {
                               {subCat.name}
                             </SelectItem>
                           ))}
+                          {isSubCategoryDropdownOpen && isSubCategoriesLoading && (
+                            <SelectItem value="loading" disabled>
+                              <div className="flex items-center gap-2">
+                                <Spinner className="h-4 w-4" />
+                                <span>Loading subcategories...</span>
+                              </div>
+                            </SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                         )}

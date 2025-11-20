@@ -132,7 +132,7 @@ interface UserPermissions {
   canManageReports: boolean
 }
 
-async function fetchUsers(search?: string, searchType: string = 'unified', page: number = 1, pageSize: number = 100): Promise<{ users: AssetUser[], pagination: PaginationInfo }> {
+async function fetchUsers(search?: string, searchType: string = 'unified', page: number = 1, pageSize: number = 50): Promise<{ users: AssetUser[], pagination: PaginationInfo }> {
   const params = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
@@ -511,7 +511,7 @@ function UsersPageContent() {
 
   // Get page, pageSize, and search from URL
   const page = parseInt(searchParams.get('page') || '1', 10)
-  const pageSize = parseInt(searchParams.get('pageSize') || '100', 10)
+  const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
   
   // Separate states for search input (immediate UI) and search query (debounced API calls)
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
@@ -536,7 +536,7 @@ function UsersPageContent() {
     }
     
     if (updates.pageSize !== undefined) {
-      if (updates.pageSize === 100) {
+      if (updates.pageSize === 50) {
         params.delete('pageSize')
       } else {
         params.set('pageSize', updates.pageSize.toString())
@@ -1206,10 +1206,10 @@ function UsersPageContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="25">25 rows</SelectItem>
+                  <SelectItem value="50">50 rows</SelectItem>
                   <SelectItem value="100">100 rows</SelectItem>
                   <SelectItem value="200">200 rows</SelectItem>
-                  <SelectItem value="300">300 rows</SelectItem>
-                  <SelectItem value="400">400 rows</SelectItem>
                   <SelectItem value="500">500 rows</SelectItem>
                 </SelectContent>
               </Select>

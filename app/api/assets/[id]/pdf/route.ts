@@ -227,14 +227,14 @@ export async function POST(
               <th>Cost</th>
               <th>Details</th>
             </tr>
-            ${maintenances.map((m: { title: string; status: string; dueDate: Date | string | null; dateCompleted: Date | string | null; maintenanceBy: string | null; cost: number | string | null; details: string | null }) => `
+            ${maintenances.map((m: typeof maintenances[0]) => `
               <tr>
                 <td>${m.title || 'N/A'}</td>
                 <td>${m.status || 'N/A'}</td>
                 <td>${formatDate(m.dueDate)}</td>
                 <td>${formatDate(m.dateCompleted)}</td>
                 <td>${m.maintenanceBy || 'N/A'}</td>
-                <td>${formatCurrency(m.cost)}</td>
+                <td>${formatCurrency(m.cost ? Number(m.cost) : null)}</td>
                 <td>${m.details || '-'}</td>
               </tr>
             `).join('')}

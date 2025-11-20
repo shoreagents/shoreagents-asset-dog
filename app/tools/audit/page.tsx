@@ -65,6 +65,7 @@ export default function AuditPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+  const [loadingAssets, setLoadingAssets] = useState<Set<string>>(new Set()) // Track assets being loaded
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
   const lastScannedCodeRef = useRef<string | null>(null)
@@ -213,23 +214,61 @@ export default function AuditPage() {
       return
     }
 
-    lastScannedCodeRef.current = scannedCode
-    setIsScannerOpen(false)
+    // Check if already scanned or loading
+    const alreadyScanned = scannedAssets.find(
+      (a) => a.assetTagId.toLowerCase() === scannedCode.toLowerCase()
+    )
+    if (alreadyScanned) {
+      toast.info(`Asset "${scannedCode}" already scanned`)
+      return
+    }
 
-    // Set the input value and look up asset
-    setAssetIdInput(scannedCode)
-    const asset = await findAssetById(scannedCode)
-    
-    if (asset) {
-      await handleAddAsset(asset)
-    } else {
-      toast.error(`Asset with ID "${scannedCode}" not found`)
+    if (loadingAssets.has(scannedCode)) {
+      return // Already loading this asset
+    }
+
+    lastScannedCodeRef.current = scannedCode
+    // Don't close scanner - allow multi-scan
+
+    // Add to loading state
+    setLoadingAssets(prev => new Set(prev).add(scannedCode))
+
+    try {
+      // Set the input value and look up asset
+      setAssetIdInput(scannedCode)
+      const asset = await findAssetById(scannedCode)
+      
+      if (asset) {
+        await handleAddAsset(asset)
+      } else {
+        toast.error(`Asset with ID "${scannedCode}" not found`)
+      }
+    } finally {
+      // Remove from loading state
+      setLoadingAssets(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(scannedCode)
+        return newSet
+      })
     }
     
     // Clear last scanned code after a delay
     setTimeout(() => {
       lastScannedCodeRef.current = null
     }, 2000)
+  }
+
+  // Handle QR code removal from multi-scan
+  const handleQRRemove = (code: string) => {
+    // Remove from loading state if present
+    setLoadingAssets(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(code)
+      return newSet
+    })
+    // Remove from scanned assets
+    setScannedAssets(prev => prev.filter(asset => asset.assetTagId !== code))
+    toast.success(`Asset ${code} removed from scan list`)
   }
 
   // Add asset to scanned list
@@ -692,10 +731,7 @@ export default function AuditPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Scanned Assets</CardTitle>
-                  <CardDescription>
-                    {scannedAssets.length} asset{scannedAssets.length !== 1 ? 's' : ''} scanned
-                  </CardDescription>
+                  <CardTitle>Scanned Assets ({scannedAssets.length})</CardTitle>
                 </div>
                 {scannedAssets.length > 0 && (
                   <Button
@@ -712,7 +748,7 @@ export default function AuditPage() {
               </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0">
-              {scannedAssets.length === 0 ? (
+              {scannedAssets.length === 0 && loadingAssets.size === 0 ? (
                 <div className="flex flex-col items-center justify-center flex-1 py-12 text-center">
                   <div className="rounded-full bg-muted p-3 mb-4">
                     <QrCode className="h-8 w-8 text-muted-foreground" />
@@ -727,6 +763,31 @@ export default function AuditPage() {
               ) : (
                 <ScrollArea className="flex-1">
                   <div className="space-y-2">
+                    {/* Show loading placeholders for assets being fetched */}
+                    {Array.from(loadingAssets).map((code) => (
+                      <Card
+                        key={`loading-${code}`}
+                        className="border py-0 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0 space-y-2.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono font-semibold text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                                  <Spinner className="h-3 w-3" />
+                                  {code}
+                                </span>
+                               
+                              </div>
+                              <p className="text-sm text-muted-foreground italic">
+                                Looking up asset details...
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {/* Show actual scanned assets */}
                     {scannedAssets.map((asset) => (
                       <Card
                         key={asset.assetTagId}
@@ -953,8 +1014,12 @@ export default function AuditPage() {
         open={isScannerOpen}
         onOpenChange={setIsScannerOpen}
         onScan={handleQRScan}
+        onRemove={handleQRRemove}
+        multiScan={true}
+        existingCodes={scannedAssets.map(asset => asset.assetTagId)}
+        loadingCodes={Array.from(loadingAssets)}
         title="Scan Asset QR Code"
-        description="Scan the QR code or barcode on the asset tag"
+        description="Scan or upload QR codes to add assets. Continue scanning to add multiple assets."
       />
 
       {/* Audit Dialog */}

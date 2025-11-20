@@ -135,6 +135,7 @@ function MaintenancePageContent() {
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
   const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
+  const [loadingAssets, setLoadingAssets] = useState<Set<string>>(new Set())
 
   const form = useForm<MaintenanceFormData>({
     resolver: zodResolver(maintenanceSchema),
@@ -685,25 +686,37 @@ function MaintenancePageContent() {
 
   // Handle QR code scan result
   const handleQRScan = async (decodedText: string) => {
-    // First check if asset exists
-    const assetExists = await findAssetById(decodedText)
+    // Add to loading set
+    setLoadingAssets(prev => new Set(prev).add(decodedText))
     
-    if (!assetExists) {
-      toast.error(`Asset with ID "${decodedText}" not found`)
-      return
+    try {
+      // First check if asset exists
+      const assetExists = await findAssetById(decodedText)
+      
+      if (!assetExists) {
+        toast.error(`Asset with ID "${decodedText}" not found`)
+        return
+      }
+      
+      // Check if asset is eligible for maintenance
+      const status = (assetExists.status || '').toLowerCase()
+      const isEligible = status === 'available' || status === 'checked out'
+      
+      if (!isEligible) {
+        toast.error(`Asset "${assetExists.assetTagId}" is not available for maintenance. Current status: ${assetExists.status}`)
+        return
+      }
+      
+      // Asset exists and is eligible, proceed to select it
+      await handleSelectAsset(assetExists)
+    } finally {
+      // Remove from loading set
+      setLoadingAssets(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(decodedText)
+        return newSet
+      })
     }
-    
-    // Check if asset is eligible for maintenance
-    const status = (assetExists.status || '').toLowerCase()
-    const isEligible = status === 'available' || status === 'checked out'
-    
-    if (!isEligible) {
-      toast.error(`Asset "${assetExists.assetTagId}" is not available for maintenance. Current status: ${assetExists.status}`)
-      return
-    }
-    
-    // Asset exists and is eligible, proceed to select it
-    await handleSelectAsset(assetExists)
   }
 
   return (
@@ -923,6 +936,45 @@ function MaintenancePageContent() {
               </Button>
               )}
             </div>
+            {/* Loading state */}
+            {loadingAssets.size > 0 && (
+              <div className="mt-2 space-y-2">
+                {Array.from(loadingAssets).map((code) => (
+                  <div
+                    key={`loading-${code}`}
+                    className="flex items-center justify-between gap-2 p-3 border rounded-md bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                          <Spinner className="h-3 w-3" />
+                          {code}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic mt-1">
+                        Looking up asset details...
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setLoadingAssets(prev => {
+                          const newSet = new Set(prev)
+                          newSet.delete(code)
+                          return newSet
+                        })
+                      }}
+                      className="h-8 w-8"
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Selected asset */}
             {selectedAsset && (
               <div className="mt-2 p-3 border rounded-md bg-muted/50">
                 <div className="flex items-center justify-between gap-2">
@@ -1324,6 +1376,7 @@ function MaintenancePageContent() {
         onScan={handleQRScan}
         multiScan={true}
         existingCodes={selectedAsset ? [selectedAsset.assetTagId] : []}
+        loadingCodes={Array.from(loadingAssets)}
         description="Scan or upload QR codes to select an asset. Continue scanning to change selection."
       />
           

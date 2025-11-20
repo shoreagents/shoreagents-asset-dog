@@ -92,6 +92,7 @@ function LeaseReturnPageContent() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [selectedAssets, setSelectedAssets] = useState<LeaseReturnAsset[]>([])
+  const [loadingAssets, setLoadingAssets] = useState<Set<string>>(new Set())
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
   const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
@@ -520,6 +521,23 @@ function LeaseReturnPageContent() {
 
   // Handle QR code scan result
   const handleQRScan = async (decodedText: string) => {
+    // Check if already selected or loading
+    const alreadySelected = selectedAssets.find(
+      (a) => a.assetTagId.toLowerCase() === decodedText.toLowerCase()
+    )
+    if (alreadySelected) {
+      toast.info(`Asset "${decodedText}" already selected`)
+      return
+    }
+
+    if (loadingAssets.has(decodedText)) {
+      return // Already loading this asset
+    }
+
+    // Add to loading state
+    setLoadingAssets(prev => new Set(prev).add(decodedText))
+
+    try {
     // First check if asset exists (regardless of lease status)
     const assetExists = await findAssetById(decodedText)
     
@@ -553,6 +571,14 @@ function LeaseReturnPageContent() {
     
     // Asset exists and has active lease that hasn't been returned, proceed to select it
     await handleSelectAsset(assetExists)
+    } finally {
+      // Remove from loading state
+      setLoadingAssets(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(decodedText)
+        return newSet
+      })
+    }
   }
 
   // Update asset condition/notes
@@ -571,6 +597,13 @@ function LeaseReturnPageContent() {
 
   // Handle removing an asset from QR scanner
   const handleQRRemove = async (assetTagId: string) => {
+    // Remove from loading state if present
+    setLoadingAssets(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(assetTagId)
+      return newSet
+    })
+    // Remove from selected assets
     const assetToRemove = selectedAssets.find(a => a.assetTagId === assetTagId)
     if (assetToRemove) {
       setSelectedAssets((prev) => {
@@ -864,6 +897,42 @@ function LeaseReturnPageContent() {
               </FieldContent>
             </Field>
 
+                {/* Loading placeholders */}
+                {Array.from(loadingAssets).map((code) => (
+                  <div
+                    key={`loading-${code}`}
+                    className="flex items-center justify-between gap-2 p-3 border rounded-md bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                          <Spinner className="h-3 w-3" />
+                          {code}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic mt-1">
+                        Looking up asset details...
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setLoadingAssets(prev => {
+                          const newSet = new Set(prev)
+                          newSet.delete(code)
+                          return newSet
+                        })
+                      }}
+                      className="h-8 w-8"
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+
+                {/* Actual selected assets */}
                 {selectedAssets.map((asset) => (
                   <div key={asset.id} className="p-4 border rounded-md space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -1000,6 +1069,7 @@ function LeaseReturnPageContent() {
         onRemove={handleQRRemove}
         multiScan={true}
         existingCodes={selectedAssets.map(asset => asset.assetTagId)}
+        loadingCodes={Array.from(loadingAssets)}
         description="Scan or upload QR codes to add assets. Continue scanning to add multiple assets."
       />
           

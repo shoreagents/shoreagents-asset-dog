@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
-import { QrCode, Upload, CheckCircle2, X } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { QrCode, Upload } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'sonner'
@@ -14,8 +14,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface QRScannerDialogProps {
   open: boolean
@@ -28,12 +26,14 @@ interface QRScannerDialogProps {
   uploadButtonLabel?: string
   multiScan?: boolean // Enable multiple scans without closing
   existingCodes?: string[] // Already scanned/added codes to prevent duplicates
+  loadingCodes?: string[] // Codes that are currently being processed/loaded
 }
 
 export function QRScannerDialog({
   open,
   onOpenChange,
   onScan,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onRemove,
   title = 'QR Code Scanner',
   description = 'Scan or upload a QR code',
@@ -41,6 +41,8 @@ export function QRScannerDialog({
   uploadButtonLabel = 'Upload',
   multiScan = false,
   existingCodes = [],
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  loadingCodes = [],
 }: QRScannerDialogProps) {
   const qrScanContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -48,58 +50,7 @@ export function QRScannerDialog({
   const lastScanTimeRef = useRef<number>(0)
   const processedCodesRef = useRef<Set<string>>(new Set()) // Track all processed codes (existing + newly scanned)
   const [qrMode, setQrMode] = useState<'scan' | 'upload'>('scan')
-  const [scannedCode, setScannedCode] = useState<string>('')
-  const [scannedCodes, setScannedCodes] = useState<string[]>([]) // Track multiple scans in this session
   const [isProcessing, setIsProcessing] = useState(false)
-
-  // Calculate unique codes for display
-  const uniqueDisplayCodes = useMemo(() => {
-    const uniqueExisting = Array.from(new Set(existingCodes))
-    const uniqueNew = Array.from(new Set(scannedCodes)).filter(code => !existingCodes.includes(code))
-    return {
-      existing: uniqueExisting,
-      new: uniqueNew,
-      total: uniqueExisting.length + uniqueNew.length
-    }
-  }, [existingCodes, scannedCodes])
-
-  // Handle removing a scanned code
-  const handleRemoveCode = async (codeToRemove: string) => {
-    const isExisting = existingCodes.includes(codeToRemove)
-    
-    // Remove from scannedCodes state (if it's a newly scanned code)
-    if (!isExisting) {
-      setScannedCodes((prev) => prev.filter((code) => code !== codeToRemove))
-    }
-    
-    // Remove from processed set (allows re-scanning)
-    processedCodesRef.current.delete(codeToRemove)
-    
-    // Reset refs to allow immediate re-scanning
-    if (lastScannedRef.current === codeToRemove) {
-      lastScannedRef.current = ''
-      lastScanTimeRef.current = 0
-    }
-    
-    // Call onRemove callback if provided (to remove from form)
-    // This works for both existing and newly scanned codes
-    if (onRemove) {
-      try {
-        await onRemove(codeToRemove)
-      } catch (error) {
-        console.error('Error in onRemove callback:', error)
-        toast.error('Failed to remove asset from form')
-        // Re-add to processed set and scannedCodes if removal failed
-        processedCodesRef.current.add(codeToRemove)
-        if (!isExisting) {
-          setScannedCodes((prev) => [...prev, codeToRemove])
-        }
-        return
-      }
-    }
-    
-    toast.success(`Removed: ${codeToRemove}`)
-  }
 
   // Initialize processed codes set with existing codes when dialog opens
   useEffect(() => {
@@ -109,8 +60,6 @@ export function QRScannerDialog({
     } else {
       // Reset everything when dialog closes
       setTimeout(() => {
-        setScannedCode('')
-        setScannedCodes([])
         setIsProcessing(false)
         lastScannedRef.current = ''
         lastScanTimeRef.current = 0
@@ -168,19 +117,6 @@ export function QRScannerDialog({
     
     // Add to processed set immediately
     processedCodesRef.current.add(trimmedText)
-    
-    setScannedCode(trimmedText)
-
-    // Add to scanned codes list in multi-scan mode (for display)
-    if (multiScan) {
-      setScannedCodes((prev) => {
-        // Double-check to prevent duplicates in the array
-        if (prev.includes(trimmedText)) {
-          return prev
-        }
-        return [...prev, trimmedText]
-      })
-    }
 
     // Call the onScan callback
     try {
@@ -189,9 +125,8 @@ export function QRScannerDialog({
       // In multi-scan mode, keep dialog open and show success
       if (multiScan) {
         toast.success(`Scanned: ${trimmedText}`)
-        // Reset scanned code after a brief delay to allow scanning again
+        // Reset after a brief delay to allow scanning again
         setTimeout(() => {
-          setScannedCode('')
           setIsProcessing(false)
         }, 1500)
       } else {
@@ -203,11 +138,8 @@ export function QRScannerDialog({
       // Don't show generic error toast or log - the onScan callback already shows specific error messages
       setIsProcessing(false)
       
-      // Remove from processed set and scanned codes if it failed
+      // Remove from processed set if it failed
       processedCodesRef.current.delete(trimmedText)
-      if (multiScan) {
-        setScannedCodes((prev) => prev.filter((code) => code !== trimmedText))
-      }
       // Reset refs on error
       lastScannedRef.current = ''
       lastScanTimeRef.current = 0
@@ -278,19 +210,6 @@ export function QRScannerDialog({
       // Add to processed set immediately
       processedCodesRef.current.add(trimmedText)
 
-      setScannedCode(trimmedText)
-
-      // Add to scanned codes list in multi-scan mode
-      if (multiScan) {
-        setScannedCodes((prev) => {
-          // Double-check to prevent duplicates
-          if (prev.includes(trimmedText)) {
-            return prev
-          }
-          return [...prev, trimmedText]
-        })
-      }
-
       // Call the onScan callback
       try {
         await onScan(trimmedText)
@@ -299,7 +218,6 @@ export function QRScannerDialog({
         if (multiScan) {
           toast.success(`Scanned: ${trimmedText}`)
           setTimeout(() => {
-            setScannedCode('')
             setIsProcessing(false)
           }, 1000)
         } else {
@@ -310,11 +228,8 @@ export function QRScannerDialog({
         // Don't show generic error toast or log - the onScan callback already shows specific error messages
         setIsProcessing(false)
         
-        // Remove from processed set and scanned codes if it failed
+        // Remove from processed set if it failed
         processedCodesRef.current.delete(trimmedText)
-        if (multiScan) {
-          setScannedCodes((prev) => prev.filter((code) => code !== trimmedText))
-        }
         // Reset refs on error
         lastScannedRef.current = ''
         lastScanTimeRef.current = 0
@@ -405,71 +320,6 @@ export function QRScannerDialog({
                   />
                 )}
               </div>
-              
-              {/* Show current scan feedback */}
-              {scannedCode && (
-                <div className="mt-4 flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span className="text-muted-foreground">
-                    Scanned: <span className="font-medium text-foreground">{scannedCode}</span>
-                  </span>
-                </div>
-              )}
-
-              {/* Show scanned codes list in multi-scan mode */}
-              {multiScan && uniqueDisplayCodes.total > 0 && (
-                <div className="mt-4 w-full">
-                  <p className="text-sm font-medium mb-2">
-                    Scanned ({uniqueDisplayCodes.total}):
-                  </p>
-                  <ScrollArea className="h-32 w-full rounded-md border p-2">
-                    <div className="flex flex-wrap gap-2">
-                      {/* Show existing codes first (unique) - with remove button */}
-                      {uniqueDisplayCodes.existing.map((code, index) => (
-                        <Badge 
-                          key={`existing-${code}-${index}`} 
-                          variant="outline" 
-                          className="text-xs pr-1 flex items-center gap-1"
-                        >
-                          {code}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleRemoveCode(code)
-                            }}
-                            className="ml-1 rounded-full hover:bg-muted p-0.5 transition-colors"
-                            aria-label={`Remove ${code}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                      {/* Show newly scanned codes (unique, excluding existing) - with remove button */}
-                      {uniqueDisplayCodes.new.map((code, index) => (
-                        <Badge 
-                          key={`new-${code}-${index}`} 
-                          variant="secondary" 
-                          className="text-xs pr-1 flex items-center gap-1"
-                        >
-                          {code}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleRemoveCode(code)
-                            }}
-                            className="ml-1 rounded-full hover:bg-secondary-foreground/20 p-0.5 transition-colors"
-                            aria-label={`Remove ${code}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
             </div>
           )}
 
@@ -506,4 +356,5 @@ export function QRScannerDialog({
     </>
   )
 }
+
 

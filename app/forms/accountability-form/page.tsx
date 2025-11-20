@@ -133,6 +133,7 @@ export default function AccountabilityFormPage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [selectedAssets, setSelectedAssets] = useState<AccountabilityAsset[]>([])
+  const [loadingAssets, setLoadingAssets] = useState<Set<string>>(new Set())
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [qrDialogContext, setQrDialogContext] = useState<'general' | 'table-row'>('general')
   const [targetRowItem, setTargetRowItem] = useState<string | null>(null)
@@ -383,6 +384,23 @@ export default function AccountabilityFormPage() {
 
   // Handle QR code scan
   const handleQRScan = async (decodedText: string) => {
+    // Check if already selected or loading
+    const alreadySelected = selectedAssets.find(
+      (a) => a.assetTagId.toLowerCase() === decodedText.toLowerCase()
+    )
+    if (alreadySelected) {
+      toast.info(`Asset "${decodedText}" already selected`)
+      return
+    }
+
+    if (loadingAssets.has(decodedText)) {
+      return // Already loading this asset
+    }
+
+    // Add to loading state
+    setLoadingAssets(prev => new Set(prev).add(decodedText))
+
+    try {
     const asset = await lookupAsset(decodedText)
     if (!asset) {
       toast.error(`Asset with ID "${decodedText}" not found`)
@@ -418,11 +436,25 @@ export default function AccountabilityFormPage() {
     } else {
       // General scan - add to list normally
       await handleAddAsset(asset)
+      }
+    } finally {
+      // Remove from loading state
+      setLoadingAssets(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(decodedText)
+        return newSet
+      })
     }
   }
 
   // Handle removing an asset from QR scanner
   const handleQRRemove = async (assetTagId: string) => {
+    // Remove from loading state if present
+    setLoadingAssets(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(assetTagId)
+      return newSet
+    })
     // Find and remove the asset from selectedAssets
     const assetToRemove = selectedAssets.find(a => a.assetTagId === assetTagId)
     if (assetToRemove) {
@@ -1223,12 +1255,47 @@ export default function AccountabilityFormPage() {
                 )}
               </div>
 
-              {selectedAssets.length > 0 && (
+              {(selectedAssets.length > 0 || loadingAssets.size > 0) && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">
-                    Selected Assets ({selectedAssets.length})
+                    Selected Assets ({selectedAssets.length + loadingAssets.size})
                   </p>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {/* Loading placeholders */}
+                    {Array.from(loadingAssets).map((code) => (
+                      <div
+                        key={`loading-${code}`}
+                        className="flex items-center justify-between gap-2 p-3 border rounded-md bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-semibold text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                              <Spinner className="h-3 w-3" />
+                              {code}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground italic mt-1">
+                            Looking up asset details...
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setLoadingAssets(prev => {
+                              const newSet = new Set(prev)
+                              newSet.delete(code)
+                              return newSet
+                            })
+                          }}
+                          className="h-8 w-8"
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {/* Actual selected assets */}
                     {selectedAssets.map((asset) => (
                       <div
                         key={asset.id}
@@ -1890,6 +1957,7 @@ export default function AccountabilityFormPage() {
         onRemove={handleQRRemove}
         multiScan={true}
         existingCodes={selectedAssets.map(asset => asset.assetTagId)}
+        loadingCodes={Array.from(loadingAssets)}
         description={qrDialogContext === 'table-row' && targetRowItem 
           ? `Scan a ${targetRowItem} asset to add to this row. Continue scanning to add more assets.`
           : "Scan or upload QR codes to add assets. Continue scanning to add multiple assets."}

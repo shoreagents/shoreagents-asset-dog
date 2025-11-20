@@ -125,6 +125,7 @@ function MoveAssetPageContent() {
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
   const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
+  const [loadingAssets, setLoadingAssets] = useState<Set<string>>(new Set())
 
   const form = useForm<MoveFormData>({
     resolver: zodResolver(moveSchema),
@@ -456,12 +457,24 @@ function MoveAssetPageContent() {
 
   // Handle QR code scan result
   const handleQRScan = async (decodedText: string) => {
-    // Lookup asset by the scanned QR code (which should be the assetTagId)
-    const asset = await lookupAsset(decodedText)
-    if (asset) {
-      await handleSelectAsset(asset)
-    } else {
-      toast.error(`Asset with ID "${decodedText}" not found`)
+    // Add to loading set
+    setLoadingAssets(prev => new Set(prev).add(decodedText))
+    
+    try {
+      // Lookup asset by the scanned QR code (which should be the assetTagId)
+      const asset = await lookupAsset(decodedText)
+      if (asset) {
+        await handleSelectAsset(asset)
+      } else {
+        toast.error(`Asset with ID "${decodedText}" not found`)
+      }
+    } finally {
+      // Remove from loading set
+      setLoadingAssets(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(decodedText)
+        return newSet
+      })
     }
   }
 
@@ -658,7 +671,44 @@ function MoveAssetPageContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2 pb-4 space-y-4">
-            {!selectedAsset ? (
+            {loadingAssets.size > 0 ? (
+              // Loading state
+              <div className="space-y-2">
+                {Array.from(loadingAssets).map((code) => (
+                  <div
+                    key={`loading-${code}`}
+                    className="flex items-center justify-between gap-2 p-3 border rounded-md bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                          <Spinner className="h-3 w-3" />
+                          {code}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic mt-1">
+                        Looking up asset details...
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setLoadingAssets(prev => {
+                          const newSet = new Set(prev)
+                          newSet.delete(code)
+                          return newSet
+                        })
+                      }}
+                      className="h-8 w-8"
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : !selectedAsset ? (
               <div className="flex gap-2">
                 <div className="relative flex-1">
                 <Input
@@ -1036,6 +1086,7 @@ function MoveAssetPageContent() {
         onScan={handleQRScan}
         multiScan={true}
         existingCodes={selectedAsset ? [selectedAsset.assetTagId] : []}
+        loadingCodes={Array.from(loadingAssets)}
         description="Scan or upload QR codes to select an asset. Continue scanning to change selection."
       />
           

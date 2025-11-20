@@ -97,6 +97,7 @@ function ReserveAssetPageContent() {
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
   const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
+  const [loadingAssets, setLoadingAssets] = useState<Set<string>>(new Set())
 
   const form = useForm<ReserveFormData>({
     resolver: zodResolver(reserveSchema),
@@ -416,31 +417,43 @@ function ReserveAssetPageContent() {
 
   // Handle QR code scan result
   const handleQRScan = async (decodedText: string) => {
-    // First check if asset exists (regardless of status)
-    const assetExists = await findAssetById(decodedText)
+    // Add to loading set
+    setLoadingAssets(prev => new Set(prev).add(decodedText))
     
-    if (!assetExists) {
-      const errorMessage = `Asset with ID "${decodedText}" not found`
-      toast.error(errorMessage)
-      throw new Error(errorMessage)
+    try {
+      // First check if asset exists (regardless of status)
+      const assetExists = await findAssetById(decodedText)
+      
+      if (!assetExists) {
+        const errorMessage = `Asset with ID "${decodedText}" not found`
+        toast.error(errorMessage)
+        throw new Error(errorMessage)
+      }
+      
+      // Check if asset is already checked out
+      if (assetExists.status === "Checked out" || assetExists.status?.toLowerCase() === "checked out" || assetExists.status?.toLowerCase() === "in use") {
+        const errorMessage = `Asset "${assetExists.assetTagId}" is already checked out. Cannot reserve an asset that is already checked out.`
+        toast.error(errorMessage)
+        throw new Error(errorMessage)
+      }
+      
+      // Check if asset is available for reservation
+      if (assetExists.status && assetExists.status !== "Available" && assetExists.status !== null && assetExists.status !== undefined) {
+        const errorMessage = `Asset "${assetExists.assetTagId}" is not available for reservation. Current status: ${assetExists.status}`
+        toast.error(errorMessage)
+        throw new Error(errorMessage)
+      }
+      
+      // Asset exists and is available, proceed to select it
+      await handleSelectAsset(assetExists)
+    } finally {
+      // Remove from loading set
+      setLoadingAssets(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(decodedText)
+        return newSet
+      })
     }
-    
-    // Check if asset is already checked out
-    if (assetExists.status === "Checked out" || assetExists.status?.toLowerCase() === "checked out" || assetExists.status?.toLowerCase() === "in use") {
-      const errorMessage = `Asset "${assetExists.assetTagId}" is already checked out. Cannot reserve an asset that is already checked out.`
-      toast.error(errorMessage)
-      throw new Error(errorMessage)
-    }
-    
-    // Check if asset is available for reservation
-    if (assetExists.status && assetExists.status !== "Available" && assetExists.status !== null && assetExists.status !== undefined) {
-      const errorMessage = `Asset "${assetExists.assetTagId}" is not available for reservation. Current status: ${assetExists.status}`
-      toast.error(errorMessage)
-      throw new Error(errorMessage)
-    }
-    
-    // Asset exists and is available, proceed to select it
-    await handleSelectAsset(assetExists)
   }
 
   // Handle reservation type change - reset conditional fields
@@ -634,7 +647,44 @@ function ReserveAssetPageContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2 pb-4 space-y-4">
-            {!selectedAsset ? (
+            {loadingAssets.size > 0 ? (
+              // Loading state
+              <div className="space-y-2">
+                {Array.from(loadingAssets).map((code) => (
+                  <div
+                    key={`loading-${code}`}
+                    className="flex items-center justify-between gap-2 p-3 border rounded-md bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                          <Spinner className="h-3 w-3" />
+                          {code}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground italic mt-1">
+                        Looking up asset details...
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setLoadingAssets(prev => {
+                          const newSet = new Set(prev)
+                          newSet.delete(code)
+                          return newSet
+                        })
+                      }}
+                      className="h-8 w-8"
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : !selectedAsset ? (
               <div className="flex gap-2">
                 <div className="relative flex-1">
                 <Input
@@ -993,6 +1043,7 @@ function ReserveAssetPageContent() {
         onScan={handleQRScan}
         multiScan={true}
         existingCodes={selectedAsset ? [selectedAsset.assetTagId] : []}
+        loadingCodes={Array.from(loadingAssets)}
         description="Scan or upload QR codes to select an asset. Continue scanning to change selection."
       />
 

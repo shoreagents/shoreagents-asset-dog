@@ -608,7 +608,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             className="w-full sm:w-auto"
           >
             <Download className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Download PDF</span>
+            <span className="hidden sm:inline">Download</span>
             <span className="sm:hidden">PDF</span>
           </Button>
           {canEditAssets && (

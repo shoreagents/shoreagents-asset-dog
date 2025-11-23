@@ -385,30 +385,40 @@ export async function POST(
     // In development: use full puppeteer package (includes bundled Chromium)
     const isProduction = process.env.NODE_ENV === 'production'
     
-    let browser: Awaited<ReturnType<typeof puppeteerCore.launch>> | Awaited<ReturnType<typeof puppeteer.launch>>
-    if (isProduction) {
-      // Production: Use puppeteer-core with @sparticuz/chromium for Vercel
-      try {
-        browser = await puppeteerCore.launch({
-          args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
-          defaultViewport: { width: 794, height: 1123 },
-          executablePath: await chromium.executablePath(),
-          headless: true,
-        })
-      } catch (error) {
-        console.error('Failed to launch Chromium in production:', error)
-        throw new Error('Failed to generate PDF: Chromium initialization failed')
-      }
-    } else {
-      // Development: Use full puppeteer package (includes bundled Chromium)
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars', '--disable-web-security'],
-        defaultViewport: { width: 794, height: 1123 },
-      })
-    }
-
+    let browser: Awaited<ReturnType<typeof puppeteerCore.launch>> | Awaited<ReturnType<typeof puppeteer.launch>> | null = null
+    
     try {
+      if (isProduction) {
+        // Production: Use puppeteer-core with @sparticuz/chromium for Vercel
+        try {
+          browser = await puppeteerCore.launch({
+            args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+            defaultViewport: { width: 794, height: 1123 },
+            executablePath: await chromium.executablePath(),
+            headless: true,
+          })
+        } catch (error) {
+          console.error('Failed to launch Chromium in production:', error)
+          throw new Error(`Failed to generate PDF: Chromium initialization failed - ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      } else {
+        // Development: Use full puppeteer package (includes bundled Chromium)
+        try {
+          browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars', '--disable-web-security'],
+            defaultViewport: { width: 794, height: 1123 },
+          })
+        } catch (error) {
+          console.error('Failed to launch Puppeteer in development:', error)
+          throw new Error(`Failed to generate PDF: Browser initialization failed - ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+      
+      if (!browser) {
+        throw new Error('Failed to generate PDF: Browser instance is null')
+      }
+
       const page = await browser.newPage()
 
       // Set viewport to A4 proportions
@@ -418,10 +428,15 @@ export async function POST(
         deviceScaleFactor: 2,
       })
 
-      // Set HTML content
-      await page.setContent(html, {
-        waitUntil: ['networkidle0', 'load', 'domcontentloaded'],
-      })
+      // Set HTML content with timeout
+      await Promise.race([
+        page.setContent(html, {
+          waitUntil: ['networkidle0', 'load', 'domcontentloaded'],
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Page content loading timeout after 30 seconds')), 30000)
+        )
+      ])
 
       // Wait for images to load
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -470,13 +485,36 @@ export async function POST(
         },
       })
     } catch (error) {
-      await browser.close()
+      // Safely close browser if it exists
+      if (browser) {
+        try {
+          await browser.close()
+        } catch (closeError) {
+          console.error('Error closing browser:', closeError)
+        }
+      }
       throw error
     }
   } catch (error) {
-    console.error('Error generating PDF:', error)
+    // Enhanced error logging
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    const errorName = error instanceof Error ? error.name : 'Error'
+    
+    console.error('Error generating PDF:', {
+      name: errorName,
+      message: errorMessage,
+      stack: errorStack,
+      isProduction: process.env.NODE_ENV === 'production',
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to generate PDF', details: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        error: 'Failed to generate PDF', 
+        details: errorMessage,
+        // Only include stack in development
+        ...(process.env.NODE_ENV === 'development' && errorStack ? { stack: errorStack } : {})
+      },
       { status: 500 }
     )
   }

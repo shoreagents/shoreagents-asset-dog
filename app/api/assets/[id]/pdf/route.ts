@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import puppeteer from 'puppeteer'
-import puppeteerCore from 'puppeteer-core'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
-
-// Helper to get Chromium for serverless environments
-async function getChromium() {
-  try {
-    // Dynamic import for Vercel/serverless
-    const chromiumModule = await import('@sparticuz/chromium')
-    return chromiumModule.default || chromiumModule
-  } catch {
-    return null
-  }
-}
 
 // Format utilities
 const formatDate = (date: string | Date | null | undefined) => {
@@ -51,10 +39,6 @@ export async function POST(
   if (!permissionCheck.allowed && permissionCheck.error) {
     return permissionCheck.error
   }
-
-  // Declare browser at function scope so it's accessible in catch block
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let browser: any = null
 
   try {
     const { id } = await params
@@ -385,75 +369,13 @@ export async function POST(
       </html>
     `
 
-    // Launch Puppeteer with production-friendly configuration
-    try {
-      // Check if we're in a serverless environment (Vercel)
-      const isVercel = process.env.VERCEL === '1'
-      const chromium = await getChromium()
-      const useChromium = isVercel && chromium !== null
-      
-      console.log('Puppeteer launch config:', {
-        isVercel,
-        useChromium,
-        hasChromium: chromium !== null,
-        nodeEnv: process.env.NODE_ENV,
-      })
-      
-      // For Vercel/serverless with @sparticuz/chromium
-      if (useChromium && chromium) {
-        try {
-          // Configure Chromium for serverless (disable graphics for better performance)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(chromium as any).setGraphicsMode = false
-          
-          const executablePath = await chromium.executablePath()
-          const args = chromium.args || []
-          const defaultViewport = { width: 1280, height: 720 }
-          
-          console.log('Using @sparticuz/chromium with puppeteer-core:', {
-            executablePath: executablePath ? 'found' : 'not found',
-            argsCount: args.length,
-          })
-          
-          // Use puppeteer-core when using @sparticuz/chromium
-          browser = await puppeteerCore.launch({
-            args,
-            defaultViewport,
-            executablePath,
-            headless: true,
-            timeout: 30000,
-          })
-        } catch (chromiumError) {
-          console.error('Failed to launch with @sparticuz/chromium, falling back to regular puppeteer:', chromiumError)
-          // Fall through to regular puppeteer - don't throw, let it try regular puppeteer
-        }
-      }
-      
-      // Regular Puppeteer configuration (fallback or default)
-      if (!browser) {
-        const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
-          headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--disable-gpu',
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process',
-            '--disable-site-isolation-trials',
-            ...(isVercel ? ['--single-process'] : []),
-          ],
-          timeout: 30000,
-        }
-        
-        console.log('Launching regular Puppeteer with options:', {
-          argsCount: launchOptions.args?.length,
-        })
-        
-        browser = await puppeteer.launch(launchOptions)
-      }
+    // Launch Puppeteer
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    })
 
+    try {
       const page = await browser.newPage()
 
       // Set viewport to A4 proportions
@@ -463,42 +385,27 @@ export async function POST(
         deviceScaleFactor: 2,
       })
 
-      // Set HTML content with timeout
+      // Set HTML content
       await page.setContent(html, {
-        waitUntil: 'domcontentloaded', // Changed from networkidle0 to avoid timeout on slow images
-        timeout: 30000,
+        waitUntil: ['networkidle0', 'load', 'domcontentloaded'],
       })
 
-      // Wait for images to load with better error handling
-      try {
-        await page.evaluate(async () => {
-          const images = Array.from(document.querySelectorAll('img'))
-          await Promise.all(
-            images.map((img) => {
-              if (img.complete) return Promise.resolve<void>(undefined)
-              return new Promise<void>((resolve) => {
-                const timeout = setTimeout(() => {
-                  resolve() // Resolve even if image fails to load
-                }, 5000) // Increased timeout to 5s
-                img.onload = () => {
-                  clearTimeout(timeout)
-                  resolve()
-                }
-                img.onerror = () => {
-                  clearTimeout(timeout)
-                  resolve() // Continue even if image fails
-                }
-              })
+      // Wait for images to load
+      await page.evaluate(async () => {
+        const images = Array.from(document.querySelectorAll('img'))
+        await Promise.all(
+          images.map((img) => {
+            if (img.complete) return Promise.resolve()
+            return new Promise((resolve) => {
+              img.onload = resolve
+              img.onerror = resolve
+              setTimeout(resolve, 3000)
             })
-          )
-        })
-      } catch (imageError) {
-        // Log but continue - images are optional
-        console.warn('Some images failed to load, continuing PDF generation:', imageError)
-      }
+          })
+        )
+      })
 
-      // Small delay to ensure rendering is complete
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
       // Generate PDF
       const pdfOptions: Parameters<typeof page.pdf>[0] = {
@@ -516,13 +423,9 @@ export async function POST(
 
       await page.emulateMediaType('print')
       
-      // Generate PDF with timeout protection
-      const pdf = await Promise.race([
-        page.pdf(pdfOptions),
-        new Promise<Buffer>((_, reject) => 
-          setTimeout(() => reject(new Error('PDF generation timeout')), 25000)
-        ),
-      ])
+      const pdf = await page.pdf(pdfOptions)
+
+      await browser.close()
 
       const filename = `asset-details-${asset.assetTagId}-${new Date().toISOString().split('T')[0]}.pdf`
       
@@ -532,46 +435,14 @@ export async function POST(
           'Content-Disposition': `attachment; filename="${filename}"`,
         },
       })
-    } finally {
-      // Always close browser, even if there's an error
-      if (browser) {
-        try {
-          await browser.close()
-        } catch (closeError) {
-          console.error('Error closing browser:', closeError)
-        }
-      }
+    } catch (error) {
+      await browser.close()
+      throw error
     }
   } catch (error) {
-    // Enhanced error logging for debugging
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorStack = error instanceof Error ? error.stack : undefined
-    
-    console.error('Error generating PDF:', {
-      message: errorMessage,
-      stack: errorStack,
-      name: error instanceof Error ? error.name : undefined,
-      // Log environment info
-      nodeEnv: process.env.NODE_ENV,
-      // Log if browser was initialized
-      browserInitialized: browser !== null,
-    })
-    
-    // Provide more detailed error messages for debugging
-    const errorDetails = process.env.NODE_ENV === 'production' 
-      ? `PDF generation failed: ${errorMessage}. Please try again or contact support.`
-      : errorMessage
-    
+    console.error('Error generating PDF:', error)
     return NextResponse.json(
-      { 
-        error: 'Failed to generate PDF', 
-        details: errorDetails,
-        // Include full error in development
-        ...(process.env.NODE_ENV !== 'production' && { 
-          stack: errorStack,
-          name: error instanceof Error ? error.name : undefined,
-        })
-      },
+      { error: 'Failed to generate PDF', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

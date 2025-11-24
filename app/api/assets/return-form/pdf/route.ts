@@ -24,9 +24,15 @@ export async function POST(request: NextRequest) {
 
     // Launch Puppeteer with Chromium for Vercel
     const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
+    
     const browser = await puppeteer.launch({
       args: isVercel
-        ? chromium.args
+        ? [
+            ...chromium.args,
+            '--hide-scrollbars',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+          ]
         : ['--no-sandbox', '--disable-setuid-sandbox'],
       defaultViewport: isVercel ? chromium.defaultViewport : undefined,
       executablePath: isVercel
@@ -581,8 +587,19 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('Error generating PDF:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    console.error('Error details:', {
+      message: errorMessage,
+      stack: errorStack,
+      name: error instanceof Error ? error.name : undefined,
+    })
     return NextResponse.json(
-      { error: 'Failed to generate PDF', details: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        error: 'Failed to generate PDF', 
+        details: errorMessage,
+        ...(process.env.NODE_ENV === 'development' && { stack: errorStack })
+      },
       { status: 500 }
     )
   }

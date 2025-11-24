@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import puppeteer from 'puppeteer'
+import puppeteer from 'puppeteer-core'
+import chromium from '@sparticuz/chromium'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
@@ -369,10 +370,17 @@ export async function POST(
       </html>
     `
 
-    // Launch Puppeteer
+    // Launch Puppeteer with Chromium for Vercel
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
     const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: isVercel
+        ? chromium.args
+        : ['--no-sandbox', '--disable-setuid-sandbox'],
+      defaultViewport: isVercel ? chromium.defaultViewport : undefined,
+      executablePath: isVercel
+        ? await chromium.executablePath()
+        : process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      headless: isVercel ? chromium.headless : true,
     })
 
     try {

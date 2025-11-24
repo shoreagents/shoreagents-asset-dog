@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import puppeteerCore from 'puppeteer-core'
-import chromium from '@sparticuz/chromium-min'
+import puppeteer from 'puppeteer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,36 +21,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Launch Puppeteer with Chromium
-    let browser: Awaited<ReturnType<typeof puppeteerCore.launch>> | null = null
-    
-    try {
-      const executablePath = await chromium.executablePath()
-      browser = await puppeteerCore.launch({
-        args: [
-          ...chromium.args,
-          '--hide-scrollbars',
-          '--disable-web-security',
-          '--disable-dev-shm-usage',
-          '--disable-software-rasterizer',
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-gpu',
-          '--single-process',
-        ],
-        defaultViewport: { width: 794, height: 1123 },
-        executablePath,
-        headless: true,
-      })
-    } catch (error) {
-      console.error('Failed to launch Chromium:', error)
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      throw new Error(`Failed to generate PDF: Chromium initialization failed - ${errorMsg}`)
-    }
-
-    if (!browser) {
-      throw new Error('Failed to generate PDF: Browser instance is null')
-    }
+    // Launch Puppeteer
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    })
 
     try {
       const page = await browser.newPage()
@@ -594,13 +568,7 @@ export async function POST(request: NextRequest) {
         },
       })
     } catch (error) {
-      if (browser) {
-        try {
-          await browser.close()
-        } catch (closeError) {
-          console.error('Error closing browser:', closeError)
-        }
-      }
+      await browser.close()
       throw error
     }
   } catch (error) {

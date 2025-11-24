@@ -6,9 +6,6 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
   
-  // Externalize puppeteer packages for serverless compatibility
-  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium-min"],
-  
   // Production optimizations
   output: 'standalone', // Smaller Docker images, faster cold starts
   poweredByHeader: false, // Remove X-Powered-By header

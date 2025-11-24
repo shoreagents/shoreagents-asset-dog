@@ -249,7 +249,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [mounted, setMounted] = React.useState(false)
 
   // Use React Query to fetch user data so it updates when cache is invalidated
-  const { data: userData, isLoading: isLoadingUser, isPending, fetchStatus } = useQuery({
+  const { data: userData, isPending, fetchStatus } = useQuery({
     queryKey: ['sidebar-user'],
     queryFn: async () => {
         const response = await fetch('/api/auth/me')

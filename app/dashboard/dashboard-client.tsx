@@ -52,6 +52,7 @@ type DashboardStats = {
     id: string
     dueDate: string | null
     status: string
+    maintenanceBy: string | null
     asset: {
       id: string
       assetTagId: string
@@ -854,6 +855,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                                 <TableHead>Asset Tag ID</TableHead>
                                 <TableHead>Description</TableHead>
                                 <TableHead>Scheduled Date</TableHead>
+                                <TableHead>Maint. By</TableHead>
                                 <TableHead>Status</TableHead>
                               </TableRow>
                             </TableHeader>
@@ -868,6 +870,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                                     {maintenance.dueDate
                                       ? format(parseDateOnlyString(maintenance.dueDate) || new Date(), 'MMM dd, yyyy')
                                       : 'N/A'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {maintenance.maintenanceBy || 'N/A'}
                                   </TableCell>
                                   <TableCell>
                                     <span

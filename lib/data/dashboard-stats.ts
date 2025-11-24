@@ -40,6 +40,7 @@ export type DashboardStats = {
     id: string
     dueDate: string | null
     status: string
+    maintenanceBy: string | null
     asset: {
       id: string
       assetTagId: string
@@ -254,7 +255,11 @@ export async function getDashboardStats(): Promise<DashboardStats> {
           where: {
             status: { in: ['Scheduled', 'In progress'] },
           },
-          include: {
+          select: {
+            id: true,
+            dueDate: true,
+            status: true,
+            maintenanceBy: true,
             asset: {
               select: {
                 id: true,
@@ -333,8 +338,9 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       })),
       assetsUnderRepair: assetsUnderRepair.map((maintenance) => ({
         id: maintenance.id,
-        dueDate: maintenance.dueDate?.toISOString() || null,
+        dueDate: maintenance.dueDate ? formatDateOnly(maintenance.dueDate) : null,
         status: maintenance.status,
+        maintenanceBy: maintenance.maintenanceBy || null,
         asset: maintenance.asset,
       })),
       feedCounts: {

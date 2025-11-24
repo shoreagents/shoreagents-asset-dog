@@ -40,8 +40,12 @@ export async function POST(request: NextRequest) {
             console.log('Using cached Chromium executable path')
           } else {
             executablePath = await chromium.executablePath()
+            // Validate executablePath is not undefined or empty
+            if (!executablePath || executablePath.trim() === '') {
+              throw new Error('chromium.executablePath() returned empty or undefined')
+            }
             cachedExecutablePath = executablePath
-            console.log('Chromium executable path obtained and cached:', executablePath ? 'Yes' : 'No')
+            console.log('Chromium executable path obtained and cached')
           }
         } catch (chromiumError) {
           const chromiumErrorMsg = chromiumError instanceof Error ? chromiumError.message : 'Unknown error'
@@ -50,6 +54,11 @@ export async function POST(request: NextRequest) {
         }
       } else {
         executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+      }
+      
+      // Final validation: ensure executablePath is valid before launching
+      if (isVercel && (!executablePath || executablePath.trim() === '')) {
+        throw new Error('Chromium executable path is required on Vercel but was not obtained')
       }
       
       console.log('Launching browser:', {
@@ -65,6 +74,9 @@ export async function POST(request: NextRequest) {
               '--hide-scrollbars',
               '--disable-web-security',
               '--disable-features=IsolateOrigins,site-per-process',
+              '--disable-gpu',
+              '--disable-dev-shm-usage',
+              '--disable-software-rasterizer',
             ]
           : ['--no-sandbox', '--disable-setuid-sandbox'],
         defaultViewport: isVercel ? chromium.defaultViewport : undefined,

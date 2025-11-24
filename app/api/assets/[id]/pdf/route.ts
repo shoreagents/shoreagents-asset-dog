@@ -391,13 +391,33 @@ export async function POST(
             executablePath = cachedExecutablePath
             console.log('Using cached Chromium executable path')
           } else {
-            executablePath = await chromium.executablePath()
-            // Validate executablePath is not undefined or empty
-            if (!executablePath || executablePath.trim() === '') {
-              throw new Error('chromium.executablePath() returned empty or undefined')
+            // Retry mechanism for Chromium download (sometimes needs a moment)
+            let retries = 3
+            let lastError: Error | null = null
+            
+            while (retries > 0) {
+              try {
+                executablePath = await chromium.executablePath()
+                // Validate executablePath is not undefined or empty
+                if (!executablePath || executablePath.trim() === '') {
+                  throw new Error('chromium.executablePath() returned empty or undefined')
+                }
+                cachedExecutablePath = executablePath
+                console.log('Chromium executable path obtained and cached')
+                break
+              } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error))
+                retries--
+                if (retries > 0) {
+                  console.log(`Chromium download attempt failed, retrying... (${retries} attempts left)`)
+                  await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second before retry
+                }
+              }
             }
-            cachedExecutablePath = executablePath
-            console.log('Chromium executable path obtained and cached')
+            
+            if (!executablePath || executablePath.trim() === '') {
+              throw lastError || new Error('Failed to get Chromium executable path after retries')
+            }
           }
         } catch (chromiumError) {
           const chromiumErrorMsg = chromiumError instanceof Error ? chromiumError.message : 'Unknown error'

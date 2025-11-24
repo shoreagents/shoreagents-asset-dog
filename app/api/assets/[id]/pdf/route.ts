@@ -7,8 +7,6 @@ import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
 import { retryDbOperation } from '@/lib/db-utils'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
-import { existsSync } from 'fs'
-import { join } from 'path'
 
 // Format utilities
 const formatDate = (date: string | Date | null | undefined) => {
@@ -417,31 +415,8 @@ export async function POST(
           // Get chromium executable path
           // This may fail if brotli files are missing - that's a deployment configuration issue
           console.log('[PDF] Getting Chromium executable path...')
-          let executablePath: string
-          
-          try {
-            executablePath = await chromium.executablePath()
-            console.log('[PDF] Chromium path:', executablePath)
-          } catch (pathError) {
-            console.error('[PDF] Failed to get Chromium executable path:', pathError)
-            // Try to find chromium in node_modules as fallback
-            const possiblePaths = [
-              join(process.cwd(), 'node_modules', '@sparticuz', 'chromium', 'bin', 'chromium'),
-              join('/var/task', 'node_modules', '@sparticuz', 'chromium', 'bin', 'chromium'),
-            ]
-            
-            executablePath = possiblePaths.find(p => existsSync(p)) || ''
-            
-            if (!executablePath) {
-              throw new Error(
-                'Chromium executable not found. The @sparticuz/chromium package files are missing from the deployment. ' +
-                'For Vercel: Ensure @sparticuz/chromium is in dependencies (not devDependencies) and redeploy. ' +
-                'The package files must be included in the serverless function bundle.'
-              )
-            }
-            
-            console.log('[PDF] Using fallback Chromium path:', executablePath)
-          }
+          const executablePath = await chromium.executablePath()
+          console.log('[PDF] Chromium path:', executablePath)
           
           console.log('[PDF] Launching browser...')
           browser = await puppeteerCore.launch({
@@ -461,16 +436,15 @@ export async function POST(
             headless: true,
           })
         } catch (error) {
-          console.error('[PDF] Failed to launch Chromium in production:', error)
+          console.error('Failed to launch Chromium in production:', error)
           const errorMsg = error instanceof Error ? error.message : 'Unknown error'
           
           // Provide helpful error message for brotli files issue
-          if (errorMsg.includes('brotli') || errorMsg.includes('does not exist') || errorMsg.includes('input directory') || errorMsg.includes('not found')) {
+          if (errorMsg.includes('brotli') || errorMsg.includes('does not exist') || errorMsg.includes('input directory')) {
             throw new Error(
               'Chromium deployment configuration issue: The @sparticuz/chromium package is missing required files. ' +
-              'SOLUTION: In your Vercel project settings, ensure @sparticuz/chromium is in dependencies (not devDependencies). ' +
-              'Then redeploy. The package binary files must be included in the serverless function bundle. ' +
-              'If the issue persists, check Vercel build logs to ensure the package files are being copied.'
+              'This typically happens when the package files are not properly included in the Vercel deployment. ' +
+              'Please ensure @sparticuz/chromium is listed in package.json dependencies and that all files are included in the build.'
             )
           }
           

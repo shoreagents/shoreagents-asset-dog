@@ -42,7 +42,7 @@ export async function GET() {
       recentLeases,
     })
   } catch (error) {
-    console.error('Error fetching lease statistics:', error)
+    console.error('Error fetching lease statistics', error)
     return NextResponse.json(
       { error: 'Failed to fetch lease statistics' },
       { status: 500 }

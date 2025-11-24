@@ -19,7 +19,7 @@ if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
       chromium.setGraphicsMode(false)
     }
   } catch {
-    console.warn('⚠️ @sparticuz/chromium not available, will use regular puppeteer')
+    // @sparticuz/chromium not available, will use regular puppeteer
   }
 }
 
@@ -69,11 +69,10 @@ async function getChromiumPath(): Promise<string | null> {
     try {
       const chromiumPath = await chromium.executablePath()
       if (chromiumPath && fs.existsSync(chromiumPath)) {
-        console.log('✅ Using @sparticuz/chromium-min for serverless:', chromiumPath)
         return chromiumPath
       }
-    } catch (e) {
-      console.warn('⚠️ Failed to get @sparticuz/chromium-min path:', e)
+    } catch {
+      // Failed to get @sparticuz/chromium-min path
     }
   }
 
@@ -89,7 +88,6 @@ async function getChromiumPath(): Promise<string | null> {
     
     for (const chromePath of systemChromePaths) {
       if (fs.existsSync(chromePath)) {
-        console.log('✅ Using system Chrome (Windows):', chromePath)
         return chromePath
       }
     }
@@ -101,19 +99,14 @@ async function getChromiumPath(): Promise<string | null> {
     if (puppeteerChromiumPath) {
       // Check if the exact path exists
       if (fs.existsSync(puppeteerChromiumPath)) {
-        console.log('✅ Using Puppeteer bundled Chromium (exact path):', puppeteerChromiumPath)
         return puppeteerChromiumPath
       }
-      
-      console.log('⚠️ Puppeteer path exists but file not found:', puppeteerChromiumPath)
-      console.log('🔍 Searching for chrome executable in parent directories...')
       
       // If the exact path doesn't exist, try to find chrome in the parent directory
       const parentDir = path.dirname(puppeteerChromiumPath)
       if (fs.existsSync(parentDir)) {
         const found = findChromeExecutable(parentDir)
         if (found) {
-          console.log('✅ Found Chrome in parent directory:', found)
           return found
         }
       }
@@ -127,10 +120,8 @@ async function getChromiumPath(): Promise<string | null> {
       
       for (const cacheBase of cacheBases) {
         if (cacheBase && fs.existsSync(cacheBase)) {
-          console.log('🔍 Searching in cache directory:', cacheBase)
           const found = findChromeExecutable(cacheBase)
           if (found) {
-            console.log('✅ Found Chrome in cache directory:', found)
             return found
           }
         }
@@ -140,22 +131,19 @@ async function getChromiumPath(): Promise<string | null> {
       if (process.env.VERCEL) {
         const nodeModulesCache = path.join(process.cwd(), 'node_modules', '.cache', 'puppeteer')
         if (fs.existsSync(nodeModulesCache)) {
-          console.log('🔍 Searching in node_modules cache:', nodeModulesCache)
           const found = findChromeExecutable(nodeModulesCache)
           if (found) {
-            console.log('✅ Found Chrome in node_modules cache:', found)
             return found
           }
         }
       }
     }
-  } catch (e) {
-    console.warn('⚠️ Puppeteer bundled Chromium not found, trying alternatives...', e)
+  } catch {
+    // Puppeteer bundled Chromium not found, trying alternatives
   }
 
   // Try environment variable
   if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
-    console.log('✅ Using CHROME_PATH:', process.env.CHROME_PATH)
     return process.env.CHROME_PATH
   }
 
@@ -180,7 +168,6 @@ async function getChromiumPath(): Promise<string | null> {
 
   for (const chromePath of commonPaths) {
     if (chromePath && fs.existsSync(chromePath)) {
-      console.log('✅ Using system Chrome:', chromePath)
       return chromePath
     }
   }
@@ -201,20 +188,12 @@ async function getChromiumPath(): Promise<string | null> {
   
   for (const cacheBase of lastResortPaths) {
     if (cacheBase && fs.existsSync(cacheBase)) {
-      console.log('🔍 Last resort: searching in:', cacheBase)
       const found = findChromeExecutable(cacheBase)
       if (found) {
-        console.log('✅ Found Chrome in last resort search:', found)
         return found
       }
     }
   }
-
-  console.error('❌ Chrome/Chromium not found in any location')
-  console.error('❌ Platform:', process.platform)
-  console.error('❌ VERCEL:', process.env.VERCEL)
-  console.error('❌ Process cwd:', process.cwd())
-  console.error('❌ HOME:', process.env.HOME)
 
   return null
 }
@@ -643,81 +622,53 @@ export async function POST(
       const chromiumPath = await getChromiumPath()
       if (chromiumPath) {
         launchOptions.executablePath = chromiumPath
-        console.log('✅ Using Chromium at:', chromiumPath)
       } else {
         // For Vercel, try to use Puppeteer's default path
         try {
           const defaultPath = puppeteer.executablePath()
           if (defaultPath) {
             launchOptions.executablePath = defaultPath
-            console.log('✅ Using Puppeteer default Chromium path:', defaultPath)
-          } else {
-            console.warn('⚠️ No Chromium found in default location')
           }
-        } catch (e) {
-          console.warn('⚠️ Could not get Puppeteer default path:', e)
+        } catch {
+          // Could not get Puppeteer default path
         }
       }
       
-      // Log the executable path being used for debugging
-      if (launchOptions.executablePath) {
-        console.log('📌 Final Chromium executable path:', launchOptions.executablePath)
-        console.log('📌 Path exists:', fs.existsSync(launchOptions.executablePath))
-        if (!fs.existsSync(launchOptions.executablePath)) {
-          console.error('❌ Chromium executable not found at specified path!')
-          console.error('❌ Attempting to find Chrome in cache directory...')
-          const windowsCacheBase = process.platform === 'win32' 
-            ? path.join(process.env.LOCALAPPDATA || process.env.USERPROFILE || '', '.cache', 'puppeteer')
-            : '/home/sbx_user1051/.cache/puppeteer'
-          
-          if (fs.existsSync(windowsCacheBase)) {
-            const found = findChromeExecutable(windowsCacheBase)
-            if (found) {
-              console.log('✅ Found Chrome in cache:', found)
-              launchOptions.executablePath = found
-            } else {
-              console.error('❌ Chrome not found in cache directory:', windowsCacheBase)
-            }
-          } else {
-            console.error('❌ Cache directory does not exist:', windowsCacheBase)
+      // Verify executable path exists
+      if (launchOptions.executablePath && !fs.existsSync(launchOptions.executablePath)) {
+        const windowsCacheBase = process.platform === 'win32' 
+          ? path.join(process.env.LOCALAPPDATA || process.env.USERPROFILE || '', '.cache', 'puppeteer')
+          : '/home/sbx_user1051/.cache/puppeteer'
+        
+        if (fs.existsSync(windowsCacheBase)) {
+          const found = findChromeExecutable(windowsCacheBase)
+          if (found) {
+            launchOptions.executablePath = found
           }
         }
-      } else {
-        console.log('📌 No explicit executable path - using Puppeteer default')
+      } else if (!launchOptions.executablePath) {
         try {
           const defaultPath = puppeteer.executablePath()
-          console.log('📌 Puppeteer default path:', defaultPath)
           if (defaultPath && fs.existsSync(defaultPath)) {
             launchOptions.executablePath = defaultPath
-            console.log('✅ Using Puppeteer default path')
           }
-        } catch (e) {
-          console.error('❌ Could not get Puppeteer default path:', e)
+        } catch {
+          // Could not get Puppeteer default path
         }
       }
-
-      console.log('🚀 Launching browser with options:', {
-        executablePath: launchOptions.executablePath,
-        headless: launchOptions.headless,
-        argsCount: launchOptions.args?.length || 0,
-        platform: process.platform
-      })
 
       // On Windows, verify the executable exists and is accessible
       if (process.platform === 'win32' && launchOptions.executablePath) {
         if (!fs.existsSync(launchOptions.executablePath)) {
           throw new Error(`Chrome executable not found at: ${launchOptions.executablePath}`)
         }
-        console.log('✅ Chrome executable verified on Windows')
       }
 
       // For Vercel/serverless, use puppeteer-core with @sparticuz/chromium
       if (chromium && (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)) {
-        console.log('🌐 Using puppeteer-core with @sparticuz/chromium for serverless')
         try {
           // Get executable path - chromium handles extraction automatically
           const chromiumPath = await chromium.executablePath()
-          console.log('📌 Chromium executable path:', chromiumPath)
           
           // Merge args - chromium provides optimized args for serverless
           const chromiumArgs = chromium.args || []
@@ -725,11 +676,8 @@ export async function POST(
           launchOptions.executablePath = chromiumPath
           launchOptions.headless = chromium.headless !== false // Default to headless
           
-          console.log('🚀 Launching with @sparticuz/chromium, args count:', launchOptions.args.length)
           browser = await puppeteerCore.launch(launchOptions)
-          console.log('✅ Browser launched successfully (serverless)')
         } catch (chromiumError) {
-          console.error('❌ Failed to launch with @sparticuz/chromium:', chromiumError)
           // Fallback to regular puppeteer if chromium fails
           throw chromiumError
         }
@@ -739,12 +687,9 @@ export async function POST(
         launchOptions.timeout = launchTimeout
 
         browser = await puppeteer.launch(launchOptions)
-        console.log('✅ Browser launched successfully')
       }
     } catch (launchError) {
-      console.error('❌ Failed to launch browser:', launchError)
-      console.error('❌ Launch error type:', typeof launchError)
-      console.error('❌ Launch error constructor:', launchError?.constructor?.name)
+      console.error('Failed to launch browser:', launchError)
       
       // Extract error message more thoroughly
       let errorMessage = 'Unknown error'
@@ -761,8 +706,6 @@ export async function POST(
       }
       
       const errorStack = launchError instanceof Error ? launchError.stack : undefined
-      
-      console.error('❌ Extracted error message:', errorMessage)
       
       // Try to provide more helpful error message
       let hint = 'Puppeteer requires Chrome/Chromium. '
@@ -814,8 +757,6 @@ export async function POST(
         deviceScaleFactor: 2,
       })
 
-      console.log('📄 Setting page content...')
-
       // Set HTML content
       await page.setContent(html, {
         waitUntil: ['networkidle0', 'load', 'domcontentloaded'],
@@ -841,13 +782,9 @@ export async function POST(
       try {
         await page.evaluate(() => document.fonts.ready)
         await new Promise(resolve => setTimeout(resolve, 2000))
-        console.log('✅ Fonts and resources loaded')
-      } catch (waitError) {
-        console.warn('⚠️ Warning waiting for fonts:', waitError)
-        // Continue anyway
+      } catch {
+        // Continue anyway if fonts fail to load
       }
-
-      console.log('📄 Generating PDF...')
 
       // Generate PDF
       const pdfOptions: Parameters<typeof page.pdf>[0] = {
@@ -870,15 +807,12 @@ export async function POST(
       
       // Convert Uint8Array to Buffer if needed
       const pdfBuffer = Buffer.isBuffer(pdfData) ? pdfData : Buffer.from(pdfData)
-      
-      console.log('✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes')
 
       // Close browser
       try {
         await browser.close()
-        console.log('✅ Browser closed')
-      } catch (closeError) {
-        console.warn('⚠️ Warning closing browser:', closeError)
+      } catch {
+        // Ignore errors when closing browser
       }
 
       const filename = `asset-details-${asset.assetTagId}-${new Date().toISOString().split('T')[0]}.pdf`
@@ -898,23 +832,18 @@ export async function POST(
         },
       })
     } catch (pageError) {
-      console.error('❌ Failed to create page or generate PDF:', pageError)
+      console.error('Failed to create page or generate PDF:', pageError)
       if (browser) {
         try {
           await browser.close()
-        } catch (closeError) {
-          console.error('❌ Error closing browser:', closeError)
+        } catch {
+          // Ignore errors when closing browser
         }
       }
       throw pageError
     }
   } catch (error) {
-    console.error('❌ Error generating PDF:', error)
-    console.error('❌ Error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : 'Unknown',
-    })
+    console.error('Error generating PDF:', error)
     
     return NextResponse.json(
       { 

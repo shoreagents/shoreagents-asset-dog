@@ -414,6 +414,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
   const { hasPermission } = usePermissions()
   const [activeTab, setActiveTab] = useState<'details' | 'photos' | 'docs' | 'depreciation' | 'maintenance' | 'reserve' | 'audit' | 'history'>('details')
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
 
   const canEditAssets = hasPermission('canEditAssets')
   const canAudit = hasPermission('canAudit')
@@ -577,40 +578,149 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
 
   // Handle PDF download
   const handleDownloadPDF = async () => {
-    try {
-      toast.loading('Generating PDF...', { id: 'pdf-generation' })
+    setIsGeneratingPDF(true)
+    
+    // Use XMLHttpRequest to track download progress
+    const xhr = new XMLHttpRequest()
+    let simulatedProgress = 0
+    let progressInterval: NodeJS.Timeout | null = null
+    let hasStartedDownload = false
+    
+    return new Promise<void>((resolve, reject) => {
+      try {
+        toast.loading('Generating PDF... 0%', { id: 'pdf-generation' })
 
-      // Send to PDF API - API will fetch all data and generate structured PDF
-      const response = await fetch(`/api/assets/${asset.id}/pdf`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+        // Simulate progress during generation phase (0-70%)
+        // This gives feedback while the server is generating the PDF
+        progressInterval = setInterval(() => {
+          if (!hasStartedDownload && simulatedProgress < 70) {
+            simulatedProgress += 2
+            if (simulatedProgress > 70) simulatedProgress = 70
+            toast.loading(`Generating PDF... ${simulatedProgress}%`, { id: 'pdf-generation' })
+          }
+        }, 200) // Update every 200ms
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to generate PDF')
+        xhr.open('POST', `/api/assets/${asset.id}/pdf`, true)
+        xhr.setRequestHeader('Content-Type', 'application/json')
+        xhr.responseType = 'blob'
+
+        // Track real download progress (70-100%)
+        xhr.addEventListener('progress', (event) => {
+          hasStartedDownload = true
+          if (progressInterval) {
+            clearInterval(progressInterval)
+            progressInterval = null
+          }
+          
+          if (event.lengthComputable && event.total > 0) {
+            // Map download progress to 70-100% range
+            const downloadPercent = Math.round((event.loaded / event.total) * 100)
+            const totalPercent = 70 + Math.round(downloadPercent * 0.3) // 70% + (download% * 30%)
+            toast.loading(`Generating PDF... ${totalPercent}%`, { id: 'pdf-generation' })
+          } else if (event.loaded > 0) {
+            // If content length is unknown but we have loaded bytes, show progress
+            toast.loading('Generating PDF... 75%', { id: 'pdf-generation' })
+          }
+        })
+
+        xhr.addEventListener('load', () => {
+          // Clear progress interval if still running
+          if (progressInterval) {
+            clearInterval(progressInterval)
+            progressInterval = null
+          }
+          
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const blob = xhr.response
+              
+              // Create download link
+              const url = window.URL.createObjectURL(blob)
+              const link = document.createElement('a')
+              link.href = url
+              link.download = `asset-details-${asset.assetTagId}-${new Date().toISOString().split('T')[0]}.pdf`
+              document.body.appendChild(link)
+              link.click()
+              document.body.removeChild(link)
+              window.URL.revokeObjectURL(url)
+
+              toast.success('PDF downloaded successfully', { id: 'pdf-generation' })
+              setIsGeneratingPDF(false)
+              resolve()
+            } catch (error) {
+              console.error('Error processing PDF:', error)
+              toast.error('Failed to process PDF', { id: 'pdf-generation' })
+              setIsGeneratingPDF(false)
+              reject(error)
+            }
+          } else {
+            // Try to parse error response
+            if (progressInterval) {
+              clearInterval(progressInterval)
+              progressInterval = null
+            }
+            
+            const reader = new FileReader()
+            reader.onload = () => {
+              try {
+                const errorData = JSON.parse(reader.result as string)
+                const errorMessage = errorData.error || 'Failed to generate PDF'
+                toast.error(errorMessage, { id: 'pdf-generation' })
+                setIsGeneratingPDF(false)
+                reject(new Error(errorMessage))
+              } catch {
+                toast.error('Failed to generate PDF', { id: 'pdf-generation' })
+                setIsGeneratingPDF(false)
+                reject(new Error('Failed to generate PDF'))
+              }
+            }
+            reader.onerror = () => {
+              toast.error('Failed to generate PDF', { id: 'pdf-generation' })
+              setIsGeneratingPDF(false)
+              reject(new Error('Failed to generate PDF'))
+            }
+            if (xhr.response) {
+              reader.readAsText(xhr.response)
+            } else {
+              toast.error('Failed to generate PDF', { id: 'pdf-generation' })
+              setIsGeneratingPDF(false)
+              reject(new Error('Failed to generate PDF'))
+            }
+          }
+        })
+
+        xhr.addEventListener('error', () => {
+          if (progressInterval) {
+            clearInterval(progressInterval)
+            progressInterval = null
+          }
+          toast.error('Network error while generating PDF', { id: 'pdf-generation' })
+          setIsGeneratingPDF(false)
+          reject(new Error('Network error'))
+        })
+
+        xhr.addEventListener('abort', () => {
+          if (progressInterval) {
+            clearInterval(progressInterval)
+            progressInterval = null
+          }
+          toast.error('PDF generation cancelled', { id: 'pdf-generation' })
+          setIsGeneratingPDF(false)
+          reject(new Error('Cancelled'))
+        })
+
+        xhr.send()
+      } catch (error) {
+        if (progressInterval) {
+          clearInterval(progressInterval)
+          progressInterval = null
+        }
+        console.error('Error generating PDF:', error)
+        toast.error(error instanceof Error ? error.message : 'Failed to generate PDF', { id: 'pdf-generation' })
+        setIsGeneratingPDF(false)
+        reject(error)
       }
-
-      // Get PDF blob
-      const blob = await response.blob()
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `asset-details-${asset.assetTagId}-${new Date().toISOString().split('T')[0]}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-
-      toast.success('PDF downloaded successfully', { id: 'pdf-generation' })
-    } catch (error) {
-      console.error('Error generating PDF:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to generate PDF', { id: 'pdf-generation' })
-    }
+    })
   }
 
   return (
@@ -627,6 +737,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             variant="outline"
             onClick={handleDownloadPDF}
             className="w-full sm:w-auto"
+            disabled={isGeneratingPDF}
           >
             <Download className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Download</span>
@@ -639,6 +750,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                 router.push(`/assets/${asset.id}`)
               }}
               className="w-full sm:w-auto"
+              disabled={isGeneratingPDF}
             >
               <Edit className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">Edit Asset</span>
@@ -651,6 +763,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                 variant="outline" 
                 className="w-full sm:w-auto"
                 title="More Actions"
+                disabled={isGeneratingPDF}
               >
                 More Actions
                 <ChevronDown className={`ml-2 h-4 w-4 transition-transform duration-200 ${isMoreActionsOpen ? 'rotate-180' : ''}`} />
@@ -662,6 +775,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   onClick={() => {
                     router.push(`/assets/${asset.id}`)
                   }}
+                  disabled={isGeneratingPDF}
                 >
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Asset
@@ -672,6 +786,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   onClick={() => {
                     router.push(`/tools/audit?assetId=${asset.id}`)
                   }}
+                  disabled={isGeneratingPDF}
                 >
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Manage Audits
@@ -682,6 +797,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   onClick={() => {
                     router.push(`/assets/checkout?assetId=${asset.id}`)
                   }}
+                  disabled={isGeneratingPDF}
                 >
                   <ArrowRight className="mr-2 h-4 w-4" />
                   Checkout
@@ -692,6 +808,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   onClick={() => {
                     router.push(`/assets/checkin?assetId=${asset.id}`)
                   }}
+                  disabled={isGeneratingPDF}
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Checkin
@@ -702,6 +819,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   onClick={() => {
                     router.push(`/assets/move?assetId=${asset.id}`)
                   }}
+                  disabled={isGeneratingPDF}
                 >
                   <Move className="mr-2 h-4 w-4" />
                   Move
@@ -712,6 +830,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   onClick={() => {
                     router.push(`/assets/reserve?assetId=${asset.id}`)
                   }}
+                  disabled={isGeneratingPDF}
                 >
                   <Package className="mr-2 h-4 w-4" />
                   Reserve
@@ -723,6 +842,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     onClick={() => {
                       router.push(`/assets/lease?assetId=${asset.id}`)
                     }}
+                    disabled={isGeneratingPDF}
                   >
                     <FileTextIcon className="mr-2 h-4 w-4" />
                     Lease
@@ -731,6 +851,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     onClick={() => {
                       router.push(`/assets/lease-return?assetId=${asset.id}`)
                     }}
+                    disabled={isGeneratingPDF}
                   >
                     <FileTextIcon className="mr-2 h-4 w-4" />
                     Lease Return
@@ -739,7 +860,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
               )}
               {canDispose && (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger disabled={isGeneratingPDF}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Dispose
                   </DropdownMenuSubTrigger>
@@ -748,6 +869,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       onClick={() => {
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Sold`)
                       }}
+                      disabled={isGeneratingPDF}
                     >
                       Sold
                     </DropdownMenuItem>
@@ -755,6 +877,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       onClick={() => {
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Donated`)
                       }}
+                      disabled={isGeneratingPDF}
                     >
                       Donated
                     </DropdownMenuItem>
@@ -762,6 +885,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       onClick={() => {
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Scrapped`)
                       }}
+                      disabled={isGeneratingPDF}
                     >
                       Scrapped
                     </DropdownMenuItem>
@@ -769,6 +893,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       onClick={() => {
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Lost/Missing`)
                       }}
+                      disabled={isGeneratingPDF}
                     >
                       Lost/Missing
                     </DropdownMenuItem>
@@ -776,6 +901,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       onClick={() => {
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Destroyed`)
                       }}
+                      disabled={isGeneratingPDF}
                     >
                       Destroyed
                     </DropdownMenuItem>
@@ -784,7 +910,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
               )}
               {canManageMaintenance && (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger disabled={isGeneratingPDF}>
                     <Wrench className="mr-2 h-4 w-4" />
                     Maintenance
                   </DropdownMenuSubTrigger>
@@ -793,6 +919,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       onClick={() => {
                         router.push(`/assets/maintenance?assetId=${asset.id}&status=Scheduled`)
                       }}
+                      disabled={isGeneratingPDF}
                     >
                       Scheduled
                     </DropdownMenuItem>
@@ -800,6 +927,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       onClick={() => {
                         router.push(`/assets/maintenance?assetId=${asset.id}&status=In progress`)
                       }}
+                      disabled={isGeneratingPDF}
                     >
                       In Progress
                     </DropdownMenuItem>
@@ -814,6 +942,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       router.push(`/assets?delete=${asset.id}`)
                     }}
                     className="text-destructive focus:text-destructive"
+                    disabled={isGeneratingPDF}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Move to Trash
@@ -823,7 +952,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             </DropdownMenuContent>
           </DropdownMenu>
           <Link href="/assets" className="w-full sm:w-auto">
-            <Button variant="outline" className="w-full sm:w-auto">
+            <Button variant="outline" className="w-full sm:w-auto" disabled={isGeneratingPDF}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">Back to Assets</span>
               <span className="sm:hidden">Back</span>
@@ -915,6 +1044,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             type="button"
             variant="ghost"
             onClick={() => setActiveTab('details')}
+            disabled={isGeneratingPDF}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
               activeTab === 'details'
                 ? 'border-primary text-primary'
@@ -927,6 +1057,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             type="button"
             variant="ghost"
             onClick={() => setActiveTab('photos')}
+            disabled={isGeneratingPDF}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
               activeTab === 'photos'
                 ? 'border-primary text-primary'
@@ -939,6 +1070,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             type="button"
             variant="ghost"
             onClick={() => setActiveTab('docs')}
+            disabled={isGeneratingPDF}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
               activeTab === 'docs'
                 ? 'border-primary text-primary'
@@ -951,6 +1083,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             type="button"
             variant="ghost"
             onClick={() => setActiveTab('depreciation')}
+            disabled={isGeneratingPDF}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
               activeTab === 'depreciation'
                 ? 'border-primary text-primary'
@@ -963,6 +1096,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             type="button"
             variant="ghost"
             onClick={() => setActiveTab('maintenance')}
+            disabled={isGeneratingPDF}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
               activeTab === 'maintenance'
                 ? 'border-primary text-primary'
@@ -975,6 +1109,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             type="button"
             variant="ghost"
             onClick={() => setActiveTab('reserve')}
+            disabled={isGeneratingPDF}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
               activeTab === 'reserve'
                 ? 'border-primary text-primary'
@@ -987,6 +1122,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             type="button"
             variant="ghost"
             onClick={() => setActiveTab('audit')}
+            disabled={isGeneratingPDF}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
               activeTab === 'audit'
                 ? 'border-primary text-primary'
@@ -999,6 +1135,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
             type="button"
             variant="ghost"
             onClick={() => setActiveTab('history')}
+            disabled={isGeneratingPDF}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
               activeTab === 'history'
                 ? 'border-primary text-primary'

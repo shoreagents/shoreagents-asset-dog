@@ -76,3 +76,52 @@ export const parseDate = (dateString: string | null | undefined | number): Date 
   
   return isValid ? parsedDate : null
 }
+
+/**
+ * Formats a Date object as YYYY-MM-DD using UTC date components
+ * This prevents timezone shifts that occur with toISOString() or local date methods
+ * Prisma returns dates in UTC, so we must use UTC methods to extract the correct date
+ * Use this for date-only values from the database
+ */
+export const formatDateOnly = (date: Date | null | undefined): string | null => {
+  if (!date) return null
+  // Use UTC methods to avoid timezone shifts
+  // If database stores "2025-11-29", Prisma returns it as "2025-11-29T00:00:00.000Z"
+  // Using local methods in UTC+8 would give us 2025-11-28, so we use UTC methods
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Parses an ISO date string and returns YYYY-MM-DD using local date components
+ * This prevents timezone shifts when converting UTC dates to local dates
+ */
+export const parseISOToDateOnly = (isoString: string | null | undefined): string | null => {
+  if (!isoString) return null
+  const date = new Date(isoString)
+  return formatDateOnly(date)
+}
+
+/**
+ * Safely parses a YYYY-MM-DD date string to a Date object in local timezone
+ * This prevents timezone shifts when parsing date-only strings
+ * Use this when you have a YYYY-MM-DD string and need a Date object for display
+ */
+export const parseDateOnlyString = (dateString: string | null | undefined): Date | null => {
+  if (!dateString) return null
+  
+  // Check if it's already in YYYY-MM-DD format
+  const yyyymmddMatch = dateString.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (yyyymmddMatch) {
+    const [, year, month, day] = yyyymmddMatch
+    // Create date in local timezone to avoid timezone shifts
+    // This ensures "2025-11-29" displays as Nov 29, not Nov 28
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+  }
+  
+  // Fallback to regular Date parsing for other formats
+  const date = new Date(dateString)
+  return isNaN(date.getTime()) ? null : date
+}

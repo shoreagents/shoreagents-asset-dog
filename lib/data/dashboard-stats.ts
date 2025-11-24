@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { retryDbOperation } from '@/lib/db-utils'
 import { getCached, setCached } from '@/lib/cache-utils'
+import { formatDateOnly } from '@/lib/date-utils'
 
 export type DashboardStats = {
   assetValueByCategory: Array<{ name: string; value: number }>
@@ -352,13 +353,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       calendar: {
         leasesExpiring: leasesExpiring.map((lease) => ({
           id: lease.id,
-          leaseEndDate: lease.leaseEndDate?.toISOString() || null,
+          leaseEndDate: formatDateOnly(lease.leaseEndDate) || null,
           lessee: lease.lessee,
           asset: lease.asset,
         })),
         maintenanceDue: maintenanceDue.map((maintenance) => ({
           id: maintenance.id,
-          dueDate: maintenance.dueDate?.toISOString() || null,
+          dueDate: formatDateOnly(maintenance.dueDate) || null,
           title: maintenance.title,
           asset: maintenance.asset,
         })),

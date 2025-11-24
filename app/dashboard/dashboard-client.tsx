@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import { parseDateOnlyString } from '@/lib/date-utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -330,15 +331,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               
               data?.calendar.leasesExpiring.forEach((lease) => {
                 if (lease.leaseEndDate) {
-                  const date = new Date(lease.leaseEndDate)
-                  leaseDates.add(date.toISOString().split('T')[0])
+                  // leaseEndDate is already in YYYY-MM-DD format from server
+                  leaseDates.add(lease.leaseEndDate)
                 }
               })
               
               data?.calendar.maintenanceDue.forEach((maintenance) => {
                 if (maintenance.dueDate) {
-                  const date = new Date(maintenance.dueDate)
-                  maintenanceDates.add(date.toISOString().split('T')[0])
+                  // dueDate is already in YYYY-MM-DD format from server
+                  maintenanceDates.add(maintenance.dueDate)
                 }
               })
 
@@ -347,7 +348,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               
               data?.calendar.leasesExpiring.forEach((lease) => {
                 if (lease.leaseEndDate) {
-                  const dateStr = lease.leaseEndDate.split('T')[0]
+                  // leaseEndDate is already in YYYY-MM-DD format from server
+                  const dateStr = lease.leaseEndDate
                   if (!eventsByDate.has(dateStr)) {
                     eventsByDate.set(dateStr, [])
                   }
@@ -361,7 +363,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               
               data?.calendar.maintenanceDue.forEach((maintenance) => {
                 if (maintenance.dueDate) {
-                  const dateStr = maintenance.dueDate.split('T')[0]
+                  // dueDate is already in YYYY-MM-DD format from server
+                  const dateStr = maintenance.dueDate
                   if (!eventsByDate.has(dateStr)) {
                     eventsByDate.set(dateStr, [])
                   }
@@ -377,7 +380,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
               // If a date is selected, show day view
               if (selectedDate) {
-                const dateStr = selectedDate.toISOString().split('T')[0]
+                // Format date as YYYY-MM-DD using local date components to avoid timezone shifts
+                const year = selectedDate.getFullYear()
+                const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
+                const day = String(selectedDate.getDate()).padStart(2, '0')
+                const dateStr = `${year}-${month}-${day}`
                 const dayEvents = eventsByDate.get(dateStr) || []
                 
                 return (
@@ -569,7 +576,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                           const allDays = [...trailingDays, ...currentMonthDays, ...nextMonthDays]
                           
                           return allDays.map((date, idx) => {
-                            const dateStr = date.toISOString().split('T')[0]
+                            // Format date as YYYY-MM-DD using local date components to avoid timezone shifts
+                            // Calendar dates are created in local timezone, so we use local methods
+                            const year = date.getFullYear()
+                            const month = String(date.getMonth() + 1).padStart(2, '0')
+                            const day = String(date.getDate()).padStart(2, '0')
+                            const dateStr = `${year}-${month}-${day}`
                             const events = eventsByDate.get(dateStr) || []
                             const isToday = format(date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')
                             const isCurrentMonth = date.getMonth() === currentMonth.getMonth()
@@ -854,7 +866,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                                   <TableCell>{maintenance.asset.description}</TableCell>
                                   <TableCell>
                                     {maintenance.dueDate
-                                      ? format(new Date(maintenance.dueDate), 'MMM dd, yyyy')
+                                      ? format(parseDateOnlyString(maintenance.dueDate) || new Date(), 'MMM dd, yyyy')
                                       : 'N/A'}
                                   </TableCell>
                                   <TableCell>

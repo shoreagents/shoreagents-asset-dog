@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import puppeteer from 'puppeteer-core'
-import chromium from '@sparticuz/chromium-min'
+import chromium from '@sparticuz/chromium'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
@@ -398,7 +398,7 @@ export async function POST(
         } catch (chromiumError) {
           const chromiumErrorMsg = chromiumError instanceof Error ? chromiumError.message : 'Unknown error'
           console.error('Failed to get Chromium executable path:', chromiumErrorMsg)
-          throw new Error(`Chromium executable path failed: ${chromiumErrorMsg}. Make sure @sparticuz/chromium-min is properly installed.`)
+          throw new Error(`Chromium executable path failed: ${chromiumErrorMsg}. Make sure @sparticuz/chromium is properly installed.`)
         }
       } else {
         executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined

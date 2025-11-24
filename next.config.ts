@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
     removeConsole: false, // Allow console.log, console.error, etc. in production
   },
 
-  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium-min"],
+  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
   
   // Image optimization
   images: {

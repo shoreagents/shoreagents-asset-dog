@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { retryDbOperation } from '@/lib/db-utils'
 
 export async function POST(request: Request) {
   try {
@@ -50,30 +49,31 @@ export async function POST(request: Request) {
     // Check if user account is active
     if (data.user) {
       try {
-        const assetUser = await retryDbOperation(() => 
-          prisma.assetUser.findUnique({
-        where: { userId: data.user.id },
-        select: { isActive: true },
-      })
-        )
+        // Simple query - no retry needed if connection is configured correctly
+        // If this fails, it's likely a configuration issue, not a transient error
+        const assetUser = await prisma.assetUser.findUnique({
+          where: { userId: data.user.id },
+          select: { isActive: true },
+        })
 
-      if (assetUser && !assetUser.isActive) {
-        // Sign out the user from Supabase session to prevent any access
-        await supabase.auth.signOut()
-        return NextResponse.json(
-          { 
-            error: 'Your account has been deactivated. Please contact your administrator.',
-            requiresApproval: true,
-            isActive: false,
-          },
-          { status: 403 }
-        )
+        if (assetUser && !assetUser.isActive) {
+          // Sign out the user from Supabase session to prevent any access
+          await supabase.auth.signOut()
+          return NextResponse.json(
+            { 
+              error: 'Your account has been deactivated. Please contact your administrator.',
+              requiresApproval: true,
+              isActive: false,
+            },
+            { status: 403 }
+          )
         }
       } catch (dbError) {
         console.error('[LOGIN API] Database error (non-blocking):', dbError)
-        // If database query fails after retries, log but don't block login
+        // If database query fails, log but don't block login
         // User exists in Supabase, so allow login
         // This prevents database issues from blocking authentication
+        // NOTE: If you're seeing persistent errors here, check your DATABASE_URL configuration
       }
     }
 

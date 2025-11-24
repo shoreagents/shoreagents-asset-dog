@@ -390,16 +390,42 @@ export async function POST(
     try {
       if (isProduction) {
         // Production: Use puppeteer-core with @sparticuz/chromium for Vercel
+        // Note: This requires @sparticuz/chromium to be properly installed with all its files
         try {
+          // Get chromium executable path
+          // This may fail if brotli files are missing - that's a deployment configuration issue
+          const executablePath = await chromium.executablePath()
+          
           browser = await puppeteerCore.launch({
-            args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
+            args: [
+              ...chromium.args,
+              '--hide-scrollbars',
+              '--disable-web-security',
+              '--disable-dev-shm-usage',
+              '--disable-software-rasterizer',
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-gpu',
+              '--single-process',
+            ],
             defaultViewport: { width: 794, height: 1123 },
-            executablePath: await chromium.executablePath(),
+            executablePath,
             headless: true,
           })
         } catch (error) {
           console.error('Failed to launch Chromium in production:', error)
-          throw new Error(`Failed to generate PDF: Chromium initialization failed - ${error instanceof Error ? error.message : 'Unknown error'}`)
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+          
+          // Provide helpful error message for brotli files issue
+          if (errorMsg.includes('brotli') || errorMsg.includes('does not exist') || errorMsg.includes('input directory')) {
+            throw new Error(
+              'Chromium deployment configuration issue: The @sparticuz/chromium package is missing required files. ' +
+              'This typically happens when the package files are not properly included in the Vercel deployment. ' +
+              'Please ensure @sparticuz/chromium is listed in package.json dependencies and that all files are included in the build.'
+            )
+          }
+          
+          throw new Error(`Failed to generate PDF: Chromium initialization failed - ${errorMsg}`)
         }
       } else {
         // Development: Use full puppeteer package (includes bundled Chromium)

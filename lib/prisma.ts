@@ -1,72 +1,99 @@
 import { PrismaClient } from '@prisma/client'
 
+// Next.js 16 compatible singleton pattern
+// Prevents multiple Prisma instances in development (especially with Turbo/HMR)
 const globalForPrisma = globalThis as unknown as {
-  prisma?: PrismaClient
+  prisma: PrismaClient | undefined
 }
 
-// Disable prepared statements to avoid "prepared statement already exists" error
-// This happens with PgBouncer/connection pooling and dev HMR
-function makeConnectionUrl() {
+/**
+ * Validates and fixes DATABASE_URL configuration
+ * - Detects if using pooler URL with wrong port (5432 should be 6543)
+ * - Configures connection parameters for Supabase
+ */
+function makeConnectionUrl(): string {
   const url = process.env.DATABASE_URL || ''
   if (!url) {
     console.error('[PRISMA] DATABASE_URL is not set')
-    return url
+    throw new Error('DATABASE_URL environment variable is required')
   }
   
   try {
     const urlObj = new URL(url)
+    const hostname = urlObj.hostname
+    const port = urlObj.port || (urlObj.protocol === 'postgresql:' ? '5432' : '')
     
-    // Add pgbouncer=true to disable prepared statements (for Supabase pooler)
-    urlObj.searchParams.set('pgbouncer', 'true')
+    // CRITICAL FIX: Supabase pooler uses port 6543, not 5432
+    // If using pooler URL but wrong port, fix it
+    if (hostname.includes('pooler.supabase.com') && port === '5432') {
+      console.warn('[PRISMA] ⚠️  Detected pooler URL with wrong port (5432). Fixing to 6543...')
+      urlObj.port = '6543'
+    }
     
-    // Add connection timeout settings if not already present
-    // Increased timeout to handle connection pool exhaustion and network issues better
+    // For Supabase pooler (port 6543), disable prepared statements
+    // For direct connection (port 5432), prepared statements are fine
+    const isPooler = hostname.includes('pooler.supabase.com') || port === '6543'
+    
+    if (isPooler) {
+      urlObj.searchParams.set('pgbouncer', 'true')
+      // Disable statement cache for pooler
+      if (!urlObj.searchParams.has('statement_cache_size')) {
+        urlObj.searchParams.set('statement_cache_size', '0')
+      }
+    }
+    
+    // Connection timeout settings
     if (!urlObj.searchParams.has('connect_timeout')) {
-      urlObj.searchParams.set('connect_timeout', '30')
-    }
-    if (!urlObj.searchParams.has('pool_timeout')) {
-      urlObj.searchParams.set('pool_timeout', '30')
+      urlObj.searchParams.set('connect_timeout', '10') // Reduced from 30 - fail fast
     }
     
-    // Add statement cache size for better connection pool handling
-    if (!urlObj.searchParams.has('statement_cache_size')) {
-      urlObj.searchParams.set('statement_cache_size', '0')
-    }
-    
-    // Add connection pool settings for better handling of concurrent requests
-    // These help Prisma manage connections more efficiently with Supabase pooler
+    // Connection pool settings
+    // Supabase pooler: 15-20 connections max
+    // Direct connection: Can use more, but keep reasonable
     if (!urlObj.searchParams.has('connection_limit')) {
-      // Increase limit for production workloads
-      // Supabase pooler supports 15-20 connections, use 15 for production, 10 for dev
-      const limit = process.env.NODE_ENV === 'production' ? '15' : '10'
+      const limit = isPooler 
+        ? (process.env.NODE_ENV === 'production' ? '15' : '10')
+        : (process.env.NODE_ENV === 'production' ? '20' : '15')
       urlObj.searchParams.set('connection_limit', limit)
     }
     
-    return urlObj.toString()
+    const finalUrl = urlObj.toString()
+    
+    // Log connection type for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[PRISMA] Using ${isPooler ? 'pooler' : 'direct'} connection: ${hostname}:${urlObj.port}`)
+    }
+    
+    return finalUrl
   } catch (error) {
     console.error('[PRISMA] Invalid DATABASE_URL format:', error)
-    return url
+    throw new Error(`Invalid DATABASE_URL: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
-export const prisma =
+// Create Prisma client with proper Next.js 16 singleton pattern
+export const prisma: PrismaClient =
   globalForPrisma.prisma ??
   new PrismaClient({
-    // Reduced logging in development - P1001 connection errors are handled via retry logic
-    // Query/error logs are suppressed to reduce noise (errors are handled in API routes)
     log: process.env.NODE_ENV === 'development' 
-      ? ['warn']
-      : ['error', 'warn'],
+      ? ['warn', 'error']
+      : ['error'],
     datasources: {
       db: {
         url: makeConnectionUrl(),
       },
     },
-    // Optimize connection pool settings
-    // Increase connection timeout to handle pool exhaustion better
-    // Connection pool is managed by Supabase PgBouncer, but we can optimize client-side
   })
 
+// Store in global for Next.js 16 (works in both dev and prod)
+// This prevents multiple instances during HMR/Turbo rebuilds
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
+}
+
+// Graceful shutdown
+if (typeof process !== 'undefined') {
+  process.on('beforeExit', async () => {
+    await prisma.$disconnect()
+  })
 }

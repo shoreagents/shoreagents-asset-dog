@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import puppeteerCore from 'puppeteer-core'
-import puppeteer from 'puppeteer'
-import chromium from '@sparticuz/chromium'
+import chromium from '@sparticuz/chromium-min'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
@@ -381,64 +380,46 @@ export async function POST(
     `
 
     // Configure Chromium for Vercel/serverless environment
-    // In production: use puppeteer-core with @sparticuz/chromium (optimized for serverless)
-    // In development: use full puppeteer package (includes bundled Chromium)
-    const isProduction = process.env.NODE_ENV === 'production'
-    
-    let browser: Awaited<ReturnType<typeof puppeteerCore.launch>> | Awaited<ReturnType<typeof puppeteer.launch>> | null = null
+    // Use puppeteer-core with @sparticuz/chromium-min in both environments
+    let browser: Awaited<ReturnType<typeof puppeteerCore.launch>> | null = null
     
     try {
-      if (isProduction) {
-        // Production: Use puppeteer-core with @sparticuz/chromium for Vercel
-        // Note: This requires @sparticuz/chromium to be properly installed with all its files
-        try {
-          // Get chromium executable path
-          // This may fail if brotli files are missing - that's a deployment configuration issue
-          const executablePath = await chromium.executablePath()
-          
-          browser = await puppeteerCore.launch({
-            args: [
-              ...chromium.args,
-              '--hide-scrollbars',
-              '--disable-web-security',
-              '--disable-dev-shm-usage',
-              '--disable-software-rasterizer',
-              '--no-sandbox',
-              '--disable-setuid-sandbox',
-              '--disable-gpu',
-              '--single-process',
-            ],
-            defaultViewport: { width: 794, height: 1123 },
-            executablePath,
-            headless: true,
-          })
-        } catch (error) {
-          console.error('Failed to launch Chromium in production:', error)
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-          
-          // Provide helpful error message for brotli files issue
-          if (errorMsg.includes('brotli') || errorMsg.includes('does not exist') || errorMsg.includes('input directory')) {
-            throw new Error(
-              'Chromium deployment configuration issue: The @sparticuz/chromium package is missing required files. ' +
-              'This typically happens when the package files are not properly included in the Vercel deployment. ' +
-              'Please ensure @sparticuz/chromium is listed in package.json dependencies and that all files are included in the build.'
-            )
-          }
-          
-          throw new Error(`Failed to generate PDF: Chromium initialization failed - ${errorMsg}`)
+      // Use puppeteer-core with @sparticuz/chromium-min for both production and development
+      try {
+        // Get chromium executable path
+        // This may fail if brotli files are missing - that's a deployment configuration issue
+        const executablePath = await chromium.executablePath()
+        
+        browser = await puppeteerCore.launch({
+          args: [
+            ...chromium.args,
+            '--hide-scrollbars',
+            '--disable-web-security',
+            '--disable-dev-shm-usage',
+            '--disable-software-rasterizer',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-gpu',
+            '--single-process',
+          ],
+          defaultViewport: { width: 794, height: 1123 },
+          executablePath,
+          headless: true,
+        })
+      } catch (error) {
+        console.error('Failed to launch Chromium:', error)
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+        
+        // Provide helpful error message for brotli files issue
+        if (errorMsg.includes('brotli') || errorMsg.includes('does not exist') || errorMsg.includes('input directory')) {
+          throw new Error(
+            'Chromium deployment configuration issue: The @sparticuz/chromium-min package is missing required files. ' +
+            'This typically happens when the package files are not properly included in the Vercel deployment. ' +
+            'Please ensure @sparticuz/chromium-min is listed in package.json dependencies and that all files are included in the build.'
+          )
         }
-      } else {
-        // Development: Use full puppeteer package (includes bundled Chromium)
-        try {
-          browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars', '--disable-web-security'],
-            defaultViewport: { width: 794, height: 1123 },
-          })
-        } catch (error) {
-          console.error('Failed to launch Puppeteer in development:', error)
-          throw new Error(`Failed to generate PDF: Browser initialization failed - ${error instanceof Error ? error.message : 'Unknown error'}`)
-        }
+        
+        throw new Error(`Failed to generate PDF: Chromium initialization failed - ${errorMsg}`)
       }
       
       if (!browser) {

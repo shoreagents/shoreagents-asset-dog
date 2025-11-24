@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useTransition, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { FileText, ClipboardList, Search, X, RefreshCw, ArrowLeft, ArrowRight, Eye } from "lucide-react"
+import { FileText, ClipboardList, Search, X, RefreshCw, ArrowLeft, ArrowRight, Eye, MoreHorizontal, Trash2 } from "lucide-react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePermissions } from "@/hooks/use-permissions"
 import { Spinner } from "@/components/ui/shadcn-io/spinner"
@@ -31,6 +31,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog"
+import { toast } from "sonner"
+import { useMutation } from "@tanstack/react-query"
 
 interface ReturnForm {
   id: string
@@ -80,7 +90,7 @@ async function fetchForms(
   search?: string,
   searchType: string = "unified",
   page: number = 1,
-  pageSize: number = 100
+  pageSize: number = 50
 ): Promise<{
   returnForms?: ReturnForm[]
   accountabilityForms?: AccountabilityForm[]
@@ -113,10 +123,12 @@ function FormsHistoryPageContent() {
 
   const canViewReturnForms = hasPermission("canViewReturnForms")
   const canViewAccountabilityForms = hasPermission("canViewAccountabilityForms")
+  const canManageReturnForms = hasPermission("canManageReturnForms")
+  const canManageAccountabilityForms = hasPermission("canManageAccountabilityForms")
 
   // Get page, pageSize, and search from URL
   const page = parseInt(searchParams.get("page") || "1", 10)
-  const pageSize = parseInt(searchParams.get("pageSize") || "100", 10)
+  const pageSize = parseInt(searchParams.get("pageSize") || "50", 10)
   const activeTab = (searchParams.get("tab") as "accountability" | "return") || "accountability"
 
   // Separate states for search input (immediate UI) and search query (debounced API calls)
@@ -126,6 +138,8 @@ function FormsHistoryPageContent() {
     (searchParams.get("searchType") as "unified" | "employee" | "department" | "formNo") || "unified"
   )
   const [isManualRefresh, setIsManualRefresh] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [formToDelete, setFormToDelete] = useState<{ id: string; type: "accountability" | "return"; name: string } | null>(null)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSearchQueryRef = useRef<string>(searchParams.get("search") || "")
   const previousSearchInputRef = useRef<string>(searchParams.get("search") || "")
@@ -150,7 +164,7 @@ function FormsHistoryPageContent() {
       }
 
       if (updates.pageSize !== undefined) {
-        if (updates.pageSize === 100) {
+        if (updates.pageSize === 50) {
           params.delete("pageSize")
         } else {
           params.set("pageSize", updates.pageSize.toString())
@@ -268,6 +282,44 @@ function FormsHistoryPageContent() {
   useEffect(() => {
     lastSearchQueryRef.current = searchQuery
   }, [searchQuery])
+
+  // Delete form mutation
+  const deleteFormMutation = useMutation({
+    mutationFn: async ({ id, type }: { id: string; type: "accountability" | "return" }) => {
+      const response = await fetch(`/api/forms/history/${id}?type=${type}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to delete form")
+      }
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["forms-history"] })
+      toast.success("Form deleted successfully")
+      setDeleteDialogOpen(false)
+      setFormToDelete(null)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to delete form")
+    },
+  })
+
+  const handleDeleteClick = (form: ReturnForm | AccountabilityForm, type: "accountability" | "return") => {
+    const formName = type === "accountability"
+      ? (form as AccountabilityForm).accountabilityFormNo || `Accountability Form - ${(form as AccountabilityForm).employeeUser.name}`
+      : (form as ReturnForm).ctrlNo || `Return Form - ${(form as ReturnForm).employeeUser.name}`
+    
+    setFormToDelete({ id: form.id, type, name: formName })
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = () => {
+    if (formToDelete) {
+      deleteFormMutation.mutate({ id: formToDelete.id, type: formToDelete.type })
+    }
+  }
 
   const returnForms = data?.returnForms || []
   const accountabilityForms = data?.accountabilityForms || []
@@ -528,11 +580,34 @@ function FormsHistoryPageContent() {
                                   )}
                                 </TableCell>
                                 <TableCell className="text-sm sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50">
-                                  <Link href={`/forms/history/${form.id}?type=accountability`}>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
-                                  </Link>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem asChild>
+                                        <Link href={`/forms/history/${form.id}?type=accountability`} className="flex items-center cursor-pointer">
+                                          <Eye className="mr-2 h-4 w-4" />
+                                          View
+                                        </Link>
+                                      </DropdownMenuItem>
+                                      {canManageAccountabilityForms && (
+                                        <>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            variant="destructive"
+                                            onClick={() => handleDeleteClick(form, "accountability")}
+                                            className="cursor-pointer"
+                                          >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </TableCell>
                               </>
                             ) : (
@@ -573,19 +648,48 @@ function FormsHistoryPageContent() {
                                     variant={
                                       (form as ReturnForm).returnType === "Resigned Staff"
                                         ? "destructive"
+                                        : (form as ReturnForm).returnType === "Return to Office, Resigned Staff"
+                                        ? "secondary"
                                         : "default"
                                     }
-                                    className="text-xs"
+                                    className={`text-xs ${
+                                      (form as ReturnForm).returnType === "Return to Office, Resigned Staff"
+                                        ? "bg-orange-500 text-white hover:bg-orange-600"
+                                        : ""
+                                    }`}
                                   >
                                     {(form as ReturnForm).returnType}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-sm sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50">
-                                  <Link href={`/forms/history/${form.id}?type=return`}>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
-                                  </Link>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem asChild>
+                                        <Link href={`/forms/history/${form.id}?type=return`} className="flex items-center cursor-pointer">
+                                          <Eye className="mr-2 h-4 w-4" />
+                                          View
+                                        </Link>
+                                      </DropdownMenuItem>
+                                      {canManageReturnForms && (
+                                        <>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            variant="destructive"
+                                            onClick={() => handleDeleteClick(form, "return")}
+                                            className="cursor-pointer"
+                                          >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </TableCell>
                               </>
                             )}
@@ -650,10 +754,10 @@ function FormsHistoryPageContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="25">25 rows</SelectItem>
+                  <SelectItem value="50">50 rows</SelectItem>
                   <SelectItem value="100">100 rows</SelectItem>
                   <SelectItem value="200">200 rows</SelectItem>
-                  <SelectItem value="300">300 rows</SelectItem>
-                  <SelectItem value="400">400 rows</SelectItem>
                   <SelectItem value="500">500 rows</SelectItem>
                 </SelectContent>
               </Select>
@@ -672,6 +776,20 @@ function FormsHistoryPageContent() {
           </div>
         </div>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Form"
+        description={formToDelete ? `Are you sure you want to delete "${formToDelete.name}"? This action cannot be undone.` : undefined}
+        itemName={formToDelete?.name}
+        isLoading={deleteFormMutation.isPending}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        loadingLabel="Deleting..."
+      />
     </div>
   )
 }

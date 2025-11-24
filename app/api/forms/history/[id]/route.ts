@@ -48,7 +48,10 @@ export async function GET(
       )
 
       if (!returnForm) {
-        return NextResponse.json({ error: "Return form not found" }, { status: 404 })
+        return NextResponse.json(
+          { error: "Return form not found" },
+          { status: 404 }
+        )
       }
 
       // Parse form data
@@ -127,7 +130,10 @@ export async function GET(
       )
 
       if (!accountabilityForm) {
-        return NextResponse.json({ error: "Accountability form not found" }, { status: 404 })
+        return NextResponse.json(
+          { error: "Accountability form not found" },
+          { status: 404 }
+        )
       }
 
       // Parse form data
@@ -204,3 +210,87 @@ export async function GET(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await verifyAuth()
+  if (auth.error) return auth.error
+
+  try {
+    const resolvedParams = await params
+    const { searchParams } = new URL(request.url)
+    const formType = searchParams.get("type") || "accountability" // "accountability" or "return"
+
+    // Check permissions based on form type
+    if (formType === "return") {
+      const permissionCheck = await requirePermission("canManageReturnForms")
+      if (!permissionCheck.allowed && permissionCheck.error) {
+        return permissionCheck.error
+      }
+    } else {
+      const permissionCheck = await requirePermission("canManageAccountabilityForms")
+      if (!permissionCheck.allowed && permissionCheck.error) {
+        return permissionCheck.error
+      }
+    }
+
+    if (formType === "return") {
+      // Check if form exists
+      const returnForm = await retryDbOperation(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma as any).returnForm.findUnique({
+          where: { id: resolvedParams.id },
+        })
+      )
+
+      if (!returnForm) {
+        return NextResponse.json(
+          { error: "Return form not found" },
+          { status: 404 }
+        )
+      }
+
+      // Delete the form
+      await retryDbOperation(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma as any).returnForm.delete({
+          where: { id: resolvedParams.id },
+        })
+      )
+
+      return NextResponse.json({ message: "Return form deleted successfully" })
+    } else {
+      // Check if form exists
+      const accountabilityForm = await retryDbOperation(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma as any).accountabilityForm.findUnique({
+          where: { id: resolvedParams.id },
+        })
+      )
+
+      if (!accountabilityForm) {
+        return NextResponse.json(
+          { error: "Accountability form not found" },
+          { status: 404 }
+        )
+      }
+
+      // Delete the form
+      await retryDbOperation(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prisma as any).accountabilityForm.delete({
+          where: { id: resolvedParams.id },
+        })
+      )
+
+      return NextResponse.json({ message: "Accountability form deleted successfully" })
+    }
+  } catch (error) {
+    console.error("Error deleting form:", error)
+    return NextResponse.json(
+      { error: "Failed to delete form" },
+      { status: 500 }
+    )
+  }
+}

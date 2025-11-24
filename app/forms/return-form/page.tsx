@@ -826,7 +826,7 @@ export default function ReturnFormPage() {
             }
           })
 
-          xhr.addEventListener('load', () => {
+          xhr.addEventListener('load', async () => {
             // Clear progress interval if still running
             if (progressInterval) {
               clearInterval(progressInterval)
@@ -848,6 +848,64 @@ export default function ReturnFormPage() {
                 window.URL.revokeObjectURL(url)
 
                 toast.success('PDF downloaded successfully', { id: 'pdf-generation' })
+
+                // Save form data to database after PDF is successfully downloaded
+                try {
+                  // Determine return type based on both checkboxes
+                  let returnType = 'Return to Office' // default
+                  if (returnToOffice && resignedStaff) {
+                    returnType = 'Return to Office, Resigned Staff'
+                  } else if (resignedStaff) {
+                    returnType = 'Resigned Staff'
+                  } else if (returnToOffice) {
+                    returnType = 'Return to Office'
+                  }
+                  
+                  const formData = {
+                    returnDate,
+                    position,
+                    returnToOffice,
+                    resignedStaff,
+                    controlNumber,
+                    returnerSignature,
+                    returnerDate,
+                    itSignature,
+                    itDate,
+                    selectedAssets: selectedAssets.map(asset => ({
+                      id: asset.id,
+                      assetTagId: asset.assetTagId,
+                      description: asset.description,
+                      quantity: asset.quantity,
+                      condition: asset.condition,
+                    })),
+                  }
+
+                  const saveResponse = await fetch('/api/forms/return-form', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      employeeUserId: selectedEmployeeId,
+                      dateReturned: returnDate,
+                      department: selectedEmployee?.department || null,
+                      ctrlNo: controlNumber || null,
+                      returnType,
+                      formData,
+                    }),
+                  })
+
+                  if (!saveResponse.ok) {
+                    const error = await saveResponse.json()
+                    console.error('Failed to save return form:', error)
+                    toast.error('PDF downloaded but failed to save form history', { id: 'form-save' })
+                  } else {
+                    toast.success('Form saved successfully', { id: 'form-save' })
+                  }
+                } catch (saveError) {
+                  console.error('Error saving return form:', saveError)
+                  toast.error('PDF downloaded but failed to save form history', { id: 'form-save' })
+                }
 
                 resolve()
               } catch (error) {
@@ -919,64 +977,6 @@ export default function ReturnFormPage() {
           reject(error)
         }
       })
-      
-      // Save form data to database after PDF is downloaded
-      try {
-        await new Promise<void>((resolve) => {
-          // Wait a bit to ensure PDF download completes
-          setTimeout(async () => {
-            try {
-              const returnType = resignedStaff ? 'Resigned Staff' : 'Return to Office'
-              const formData = {
-                returnDate,
-                position,
-                returnToOffice,
-                resignedStaff,
-                controlNumber,
-                returnerSignature,
-                returnerDate,
-                itSignature,
-                itDate,
-                selectedAssets: selectedAssets.map(asset => ({
-                  id: asset.id,
-                  assetTagId: asset.assetTagId,
-                  description: asset.description,
-                  quantity: asset.quantity,
-                  condition: asset.condition,
-                })),
-              }
-
-              const saveResponse = await fetch('/api/forms/return-form', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  employeeUserId: selectedEmployeeId,
-                  dateReturned: returnDate,
-                  department: selectedEmployee?.department || null,
-                  ctrlNo: controlNumber || null,
-                  returnType,
-                  formData,
-                }),
-              })
-
-              if (!saveResponse.ok) {
-                const error = await saveResponse.json()
-                console.error('Failed to save return form:', error)
-                // Don't show error to user since PDF was already downloaded successfully
-              }
-            } catch (saveError) {
-              console.error('Error saving return form:', saveError)
-              // Don't show error to user since PDF was already downloaded successfully
-            }
-            resolve()
-          }, 100)
-        })
-      } catch (saveError) {
-        console.error('Error saving return form:', saveError)
-        // Don't show error to user since PDF was already downloaded successfully
-      }
     } catch (error) {
       console.error('Error generating PDF:', error)
       toast.error(`Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'pdf-generation' })

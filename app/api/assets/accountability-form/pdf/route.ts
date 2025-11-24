@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import puppeteer from 'puppeteer-core'
-import chromium from '@sparticuz/chromium'
-
-// Cache Chromium executable path to avoid re-downloading on subsequent requests
-let cachedExecutablePath: string | null = null
+import puppeteer from 'puppeteer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,69 +21,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Launch Puppeteer with Chromium for Vercel
-    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
-    
-    let browser
-    try {
-      let executablePath: string | undefined
-      
-      if (isVercel) {
-        try {
-          // Use cached path if available, otherwise get it and cache it
-          if (cachedExecutablePath) {
-            executablePath = cachedExecutablePath
-            console.log('Using cached Chromium executable path')
-          } else {
-            executablePath = await chromium.executablePath()
-            // Validate executablePath is not undefined or empty
-            if (!executablePath || executablePath.trim() === '') {
-              throw new Error('chromium.executablePath() returned empty or undefined')
-            }
-            cachedExecutablePath = executablePath
-            console.log('Chromium executable path obtained and cached')
-          }
-        } catch (chromiumError) {
-          const chromiumErrorMsg = chromiumError instanceof Error ? chromiumError.message : 'Unknown error'
-          console.error('Failed to get Chromium executable path:', chromiumErrorMsg)
-          throw new Error(`Chromium executable path failed: ${chromiumErrorMsg}. Make sure @sparticuz/chromium is properly installed.`)
-        }
-      } else {
-        executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-      }
-      
-      // Final validation: ensure executablePath is valid before launching
-      if (isVercel && (!executablePath || executablePath.trim() === '')) {
-        throw new Error('Chromium executable path is required on Vercel but was not obtained')
-      }
-      
-      console.log('Launching browser:', {
-        isVercel,
-        hasExecutablePath: !!executablePath,
-        executablePath: executablePath ? executablePath.substring(0, 50) + '...' : 'none',
-      })
-      
-      browser = await puppeteer.launch({
-        args: isVercel
-          ? [
-              ...chromium.args,
-              '--hide-scrollbars',
-              '--disable-web-security',
-              '--disable-features=IsolateOrigins,site-per-process',
-              '--disable-gpu',
-              '--disable-dev-shm-usage',
-              '--disable-software-rasterizer',
-            ]
-          : ['--no-sandbox', '--disable-setuid-sandbox'],
-        defaultViewport: isVercel ? chromium.defaultViewport : undefined,
-        executablePath,
-        headless: isVercel ? chromium.headless : true,
-      })
-    } catch (browserError) {
-      const browserErrorMessage = browserError instanceof Error ? browserError.message : 'Unknown browser launch error'
-      console.error('Failed to launch browser:', browserErrorMessage)
-      throw new Error(`Browser launch failed: ${browserErrorMessage}`)
-    }
+    // Launch Puppeteer
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    })
 
     try {
       const page = await browser.newPage()
@@ -507,26 +445,8 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('Error generating PDF:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorStack = error instanceof Error ? error.stack : undefined
-    const errorName = error instanceof Error ? error.name : 'Error'
-    
-    console.error('Error details:', {
-      name: errorName,
-      message: errorMessage,
-      stack: errorStack,
-      isVercel: process.env.VERCEL === '1' || !!process.env.VERCEL_ENV,
-    })
-    
-    // Always include error details in response (for debugging in production)
     return NextResponse.json(
-      { 
-        error: 'Failed to generate PDF',
-        errorName,
-        message: errorMessage,
-        // Include stack in production for debugging (you can remove this later)
-        stack: errorStack,
-      },
+      { error: 'Failed to generate PDF', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

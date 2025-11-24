@@ -7,9 +7,9 @@
       "maxDuration": 30,
       "memory": 1024
     },
-    "app/api/**/pdf/route.ts": {
-      "maxDuration": 30,
-      "memory": 1024
+    "app/api/assets/**/pdf/route.ts": {
+      "maxDuration": 60,
+      "memory": 2048
     },
     "app/dashboard/**/*.tsx": {
       "maxDuration": 30,

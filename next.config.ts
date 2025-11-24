@@ -11,13 +11,6 @@ const nextConfig: NextConfig = {
   poweredByHeader: false, // Remove X-Powered-By header
   compress: true, // Enable gzip compression
   
-  // Keep console logs in production (for debugging)
-  compiler: {
-    removeConsole: false, // Allow console.log, console.error, etc. in production
-  },
-
-  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
-  
   // Image optimization
   images: {
     remotePatterns: [

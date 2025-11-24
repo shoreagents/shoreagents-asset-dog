@@ -1,12 +1,223 @@
 import { NextRequest, NextResponse } from 'next/server'
-import puppeteer from 'puppeteer-core'
-import chromium from '@sparticuz/chromium'
+import puppeteer from 'puppeteer'
+import puppeteerCore from 'puppeteer-core'
+import * as fs from 'fs'
+import * as path from 'path'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
 
-// Cache Chromium executable path to avoid re-downloading on subsequent requests
-let cachedExecutablePath: string | null = null
+// For Vercel/serverless, use lightweight Chromium
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let chromium: any = null
+if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    chromium = require('@sparticuz/chromium')
+    // Configure for serverless
+    if (chromium && typeof chromium.setGraphicsMode === 'function') {
+      chromium.setGraphicsMode(false)
+    }
+  } catch {
+    console.warn('⚠️ @sparticuz/chromium not available, will use regular puppeteer')
+  }
+}
+
+// Helper function to recursively find chrome executable in a directory
+function findChromeExecutable(dir: string, depth: number = 0): string | null {
+  if (depth > 4) return null // Limit recursion depth
+  
+  try {
+    if (!fs.existsSync(dir)) return null
+    
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+      
+      // Check if this is the chrome executable
+      if (entry.isFile() && (entry.name === 'chrome' || entry.name === 'chrome.exe')) {
+        // On Unix systems, check if it's executable
+        try {
+          if (process.platform !== 'win32') {
+            fs.accessSync(fullPath, fs.constants.X_OK)
+          }
+          return fullPath
+        } catch {
+          // Not executable or access check failed, continue searching
+          continue
+        }
+      }
+      
+      // Recursively search in subdirectories (skip hidden and node_modules)
+      if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        const found = findChromeExecutable(fullPath, depth + 1)
+        if (found) return found
+      }
+    }
+  } catch {
+    // Ignore errors and continue
+  }
+  
+  return null
+}
+
+// Helper function to get Chromium executable path
+async function getChromiumPath(): Promise<string | null> {
+  // For Vercel/serverless, use @sparticuz/chromium-min
+  if (chromium && (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)) {
+    try {
+      const chromiumPath = await chromium.executablePath()
+      if (chromiumPath && fs.existsSync(chromiumPath)) {
+        console.log('✅ Using @sparticuz/chromium-min for serverless:', chromiumPath)
+        return chromiumPath
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to get @sparticuz/chromium-min path:', e)
+    }
+  }
+
+  // On Windows, prioritize system Chrome over Puppeteer Chromium for better stability
+  if (process.platform === 'win32') {
+    const systemChromePaths = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe` : '',
+      process.env.PROGRAMFILES ? `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe` : '',
+      process.env['PROGRAMFILES(X86)'] ? `${process.env['PROGRAMFILES(X86)']}\\Google\\Chrome\\Application\\chrome.exe` : '',
+    ].filter(Boolean) as string[]
+    
+    for (const chromePath of systemChromePaths) {
+      if (fs.existsSync(chromePath)) {
+        console.log('✅ Using system Chrome (Windows):', chromePath)
+        return chromePath
+      }
+    }
+  }
+
+  try {
+    // Try to use Puppeteer's bundled Chromium
+    const puppeteerChromiumPath = puppeteer.executablePath()
+    if (puppeteerChromiumPath) {
+      // Check if the exact path exists
+      if (fs.existsSync(puppeteerChromiumPath)) {
+        console.log('✅ Using Puppeteer bundled Chromium (exact path):', puppeteerChromiumPath)
+        return puppeteerChromiumPath
+      }
+      
+      console.log('⚠️ Puppeteer path exists but file not found:', puppeteerChromiumPath)
+      console.log('🔍 Searching for chrome executable in parent directories...')
+      
+      // If the exact path doesn't exist, try to find chrome in the parent directory
+      const parentDir = path.dirname(puppeteerChromiumPath)
+      if (fs.existsSync(parentDir)) {
+        const found = findChromeExecutable(parentDir)
+        if (found) {
+          console.log('✅ Found Chrome in parent directory:', found)
+          return found
+        }
+      }
+      
+      // Try to find in the cache directory structure (Vercel/Linux)
+      const cacheBases = [
+        '/home/sbx_user1051/.cache/puppeteer', // Vercel default
+        path.join(process.env.HOME || '', '.cache', 'puppeteer'), // Linux home
+        '/tmp/.cache/puppeteer', // Alternative temp location
+      ]
+      
+      for (const cacheBase of cacheBases) {
+        if (cacheBase && fs.existsSync(cacheBase)) {
+          console.log('🔍 Searching in cache directory:', cacheBase)
+          const found = findChromeExecutable(cacheBase)
+          if (found) {
+            console.log('✅ Found Chrome in cache directory:', found)
+            return found
+          }
+        }
+      }
+      
+      // For Vercel, also try to find in node_modules/.cache
+      if (process.env.VERCEL) {
+        const nodeModulesCache = path.join(process.cwd(), 'node_modules', '.cache', 'puppeteer')
+        if (fs.existsSync(nodeModulesCache)) {
+          console.log('🔍 Searching in node_modules cache:', nodeModulesCache)
+          const found = findChromeExecutable(nodeModulesCache)
+          if (found) {
+            console.log('✅ Found Chrome in node_modules cache:', found)
+            return found
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Puppeteer bundled Chromium not found, trying alternatives...', e)
+  }
+
+  // Try environment variable
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
+    console.log('✅ Using CHROME_PATH:', process.env.CHROME_PATH)
+    return process.env.CHROME_PATH
+  }
+
+  // Try common system locations (prioritize system Chrome on Windows for stability)
+  const commonPaths = [
+    // Windows - try system Chrome first (more stable than Puppeteer Chromium)
+    ...(process.platform === 'win32' ? [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe` : '',
+      process.env.PROGRAMFILES ? `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe` : '',
+      process.env['PROGRAMFILES(X86)'] ? `${process.env['PROGRAMFILES(X86)']}\\Google\\Chrome\\Application\\chrome.exe` : '',
+    ].filter(Boolean) : []),
+    // Linux
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    // macOS
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  ]
+
+  for (const chromePath of commonPaths) {
+    if (chromePath && fs.existsSync(chromePath)) {
+      console.log('✅ Using system Chrome:', chromePath)
+      return chromePath
+    }
+  }
+
+  // Last resort: search in various cache directories
+  const lastResortPaths = [
+    '/home/sbx_user1051/.cache/puppeteer', // Vercel default
+    path.join(process.env.HOME || '', '.cache', 'puppeteer'), // Linux home
+    '/tmp/.cache/puppeteer', // Temp location
+  ]
+  
+  if (process.env.VERCEL) {
+    lastResortPaths.push(
+      path.join(process.cwd(), 'node_modules', '.cache', 'puppeteer'),
+      path.join('/tmp', 'puppeteer'),
+    )
+  }
+  
+  for (const cacheBase of lastResortPaths) {
+    if (cacheBase && fs.existsSync(cacheBase)) {
+      console.log('🔍 Last resort: searching in:', cacheBase)
+      const found = findChromeExecutable(cacheBase)
+      if (found) {
+        console.log('✅ Found Chrome in last resort search:', found)
+        return found
+      }
+    }
+  }
+
+  console.error('❌ Chrome/Chromium not found in any location')
+  console.error('❌ Platform:', process.platform)
+  console.error('❌ VERCEL:', process.env.VERCEL)
+  console.error('❌ Process cwd:', process.cwd())
+  console.error('❌ HOME:', process.env.HOME)
+
+  return null
+}
 
 // Format utilities
 const formatDate = (date: string | Date | null | undefined) => {
@@ -373,101 +584,228 @@ export async function POST(
       </html>
     `
 
-    // Launch Puppeteer with Chromium for Vercel
-    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
-    
-    let browser
-    try {
-      // On Vercel: use @sparticuz/chromium (required)
-      // Local dev: PUPPETEER_EXECUTABLE_PATH is optional - if not set, puppeteer-core will try to find Chrome/Chromium automatically
-      // You can set it in .env.local if you want to use a specific Chrome path, e.g.:
-      // PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
-      let executablePath: string | undefined
-      
-      if (isVercel) {
-        try {
-          // Use cached path if available, otherwise get it and cache it
-          if (cachedExecutablePath) {
-            executablePath = cachedExecutablePath
-            console.log('Using cached Chromium executable path')
-          } else {
-            // Retry mechanism for Chromium download (sometimes needs a moment)
-            let retries = 3
-            let lastError: Error | null = null
-            
-            while (retries > 0) {
-              try {
-                executablePath = await chromium.executablePath()
-                // Validate executablePath is not undefined or empty
-                if (!executablePath || executablePath.trim() === '') {
-                  throw new Error('chromium.executablePath() returned empty or undefined')
-                }
-                cachedExecutablePath = executablePath
-                console.log('Chromium executable path obtained and cached')
-                break
-              } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error))
-                retries--
-                if (retries > 0) {
-                  console.log(`Chromium download attempt failed, retrying... (${retries} attempts left)`)
-                  await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second before retry
-                }
-              }
-            }
-            
-            if (!executablePath || executablePath.trim() === '') {
-              throw lastError || new Error('Failed to get Chromium executable path after retries')
-            }
-          }
-        } catch (chromiumError) {
-          const chromiumErrorMsg = chromiumError instanceof Error ? chromiumError.message : 'Unknown error'
-          console.error('Failed to get Chromium executable path:', chromiumErrorMsg)
-          throw new Error(`Chromium executable path failed: ${chromiumErrorMsg}. Make sure @sparticuz/chromium is properly installed.`)
-        }
-      } else {
-        executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-      }
-      
-      // Final validation: ensure executablePath is valid before launching
-      if (isVercel && (!executablePath || executablePath.trim() === '')) {
-        throw new Error('Chromium executable path is required on Vercel but was not obtained')
-      }
-      
-      console.log('Launching browser:', {
-        isVercel,
-        hasExecutablePath: !!executablePath,
-        executablePath: executablePath ? executablePath.substring(0, 50) + '...' : 'none (will auto-detect)',
-      })
-      
-      browser = await puppeteer.launch({
-        args: isVercel
-          ? [
-              ...chromium.args,
-              '--hide-scrollbars',
-              '--disable-web-security',
-              '--disable-features=IsolateOrigins,site-per-process',
-              '--disable-gpu',
-              '--disable-dev-shm-usage',
-              '--disable-software-rasterizer',
-            ]
-          : ['--no-sandbox', '--disable-setuid-sandbox'],
-        defaultViewport: isVercel ? chromium.defaultViewport : undefined,
-        executablePath,
-        headless: isVercel ? chromium.headless : true,
-      })
-    } catch (browserError) {
-      const browserErrorMessage = browserError instanceof Error ? browserError.message : 'Unknown browser launch error'
-      const browserErrorStack = browserError instanceof Error ? browserError.stack : undefined
-      console.error('Failed to launch browser', {
-        message: browserErrorMessage,
-        stack: browserErrorStack,
-        isVercel,
-      })
-      throw new Error(`Browser launch failed: ${browserErrorMessage}`)
+    // Launch browser with optimized settings
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let browser: any = null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const launchOptions: any = {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+        // Windows-specific: Don't use --single-process as it can cause ECONNRESET
+        // Use it only for serverless environments (not Windows local dev)
+        ...(process.platform !== 'win32' && (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) 
+          ? ['--single-process'] 
+          : []),
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-breakpad',
+        '--disable-client-side-phishing-detection',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-domain-reliability',
+        '--disable-features=AudioServiceOutOfProcess',
+        '--disable-hang-monitor',
+        '--disable-ipc-flooding-protection',
+        '--disable-notifications',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-popup-blocking',
+        '--disable-print-preview',
+        '--disable-prompt-on-repost',
+        '--disable-renderer-backgrounding',
+        '--disable-speech-api',
+        '--disable-sync',
+        '--disable-translate',
+        '--disable-windows10-custom-titlebar',
+        '--metrics-recording-only',
+        '--mute-audio',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--no-zygote',
+        '--safebrowsing-disable-auto-update',
+        '--use-mock-keychain',
+      ],
+      timeout: 60000, // 60 second timeout for browser launch
     }
 
     try {
-      const page = await browser.newPage()
+      // Try to find Chromium executable
+      const chromiumPath = await getChromiumPath()
+      if (chromiumPath) {
+        launchOptions.executablePath = chromiumPath
+        console.log('✅ Using Chromium at:', chromiumPath)
+      } else {
+        // For Vercel, try to use Puppeteer's default path
+        try {
+          const defaultPath = puppeteer.executablePath()
+          if (defaultPath) {
+            launchOptions.executablePath = defaultPath
+            console.log('✅ Using Puppeteer default Chromium path:', defaultPath)
+          } else {
+            console.warn('⚠️ No Chromium found in default location')
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not get Puppeteer default path:', e)
+        }
+      }
+      
+      // Log the executable path being used for debugging
+      if (launchOptions.executablePath) {
+        console.log('📌 Final Chromium executable path:', launchOptions.executablePath)
+        console.log('📌 Path exists:', fs.existsSync(launchOptions.executablePath))
+        if (!fs.existsSync(launchOptions.executablePath)) {
+          console.error('❌ Chromium executable not found at specified path!')
+          console.error('❌ Attempting to find Chrome in cache directory...')
+          const windowsCacheBase = process.platform === 'win32' 
+            ? path.join(process.env.LOCALAPPDATA || process.env.USERPROFILE || '', '.cache', 'puppeteer')
+            : '/home/sbx_user1051/.cache/puppeteer'
+          
+          if (fs.existsSync(windowsCacheBase)) {
+            const found = findChromeExecutable(windowsCacheBase)
+            if (found) {
+              console.log('✅ Found Chrome in cache:', found)
+              launchOptions.executablePath = found
+            } else {
+              console.error('❌ Chrome not found in cache directory:', windowsCacheBase)
+            }
+          } else {
+            console.error('❌ Cache directory does not exist:', windowsCacheBase)
+          }
+        }
+      } else {
+        console.log('📌 No explicit executable path - using Puppeteer default')
+        try {
+          const defaultPath = puppeteer.executablePath()
+          console.log('📌 Puppeteer default path:', defaultPath)
+          if (defaultPath && fs.existsSync(defaultPath)) {
+            launchOptions.executablePath = defaultPath
+            console.log('✅ Using Puppeteer default path')
+          }
+        } catch (e) {
+          console.error('❌ Could not get Puppeteer default path:', e)
+        }
+      }
+
+      console.log('🚀 Launching browser with options:', {
+        executablePath: launchOptions.executablePath,
+        headless: launchOptions.headless,
+        argsCount: launchOptions.args?.length || 0,
+        platform: process.platform
+      })
+
+      // On Windows, verify the executable exists and is accessible
+      if (process.platform === 'win32' && launchOptions.executablePath) {
+        if (!fs.existsSync(launchOptions.executablePath)) {
+          throw new Error(`Chrome executable not found at: ${launchOptions.executablePath}`)
+        }
+        console.log('✅ Chrome executable verified on Windows')
+      }
+
+      // For Vercel/serverless, use puppeteer-core with @sparticuz/chromium
+      if (chromium && (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)) {
+        console.log('🌐 Using puppeteer-core with @sparticuz/chromium for serverless')
+        try {
+          // Get executable path - chromium handles extraction automatically
+          const chromiumPath = await chromium.executablePath()
+          console.log('📌 Chromium executable path:', chromiumPath)
+          
+          // Merge args - chromium provides optimized args for serverless
+          const chromiumArgs = chromium.args || []
+          launchOptions.args = [...chromiumArgs, ...launchOptions.args]
+          launchOptions.executablePath = chromiumPath
+          launchOptions.headless = chromium.headless !== false // Default to headless
+          
+          console.log('🚀 Launching with @sparticuz/chromium, args count:', launchOptions.args.length)
+          browser = await puppeteerCore.launch(launchOptions)
+          console.log('✅ Browser launched successfully (serverless)')
+        } catch (chromiumError) {
+          console.error('❌ Failed to launch with @sparticuz/chromium:', chromiumError)
+          // Fallback to regular puppeteer if chromium fails
+          throw chromiumError
+        }
+      } else {
+        // Launch with increased timeout for Windows
+        const launchTimeout = process.platform === 'win32' ? 90000 : 60000
+        launchOptions.timeout = launchTimeout
+
+        browser = await puppeteer.launch(launchOptions)
+        console.log('✅ Browser launched successfully')
+      }
+    } catch (launchError) {
+      console.error('❌ Failed to launch browser:', launchError)
+      console.error('❌ Launch error type:', typeof launchError)
+      console.error('❌ Launch error constructor:', launchError?.constructor?.name)
+      
+      // Extract error message more thoroughly
+      let errorMessage = 'Unknown error'
+      if (launchError instanceof Error) {
+        errorMessage = launchError.message || launchError.toString()
+      } else if (typeof launchError === 'string') {
+        errorMessage = launchError
+      } else if (launchError && typeof launchError === 'object') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        errorMessage = (launchError as any).message || 
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      (launchError as any).toString() || 
+                      JSON.stringify(launchError)
+      }
+      
+      const errorStack = launchError instanceof Error ? launchError.stack : undefined
+      
+      console.error('❌ Extracted error message:', errorMessage)
+      
+      // Try to provide more helpful error message
+      let hint = 'Puppeteer requires Chrome/Chromium. '
+      if (errorMessage.includes('ECONNRESET') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('read ECONNRESET')) {
+        hint = 'Chrome connection was reset - Chrome may have crashed during startup. '
+        if (process.platform === 'win32') {
+          hint += 'Solutions: 1) Close all Chrome/Chromium windows, 2) Check if Windows Defender/antivirus is blocking Chrome, 3) Restart your dev server, 4) Try using system Chrome instead (install Google Chrome browser).'
+        } else {
+          hint += 'Try: 1) Kill any existing Chrome processes (killall chrome), 2) Restart your dev server, 3) Try again.'
+        }
+      } else if (errorMessage.includes('executable') || 
+          errorMessage.includes('chrome') || 
+          errorMessage.includes('Could not find Chrome') ||
+          errorMessage.includes('Browser was not found')) {
+        if (process.env.VERCEL) {
+          hint += 'For Vercel deployments, add this to your package.json build script: "build": "npx puppeteer browsers install chrome && next build". Or set CHROME_PATH environment variable in Vercel dashboard.'
+        } else if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+          hint += 'For AWS Lambda, you need to bundle Chromium with your deployment or use a Lambda layer with Chromium.'
+        } else {
+          hint += 'For local development: 1) Install Google Chrome browser, OR 2) Run: npx puppeteer browsers install chrome, then restart your dev server.'
+        }
+      } else if (errorMessage.includes('timeout')) {
+        hint += 'Browser launch timed out. This might be due to system resource constraints.'
+      } else {
+        hint += 'Check server logs for more details.'
+      }
+      
+      return NextResponse.json(
+        { 
+          error: 'Failed to launch browser',
+          details: errorMessage,
+          hint: hint,
+          executablePath: launchOptions.executablePath || 'not set',
+          ...(process.env.NODE_ENV === 'development' && errorStack ? { stack: errorStack } : {})
+        },
+        { status: 500 }
+      )
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let page: any = null
+    try {
+      page = await browser.newPage()
 
       // Set viewport to A4 proportions
       await page.setViewport({
@@ -476,9 +814,12 @@ export async function POST(
         deviceScaleFactor: 2,
       })
 
+      console.log('📄 Setting page content...')
+
       // Set HTML content
       await page.setContent(html, {
         waitUntil: ['networkidle0', 'load', 'domcontentloaded'],
+        timeout: 60000, // Increased timeout
       })
 
       // Wait for images to load
@@ -496,7 +837,17 @@ export async function POST(
         )
       })
 
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Wait for fonts and images to load
+      try {
+        await page.evaluate(() => document.fonts.ready)
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        console.log('✅ Fonts and resources loaded')
+      } catch (waitError) {
+        console.warn('⚠️ Warning waiting for fonts:', waitError)
+        // Continue anyway
+      }
+
+      console.log('📄 Generating PDF...')
 
       // Generate PDF
       const pdfOptions: Parameters<typeof page.pdf>[0] = {
@@ -510,47 +861,66 @@ export async function POST(
         },
         preferCSSPageSize: false,
         displayHeaderFooter: false,
+        timeout: 60000, // 60 second timeout
       }
 
       await page.emulateMediaType('print')
       
-      const pdf = await page.pdf(pdfOptions)
+      const pdfData = await page.pdf(pdfOptions)
+      
+      // Convert Uint8Array to Buffer if needed
+      const pdfBuffer = Buffer.isBuffer(pdfData) ? pdfData : Buffer.from(pdfData)
+      
+      console.log('✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes')
 
-      await browser.close()
+      // Close browser
+      try {
+        await browser.close()
+        console.log('✅ Browser closed')
+      } catch (closeError) {
+        console.warn('⚠️ Warning closing browser:', closeError)
+      }
 
       const filename = `asset-details-${asset.assetTagId}-${new Date().toISOString().split('T')[0]}.pdf`
+      const sanitizedFileName = filename.replace(/[^a-zA-Z0-9._-]/g, '_')
       
-      return new NextResponse(Buffer.from(pdf), {
+      // Convert to Uint8Array for NextResponse compatibility
+      const pdfArray = Buffer.isBuffer(pdfBuffer) ? new Uint8Array(pdfBuffer) : pdfBuffer
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return new NextResponse(pdfArray as any, {
+        status: 200,
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Disposition': `attachment; filename="${sanitizedFileName}"; filename*=UTF-8''${encodeURIComponent(sanitizedFileName)}`,
+          'Content-Length': pdfBuffer.length.toString(),
+          'X-Content-Type-Options': 'nosniff',
         },
       })
-    } catch (error) {
-      await browser.close()
-      throw error
+    } catch (pageError) {
+      console.error('❌ Failed to create page or generate PDF:', pageError)
+      if (browser) {
+        try {
+          await browser.close()
+        } catch (closeError) {
+          console.error('❌ Error closing browser:', closeError)
+        }
+      }
+      throw pageError
     }
   } catch (error) {
-    console.error('Error generating PDF:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorStack = error instanceof Error ? error.stack : undefined
-    const errorName = error instanceof Error ? error.name : 'Error'
-    
-    console.error('Error details:', {
-      name: errorName,
-      message: errorMessage,
-      stack: errorStack,
-      isVercel: process.env.VERCEL === '1' || !!process.env.VERCEL_ENV,
+    console.error('❌ Error generating PDF:', error)
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : 'Unknown',
     })
     
-    // Always include error details in response (for debugging in production)
     return NextResponse.json(
       { 
         error: 'Failed to generate PDF',
-        errorName,
-        message: errorMessage,
-        // Include stack in production for debugging (you can remove this later)
-        stack: errorStack,
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
       },
       { status: 500 }
     )

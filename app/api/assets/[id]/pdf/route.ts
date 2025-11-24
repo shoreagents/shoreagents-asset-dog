@@ -439,6 +439,8 @@ export async function POST(
                 'The package files must be included in the serverless function bundle.'
               )
             }
+            
+            console.log('[PDF] Using fallback Chromium path:', executablePath)
           }
           
           console.log('[PDF] Launching browser...')

@@ -8,8 +8,8 @@
       "memory": 1024
     },
     "app/api/**/pdf/route.ts": {
-      "maxDuration": 60,
-      "memory": 3008
+      "maxDuration": 30,
+      "memory": 1024
     },
     "app/dashboard/**/*.tsx": {
       "maxDuration": 30,

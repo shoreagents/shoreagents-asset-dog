@@ -373,21 +373,40 @@ export async function POST(
     // Launch Puppeteer with Chromium for Vercel
     const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV
     
-    const browser = await puppeteer.launch({
-      args: isVercel
-        ? [
-            ...chromium.args,
-            '--hide-scrollbars',
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process',
-          ]
-        : ['--no-sandbox', '--disable-setuid-sandbox'],
-      defaultViewport: isVercel ? chromium.defaultViewport : undefined,
-      executablePath: isVercel
+    let browser
+    try {
+      // On Vercel: use @sparticuz/chromium (required)
+      // Local dev: PUPPETEER_EXECUTABLE_PATH is optional - if not set, puppeteer-core will try to find Chrome/Chromium automatically
+      // You can set it in .env.local if you want to use a specific Chrome path, e.g.:
+      // PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
+      const executablePath = isVercel
         ? await chromium.executablePath()
-        : process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      headless: isVercel ? chromium.headless : true,
-    })
+        : process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+      
+      console.log('Launching browser:', {
+        isVercel,
+        hasExecutablePath: !!executablePath,
+        executablePath: executablePath ? executablePath.substring(0, 50) + '...' : 'none (will auto-detect)',
+      })
+      
+      browser = await puppeteer.launch({
+        args: isVercel
+          ? [
+              ...chromium.args,
+              '--hide-scrollbars',
+              '--disable-web-security',
+              '--disable-features=IsolateOrigins,site-per-process',
+            ]
+          : ['--no-sandbox', '--disable-setuid-sandbox'],
+        defaultViewport: isVercel ? chromium.defaultViewport : undefined,
+        executablePath,
+        headless: isVercel ? chromium.headless : true,
+      })
+    } catch (browserError) {
+      const browserErrorMessage = browserError instanceof Error ? browserError.message : 'Unknown browser launch error'
+      console.error('Failed to launch browser:', browserErrorMessage)
+      throw new Error(`Browser launch failed: ${browserErrorMessage}`)
+    }
 
     try {
       const page = await browser.newPage()
@@ -457,16 +476,23 @@ export async function POST(
     console.error('Error generating PDF:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     const errorStack = error instanceof Error ? error.stack : undefined
+    const errorName = error instanceof Error ? error.name : 'Error'
+    
     console.error('Error details:', {
+      name: errorName,
       message: errorMessage,
       stack: errorStack,
-      name: error instanceof Error ? error.name : undefined,
+      isVercel: process.env.VERCEL === '1' || !!process.env.VERCEL_ENV,
     })
+    
+    // Always include error details in response (for debugging in production)
     return NextResponse.json(
       { 
-        error: 'Failed to generate PDF', 
-        details: errorMessage,
-        ...(process.env.NODE_ENV === 'development' && { stack: errorStack })
+        error: 'Failed to generate PDF',
+        errorName,
+        message: errorMessage,
+        // Include stack in production for debugging (you can remove this later)
+        stack: errorStack,
       },
       { status: 500 }
     )

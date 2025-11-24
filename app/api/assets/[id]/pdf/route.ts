@@ -436,11 +436,9 @@ export async function POST(
               throw new Error(
                 'Chromium executable not found. The @sparticuz/chromium package files are missing from the deployment. ' +
                 'For Vercel: Ensure @sparticuz/chromium is in dependencies (not devDependencies) and redeploy. ' +
-                'The package files must be included in the serverless function bundle'
+                'The package files must be included in the serverless function bundle.'
               )
             }
-            
-            console.log('[PDF] Using fallback Chromium path:', executablePath)
           }
           
           console.log('[PDF] Launching browser...')

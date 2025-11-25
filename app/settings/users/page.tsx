@@ -412,6 +412,7 @@ function UsersPageContent() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [isManualRefresh, setIsManualRefresh] = useState(false)
   const [, startTransition] = useTransition()
+  const isInitialMount = useRef(true)
   
   // Fetch current user ID
   useEffect(() => {
@@ -965,6 +966,19 @@ function UsersPageContent() {
 
   const users = useMemo(() => data?.users || [], [data?.users])
   const pagination = data?.pagination
+  
+  // Track initial mount for animations - only animate stagger on first load
+  useEffect(() => {
+    if (isInitialMount.current && data && users.length > 0) {
+      // Disable staggered animations after first data load
+      // Use a short delay to allow first animation to start
+      const timer = setTimeout(() => {
+        isInitialMount.current = false
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [data, users.length])
+  
   const table = useReactTable({
     data: users,
     columns,
@@ -977,7 +991,12 @@ function UsersPageContent() {
   })
 
   return (
-    <div className="space-y-6 max-h-screen">
+    <motion.div 
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="space-y-6 max-h-screen"
+    >
       <div>
         <h1 className="text-3xl font-bold">Users</h1>
         <p className="text-muted-foreground">
@@ -1119,16 +1138,19 @@ function UsersPageContent() {
                     ))}
                   </TableHeader>
                   <TableBody>
-                    <AnimatePresence mode='popLayout' initial={false}>
+                    <AnimatePresence mode='popLayout'>
                     {table.getRowModel().rows?.length ? (
-                      table.getRowModel().rows.map((row) => (
+                      table.getRowModel().rows.map((row, index) => (
                         <motion.tr
                           key={row.id} 
                           layout
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -20 }}
-                          transition={{ duration: 0.2 }}
+                          transition={{ 
+                            duration: 0.2, 
+                            delay: isInitialMount.current ? index * 0.05 : 0 
+                          }}
                           data-state={row.getIsSelected() && 'selected'}
                           className="group relative hover:bg-muted/90 data-[state=selected]:bg-muted border-b transition-colors"
                         >
@@ -2029,7 +2051,7 @@ function UsersPageContent() {
         description={`Are you sure you want to delete user "${selectedUser?.email || selectedUser?.userId || 'this user'}"? This action cannot be undone.`}
         isLoading={deleteMutation.isPending}
       />
-    </div>
+    </motion.div>
   )
 }
 

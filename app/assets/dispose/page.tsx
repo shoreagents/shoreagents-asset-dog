@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, History, QrCode } from "lucide-react"
@@ -121,8 +121,10 @@ const getDisposalMethodBadgeClass = (method: string): string => {
 function DisposeAssetPageContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
+  const hasProcessedUrlParams = useRef(false)
   const canViewAssets = hasPermission('canViewAssets')
   const canDispose = hasPermission('canDispose')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -439,12 +441,30 @@ function DisposeAssetPageContent() {
     toast.success('Asset removed from disposal list')
   }
 
+  // Clear URL parameters helper
+  const clearUrlParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('assetId')
+    params.delete('method')
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+    router.replace(newUrl)
+    hasProcessedUrlParams.current = false
+  }, [searchParams, router])
+
   // Handle URL query parameters for assetId and method
   useEffect(() => {
+    // Skip if we've already processed URL params (prevents re-population after save)
+    if (hasProcessedUrlParams.current) {
+      return
+    }
+
     const urlAssetId = searchParams.get('assetId')
     const urlMethod = searchParams.get('method')
 
     if (urlAssetId && selectedAssets.length === 0) {
+      // Mark as processed to prevent re-population
+      hasProcessedUrlParams.current = true
+      
       // Fetch and add the asset from URL
       const addAssetFromUrl = async () => {
         try {
@@ -457,6 +477,7 @@ function DisposeAssetPageContent() {
             const disposalStatuses = ['Disposed', 'Sold', 'Donated', 'Scrapped', 'Lost/Missing', 'Destroyed']
             if (asset.status && disposalStatuses.includes(asset.status)) {
               toast.error(`Asset "${asset.assetTagId}" is already disposed. Current status: ${asset.status}`)
+              clearUrlParams()
               return
             }
 
@@ -483,7 +504,7 @@ function DisposeAssetPageContent() {
     }
 
     // Set disposal method from URL parameter
-    if (urlMethod && !form.getValues('disposalMethod')) {
+    if (urlMethod && !hasProcessedUrlParams.current && !form.getValues('disposalMethod')) {
       // Map URL method to form method values
       const methodMap: Record<string, string> = {
         'Sold': 'Sold',
@@ -502,7 +523,7 @@ function DisposeAssetPageContent() {
         form.setValue('disposeReason', mappedMethod)
       }
     }
-  }, [searchParams, selectedAssets, form])
+  }, [searchParams, selectedAssets, form, clearUrlParams])
 
   // Watch disposeReason for form dirty check
   const disposeReason = useWatch({
@@ -530,6 +551,8 @@ function DisposeAssetPageContent() {
       disposeReason: '',
       assetUpdates: [],
     })
+    // Reset the URL params processed flag so new URL params can be processed
+    hasProcessedUrlParams.current = false
   }
 
   // Handle QR code scan result
@@ -646,6 +669,7 @@ function DisposeAssetPageContent() {
       toast.success('Assets disposed successfully')
       // Reset form
       clearForm()
+      clearUrlParams()
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to dispose assets')

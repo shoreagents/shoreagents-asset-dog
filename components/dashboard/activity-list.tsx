@@ -344,43 +344,43 @@ export function ActivityList({
           </CardContent>
           
           {/* Pagination Bar */}
-          <div className="border-t bg-card/50 backdrop-blur-sm p-4">
+          <div className="border-t bg-card/50 backdrop-blur-sm py-3 px-4 sm:px-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               {/* Left Side - Navigation */}
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  size="icon"
+                  size="sm"
                   onClick={() => {
                     if (pagination?.hasPreviousPage) {
                       onPageChange((pagination.page || 1) - 1)
                     }
                   }}
                   disabled={!pagination?.hasPreviousPage || isLoading}
-                  className="h-8 w-8"
+                  className="h-8 px-2 sm:px-3"
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
                 
-                <div className="flex items-center gap-2 text-sm font-medium">
+                <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
                   <span className="text-muted-foreground">Page</span>
-                  <div className="px-2 py-1 rounded-md bg-primary/10 text-primary min-w-8 text-center">
+                  <div className="px-1.5 sm:px-2 py-1 rounded-md bg-primary/10 text-primary font-medium text-xs sm:text-sm">
                     {isLoading ? '...' : (pagination?.page || 1)}
                   </div>
                   <span className="text-muted-foreground">of</span>
-                  <span>{isLoading ? '...' : (pagination?.totalPages || 1)}</span>
+                  <span className="text-muted-foreground">{isLoading ? '...' : (pagination?.totalPages || 1)}</span>
                 </div>
                 
                 <Button
                   variant="outline"
-                  size="icon"
+                  size="sm"
                   onClick={() => {
                     if (pagination?.hasNextPage) {
                       onPageChange((pagination.page || 1) + 1)
                     }
                   }}
                   disabled={!pagination?.hasNextPage || isLoading}
-                  className="h-8 w-8"
+                  className="h-8 px-2 sm:px-3"
                 >
                   <ArrowRight className="h-4 w-4" />
                 </Button>
@@ -389,30 +389,32 @@ export function ActivityList({
               {/* Right Side - Rows and Records */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Rows per page</span>
                   <Select 
                     value={pagination?.pageSize?.toString() || "50"} 
                     onValueChange={onPageSizeChange} 
                     disabled={isLoading}
                   >
-                    <SelectTrigger className="h-8 w-[70px] text-xs">
+                    <SelectTrigger className="h-8 w-auto min-w-[90px] sm:min-w-[100px] text-xs sm:text-sm border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="25">25 rows</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                      <SelectItem value="200">200</SelectItem>
-                      <SelectItem value="500">500</SelectItem>
+                      <SelectItem value="50">50 rows</SelectItem>
+                      <SelectItem value="100">100 rows</SelectItem>
+                      <SelectItem value="200">200 rows</SelectItem>
+                      <SelectItem value="500">500 rows</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
-                <div className="text-xs text-muted-foreground font-medium tabular-nums bg-muted/50 px-2 py-1 rounded">
+                <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                   {isLoading ? (
-                    <span className="animate-pulse">Loading...</span>
+                    <Spinner className="h-4 w-4" variant="default" />
                   ) : (
-                    `${pagination?.total || 0} records`
+                    <>
+                      <span className="hidden sm:inline">{pagination?.total || 0} records</span>
+                      <span className="sm:hidden">{pagination?.total || 0}</span>
+                    </>
                   )}
                 </div>
               </div>

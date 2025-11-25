@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, Package, CheckCircle2, DollarSign, History, QrCode } from "lucide-react"
@@ -102,7 +102,9 @@ const getStatusBadge = (status: string | null) => {
 function CheckinPageContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const hasProcessedUrlParams = useRef(false)
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
   const canCheckin = hasPermission('canCheckin')
@@ -326,11 +328,28 @@ function CheckinPageContent() {
     toast.success('Asset removed from check-in list')
   }
 
+  // Clear URL parameters helper
+  const clearUrlParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('assetId')
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+    router.replace(newUrl)
+    hasProcessedUrlParams.current = false
+  }, [searchParams, router])
+
   // Handle URL query parameters for assetId
   useEffect(() => {
+    // Skip if we've already processed URL params (prevents re-population after save)
+    if (hasProcessedUrlParams.current) {
+      return
+    }
+
     const urlAssetId = searchParams.get('assetId')
 
     if (urlAssetId && selectedAssets.length === 0) {
+      // Mark as processed to prevent re-population
+      hasProcessedUrlParams.current = true
+      
       // Fetch and add the asset from URL
       const addAssetFromUrl = async () => {
         try {
@@ -342,12 +361,14 @@ function CheckinPageContent() {
             // Check if asset is already available (already checked in)
             if (asset.status === "Available" || !asset.status || asset.status.toLowerCase() === "available") {
               toast.error(`Asset "${asset.assetTagId}" is already available. Cannot check in an asset that is already checked in.`)
+              clearUrlParams()
               return
             }
 
             // Check if asset is checked out
             if (asset.status !== "Checked out") {
               toast.error(`Asset "${asset.assetTagId}" is not checked out. Current status: ${asset.status || 'Unknown'}`)
+              clearUrlParams()
               return
             }
 
@@ -355,6 +376,7 @@ function CheckinPageContent() {
             const activeCheckout = asset.checkouts?.[0]
             if (!activeCheckout) {
               toast.error(`No active checkout found for asset "${asset.assetTagId}"`)
+              clearUrlParams()
               return
             }
 
@@ -392,7 +414,7 @@ function CheckinPageContent() {
       
       addAssetFromUrl()
     }
-  }, [searchParams, selectedAssets, form])
+  }, [searchParams, selectedAssets, form, clearUrlParams])
 
   // Track form changes to show floating buttons - only show when assets are selected
   const isFormDirty = useMemo(() => {
@@ -408,6 +430,8 @@ function CheckinPageContent() {
       checkinDate: new Date().toISOString().split('T')[0],
       assetUpdates: [],
     })
+    // Reset the URL params processed flag so new URL params can be processed
+    hasProcessedUrlParams.current = false
   }
 
   // Handle QR code scan result
@@ -523,6 +547,7 @@ function CheckinPageContent() {
       queryClient.invalidateQueries({ queryKey: ["checkin-stats"] })
       toast.success('Assets checked in successfully')
       clearForm()
+      clearUrlParams()
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to check in assets')

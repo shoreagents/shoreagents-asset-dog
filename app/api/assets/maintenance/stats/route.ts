@@ -76,10 +76,11 @@ export async function GET() {
     await setCached(cacheKey, result, 30000)
 
     return NextResponse.json(result)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching maintenance stats:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch maintenance stats'
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch maintenance stats' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

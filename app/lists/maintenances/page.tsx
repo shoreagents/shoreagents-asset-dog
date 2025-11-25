@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo, useCallback, useEffect, useRef, useTransition, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   useReactTable,
@@ -1731,6 +1732,7 @@ function ListOfMaintenancesPageContent() {
   const [shouldCloseSelect, setShouldCloseSelect] = useState(false)
   const [isManualRefresh, setIsManualRefresh] = useState(false)
   const [, startTransition] = useTransition()
+  const isInitialMount = useRef(true)
   
   // Edit maintenance dialog state
   const [editingMaintenance, setEditingMaintenance] = useState<{
@@ -2005,6 +2007,18 @@ function ListOfMaintenancesPageContent() {
   // Memoize assets data
   const assets = useMemo(() => data?.assets || [], [data?.assets])
 
+  // Track initial mount for animations - only animate stagger on first load
+  useEffect(() => {
+    if (isInitialMount.current && data && assets.length > 0) {
+      // Disable staggered animations after first data load
+      // Use a short delay to allow first animation to start
+      const timer = setTimeout(() => {
+        isInitialMount.current = false
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [data, assets.length])
+
   const table = useReactTable({
     data: assets,
     columns,
@@ -2100,7 +2114,12 @@ function ListOfMaintenancesPageContent() {
   }
 
   return (
-    <div className="space-y-6 max-h-screen">
+    <motion.div 
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="space-y-6 max-h-screen"
+    >
       <div>
         <h1 className="text-3xl font-bold">List of Maintenances</h1>
         <p className="text-muted-foreground">
@@ -2287,9 +2306,22 @@ function ListOfMaintenancesPageContent() {
                     ))}
                   </TableHeader>
                   <TableBody>
+                    <AnimatePresence mode='popLayout'>
                     {table.getRowModel().rows?.length ? (
-                      table.getRowModel().rows.map((row) => (
-                        <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'} className="group relative after:content-[''] after:absolute after:top-0 after:bottom-0 after:right-0 after:w-px after:bg-border after:z-10">
+                      table.getRowModel().rows.map((row, index) => (
+                        <motion.tr
+                          key={row.id}
+                          layout
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ 
+                            duration: 0.2, 
+                            delay: isInitialMount.current ? index * 0.05 : 0 
+                          }}
+                          data-state={row.getIsSelected() && 'selected'}
+                          className="group relative hover:bg-muted/90 data-[state=selected]:bg-muted border-b transition-colors after:content-[''] after:absolute after:top-0 after:bottom-0 after:right-0 after:w-px after:bg-border after:z-10"
+                        >
                           {row.getVisibleCells().map((cell) => {
                             const isActionsColumn = cell.column.id === 'maintenanceActions'
                             return (
@@ -2303,7 +2335,7 @@ function ListOfMaintenancesPageContent() {
                               </TableCell>
                             )
                           })}
-                        </TableRow>
+                        </motion.tr>
                       ))
                     ) : (
                       <TableRow>
@@ -2312,6 +2344,7 @@ function ListOfMaintenancesPageContent() {
                         </TableCell>
                       </TableRow>
                     )}
+                    </AnimatePresence>
                   </TableBody>
                 </Table>
                 </div>
@@ -2496,7 +2529,7 @@ function ListOfMaintenancesPageContent() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </motion.div>
   )
 }
 

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, History, QrCode } from "lucide-react"
@@ -82,12 +82,14 @@ interface LeaseReturnAsset extends Asset {
 function LeaseReturnPageContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
   const canLease = hasPermission('canLease')
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
+  const hasProcessedUrlParams = useRef(false)
   const [assetIdInput, setAssetIdInput] = useState("")
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
@@ -451,11 +453,28 @@ function LeaseReturnPageContent() {
     toast.success('Asset removed')
   }
 
+  // Clear URL parameters helper
+  const clearUrlParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('assetId')
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+    router.replace(newUrl)
+    hasProcessedUrlParams.current = false
+  }, [searchParams, router])
+
   // Handle URL query parameters for assetId
   useEffect(() => {
+    // Skip if we've already processed URL params (prevents re-population after save)
+    if (hasProcessedUrlParams.current) {
+      return
+    }
+
     const urlAssetId = searchParams.get('assetId')
 
     if (urlAssetId && selectedAssets.length === 0) {
+      // Mark as processed to prevent re-population
+      hasProcessedUrlParams.current = true
+      
       // Fetch and add the asset from URL
       const addAssetFromUrl = async () => {
         try {
@@ -468,6 +487,7 @@ function LeaseReturnPageContent() {
             const activeLease = asset.leases?.[0]
             if (!activeLease || activeLease.leaseEndDate) {
               toast.error(`Asset "${asset.assetTagId}" does not have an active lease`)
+              clearUrlParams()
               return
             }
 
@@ -500,7 +520,7 @@ function LeaseReturnPageContent() {
       
       addAssetFromUrl()
     }
-  }, [searchParams, selectedAssets, form])
+  }, [searchParams, selectedAssets, form, clearUrlParams])
 
   // Track form changes to show floating buttons - only show when asset is selected
   const isFormDirty = useMemo(() => {
@@ -517,6 +537,8 @@ function LeaseReturnPageContent() {
       returnDate: new Date().toISOString().split('T')[0],
       assetUpdates: [],
     })
+    // Reset the URL params processed flag so new URL params can be processed
+    hasProcessedUrlParams.current = false
   }
 
   // Handle QR code scan result
@@ -647,6 +669,7 @@ function LeaseReturnPageContent() {
       queryClient.invalidateQueries({ queryKey: ["lease-stats"] })
       toast.success('Leased assets returned successfully')
       clearForm()
+      clearUrlParams()
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to return leased assets')

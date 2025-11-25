@@ -1,22 +1,15 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { XIcon, History, Edit2, QrCode } from "lucide-react"
+import { XIcon, History, QrCode } from "lucide-react"
 import { usePermissions } from '@/hooks/use-permissions'
 import { useSidebar } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/qr-scanner-dialog'
 import { QRCodeDisplayDialog } from '@/components/qr-code-display-dialog'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -65,8 +58,6 @@ interface Asset {
     name: string
   } | null
 }
-
-type MaintenanceStatus = "Scheduled" | "In progress" | "Completed" | "Cancelled" | ""
 
 // Helper function to get status badge with colors
 const getStatusBadge = (status: string | null) => {
@@ -120,6 +111,7 @@ const getMaintenanceStatusBadgeClass = (status: string): string => {
 function MaintenancePageContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
   
@@ -136,6 +128,7 @@ function MaintenancePageContent() {
   const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
   const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
   const [loadingAssets, setLoadingAssets] = useState<Set<string>>(new Set())
+  const hasProcessedUrlParams = useRef(false)
 
   const form = useForm<MaintenanceFormData>({
     resolver: zodResolver(maintenanceSchema),
@@ -168,20 +161,9 @@ function MaintenancePageContent() {
   const dateCompleted = useWatch({ control: form.control, name: 'dateCompleted' })
   const dateCancelled = useWatch({ control: form.control, name: 'dateCancelled' })
   const isRepeating = useWatch({ control: form.control, name: 'isRepeating' })
-  
-  // Edit maintenance dialog state
-  const [editingMaintenance, setEditingMaintenance] = useState<{
-    id: string
-    status: string
-    dateCompleted?: string | null
-    dateCancelled?: string | null
-  } | null>(null)
-  const [editStatus, setEditStatus] = useState<MaintenanceStatus>("")
-  const [editDateCompleted, setEditDateCompleted] = useState<string>("")
-  const [editDateCancelled, setEditDateCancelled] = useState<string>("")
 
   // Fetch maintenance statistics
-  const { data: maintenanceStats, isLoading: isLoadingStats, error: statsError } = useQuery<{
+  const { data: maintenanceStats, isLoading: isLoadingStats, error: statsError, refetch: refetchMaintenanceStats } = useQuery<{
     scheduledTodayCount: number
     inProgressCount: number
     recentMaintenances: Array<{
@@ -222,6 +204,8 @@ function MaintenancePageContent() {
     },
     retry: 2,
     retryDelay: 1000,
+    staleTime: 0, // Always consider data stale so it refetches when invalidated
+    refetchOnWindowFocus: true, // Refetch when window regains focus
   })
 
   // Calculate time ago
@@ -383,12 +367,30 @@ function MaintenancePageContent() {
     }
   }
 
+  // Clear URL parameters helper
+  const clearUrlParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('assetId')
+    params.delete('status')
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+    router.replace(newUrl)
+    hasProcessedUrlParams.current = false
+  }, [searchParams, router])
+
   // Handle URL query parameters for assetId and status
   useEffect(() => {
+    // Skip if we've already processed URL params (prevents re-population after save)
+    if (hasProcessedUrlParams.current) {
+      return
+    }
+
     const urlAssetId = searchParams.get('assetId')
     const urlStatus = searchParams.get('status')
 
     if (urlAssetId && !selectedAsset) {
+      // Mark as processed to prevent re-population
+      hasProcessedUrlParams.current = true
+      
       // Fetch and select the asset from URL
       const selectAssetFromUrl = async () => {
         try {
@@ -405,8 +407,23 @@ function MaintenancePageContent() {
               setSelectedAsset(asset)
               form.setValue('assetId', asset.id)
               setAssetIdInput(asset.assetTagId)
+              
+              // Set status from URL parameter if provided
+              if (urlStatus) {
+                const statusMap: Record<string, string> = {
+                  'Scheduled': 'Scheduled',
+                  'In Progress': 'In progress',
+                  'In progress': 'In progress',
+                  'Completed': 'Completed',
+                  'Cancelled': 'Cancelled',
+                }
+                const mappedStatus = statusMap[urlStatus] || urlStatus
+                form.setValue('status', mappedStatus)
+              }
             } else {
               toast.error(`Asset "${asset.assetTagId}" is not available for maintenance. Current status: ${asset.status}`)
+              // Clear URL params if asset is not eligible
+              clearUrlParams()
             }
           }
         } catch (error) {
@@ -415,28 +432,26 @@ function MaintenancePageContent() {
       }
       
       selectAssetFromUrl()
-    }
-
-    // Set status from URL parameter
-    if (urlStatus) {
-      // Map URL status to form status values (exact match required for Select component)
+    } else if (urlAssetId) {
+      // If we already have a selected asset, mark as processed
+      hasProcessedUrlParams.current = true
+    } else if (urlStatus && !selectedAsset) {
+      // Only process status if no assetId and we haven't processed yet
+      hasProcessedUrlParams.current = true
       const statusMap: Record<string, string> = {
         'Scheduled': 'Scheduled',
-        'In Progress': 'In progress', // URL might have capital P
-        'In progress': 'In progress', // Form uses lowercase p
+        'In Progress': 'In progress',
+        'In progress': 'In progress',
         'Completed': 'Completed',
         'Cancelled': 'Cancelled',
       }
-      
       const mappedStatus = statusMap[urlStatus] || urlStatus
       const currentStatus = form.getValues('status')
-      
-      // Only set if different from current value
       if (currentStatus !== mappedStatus) {
         form.setValue('status', mappedStatus)
       }
     }
-  }, [searchParams, selectedAsset, form])
+  }, [searchParams, selectedAsset, form, clearUrlParams])
 
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -519,115 +534,20 @@ function MaintenancePageContent() {
 
       return response.json()
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["assets"] })
       queryClient.invalidateQueries({ queryKey: ["maintenance-stats"] })
+      // Explicitly refetch the maintenance stats to update the recent history table
+      await refetchMaintenanceStats()
       toast.success('Maintenance record created successfully')
-      // Reset form
+      // Reset form and clear URL params
       clearForm()
+      clearUrlParams()
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to create maintenance')
     }
   })
-
-  // Update maintenance mutation
-  const updateMaintenanceMutation = useMutation({
-    mutationFn: async (data: {
-      id: string
-      status: string
-      dateCompleted?: string
-      dateCancelled?: string
-    }) => {
-      const response = await fetch('/api/assets/maintenance', {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to update maintenance')
-      }
-
-      return response.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["maintenance-stats"] })
-      toast.success('Maintenance status updated successfully')
-      setEditingMaintenance(null)
-      setEditStatus("")
-      setEditDateCompleted("")
-      setEditDateCancelled("")
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to update maintenance')
-    }
-  })
-
-  // Handle opening edit dialog
-  const handleEditMaintenance = (maintenance: {
-    id: string
-    status: string
-    dateCompleted?: string | null
-    dateCancelled?: string | null
-  }) => {
-    if (!canManageMaintenance) {
-      toast.error('You do not have permission to take actions')
-      return
-    }
-    setEditingMaintenance(maintenance)
-    setEditStatus(maintenance.status as MaintenanceStatus)
-    setEditDateCompleted(maintenance.dateCompleted ? new Date(maintenance.dateCompleted).toISOString().split('T')[0] : "")
-    setEditDateCancelled(maintenance.dateCancelled ? new Date(maintenance.dateCancelled).toISOString().split('T')[0] : "")
-  }
-
-  // Handle edit status change
-  useEffect(() => {
-    if (!editingMaintenance) return
-    if (editStatus === 'Completed') {
-      setEditDateCancelled("")
-      if (!editDateCompleted && !editingMaintenance.dateCompleted) {
-        setEditDateCompleted(new Date().toISOString().split('T')[0])
-      }
-    } else if (editStatus === 'Cancelled') {
-      setEditDateCompleted("")
-      if (!editDateCancelled && !editingMaintenance.dateCancelled) {
-        setEditDateCancelled(new Date().toISOString().split('T')[0])
-      }
-    } else {
-      setEditDateCompleted("")
-      setEditDateCancelled("")
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editStatus, editingMaintenance])
-
-  // Handle edit form submission
-  const handleUpdateMaintenance = () => {
-    if (!editingMaintenance) return
-
-    if (!editStatus) {
-      toast.error('Maintenance status is required')
-      return
-    }
-
-    if (editStatus === 'Completed' && !editDateCompleted) {
-      toast.error('Date completed is required when status is Completed')
-      return
-    }
-
-    if (editStatus === 'Cancelled' && !editDateCancelled) {
-      toast.error('Date cancelled is required when status is Cancelled')
-      return
-    }
-
-    updateMaintenanceMutation.mutate({
-      id: editingMaintenance.id,
-      status: editStatus,
-      dateCompleted: editStatus === 'Completed' ? editDateCompleted : undefined,
-      dateCancelled: editStatus === 'Cancelled' ? editDateCancelled : undefined,
-    })
-  }
 
   // Handle form submission
   const handleSubmit = form.handleSubmit(async (data) => {
@@ -682,6 +602,8 @@ function MaintenancePageContent() {
       dateCancelled: '',
       isRepeating: false,
     })
+    // Reset the URL params processed flag so new URL params can be processed
+    hasProcessedUrlParams.current = false
   }
 
   // Handle QR code scan result
@@ -776,7 +698,6 @@ function MaintenancePageContent() {
                         <TableHead className="h-8 text-xs bg-card">Due Date</TableHead>
                         <TableHead className="h-8 text-xs bg-card">Cost</TableHead>
                         <TableHead className="h-8 text-xs text-right bg-card">Time Ago</TableHead>
-                        <TableHead className="h-8 text-xs text-right bg-card">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -813,22 +734,6 @@ function MaintenancePageContent() {
                         </TableCell>
                         <TableCell className="py-1.5 text-xs text-muted-foreground text-right">
                           {getTimeAgo(maintenance.createdAt)}
-                        </TableCell>
-                        <TableCell className="py-1.5 text-right">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => handleEditMaintenance({
-                              id: maintenance.id,
-                              status: maintenance.status,
-                              dateCompleted: maintenance.dateCompleted,
-                              dateCancelled: maintenance.dateCancelled,
-                            })}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1273,101 +1178,6 @@ function MaintenancePageContent() {
           </Button>
         </div>
       )}
-
-      {/* Edit Maintenance Dialog */}
-      <Dialog open={!!editingMaintenance} onOpenChange={(open: boolean) => !open && setEditingMaintenance(null)}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Update Maintenance Status</DialogTitle>
-            <DialogDescription>
-              Update the maintenance status. The asset status will be automatically updated based on the maintenance status.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {/* Status and Date Completed/Cancelled */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel>Maintenance Status <span className="text-destructive">*</span></FieldLabel>
-                <FieldContent>
-                  <Select
-                    value={editStatus}
-                    onValueChange={(value) => setEditStatus(value as MaintenanceStatus)}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select maintenance status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Scheduled">Scheduled</SelectItem>
-                      <SelectItem value="In progress">In progress</SelectItem>
-                      <SelectItem value="Completed">Completed</SelectItem>
-                      <SelectItem value="Cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-
-              {/* Date Completed / Date Cancelled - Conditional based on status */}
-              {editStatus === 'Completed' && (
-                <Field>
-                  <FieldLabel>Date Completed <span className="text-destructive">*</span></FieldLabel>
-                  <FieldContent>
-                    <Input
-                      type="date"
-                      value={editDateCompleted}
-                      onChange={(e) => setEditDateCompleted(e.target.value)}
-                      required
-                    />
-                  </FieldContent>
-                </Field>
-              )}
-
-              {editStatus === 'Cancelled' && (
-                <Field>
-                  <FieldLabel>Date Cancelled <span className="text-destructive">*</span></FieldLabel>
-                  <FieldContent>
-                    <Input
-                      type="date"
-                      value={editDateCancelled}
-                      onChange={(e) => setEditDateCancelled(e.target.value)}
-                      required
-                    />
-                  </FieldContent>
-                </Field>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditingMaintenance(null)
-                  setEditStatus("")
-                  setEditDateCompleted("")
-                  setEditDateCancelled("")
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                onClick={handleUpdateMaintenance}
-                disabled={updateMaintenanceMutation.isPending}
-              >
-                {updateMaintenanceMutation.isPending ? (
-                  <>
-                    <Spinner className="mr-2 h-4 w-4" />
-                    Updating...
-                  </>
-                ) : (
-                  'Update Status'
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* QR Code Scanner Dialog */}
       <QRScannerDialog

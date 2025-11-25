@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useForm, useWatch, type Control } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, Package, CheckCircle2, Users, History, QrCode } from "lucide-react"
@@ -98,6 +98,8 @@ const getStatusBadge = (status: string | null) => {
 function CheckoutPageContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const hasProcessedUrlParams = useRef(false)
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
@@ -317,11 +319,28 @@ function CheckoutPageContent() {
     }
   }
 
+  // Clear URL parameters helper
+  const clearUrlParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('assetId')
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+    router.replace(newUrl)
+    hasProcessedUrlParams.current = false
+  }, [searchParams, router])
+
   // Handle URL query parameters for assetId
   useEffect(() => {
+    // Skip if we've already processed URL params (prevents re-population after save)
+    if (hasProcessedUrlParams.current) {
+      return
+    }
+
     const urlAssetId = searchParams.get('assetId')
 
     if (urlAssetId && selectedAssets.length === 0) {
+      // Mark as processed to prevent re-population
+      hasProcessedUrlParams.current = true
+      
       // Fetch and add the asset from URL
       const addAssetFromUrl = async () => {
         try {
@@ -333,12 +352,14 @@ function CheckoutPageContent() {
             // Check if asset is already checked out
             if (asset.status === "Checked out" || asset.status?.toLowerCase() === "checked out" || asset.status?.toLowerCase() === "in use") {
               toast.error(`Asset "${asset.assetTagId}" is already checked out. Cannot checkout an asset that is already checked out.`)
+              clearUrlParams()
               return
             }
 
             // Check if asset is available
             if (asset.status && asset.status !== "Available") {
               toast.error(`Asset "${asset.assetTagId}" is not available. Current status: ${asset.status}`)
+              clearUrlParams()
               return
             }
 
@@ -364,7 +385,7 @@ function CheckoutPageContent() {
       
       addAssetFromUrl()
     }
-  }, [searchParams, selectedAssets])
+  }, [searchParams, selectedAssets, clearUrlParams])
 
   // Track form changes to show floating buttons - only show when assets are selected
   const isFormDirty = useMemo(() => {

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, History, QrCode } from "lucide-react"
@@ -111,6 +111,7 @@ const getStatusBadge = (status: string | null) => {
 function MoveAssetPageContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
@@ -118,6 +119,7 @@ function MoveAssetPageContent() {
   const canManageSetup = hasPermission('canManageSetup')
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
+  const hasProcessedUrlParams = useRef(false)
   const [assetIdInput, setAssetIdInput] = useState("")
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
@@ -397,11 +399,28 @@ function MoveAssetPageContent() {
     toast.success('Asset cleared')
   }
 
+  // Clear URL parameters helper
+  const clearUrlParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('assetId')
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+    router.replace(newUrl)
+    hasProcessedUrlParams.current = false
+  }, [searchParams, router])
+
   // Handle URL query parameters for assetId
   useEffect(() => {
+    // Skip if we've already processed URL params (prevents re-population after save)
+    if (hasProcessedUrlParams.current) {
+      return
+    }
+
     const urlAssetId = searchParams.get('assetId')
 
     if (urlAssetId && !selectedAsset) {
+      // Mark as processed to prevent re-population
+      hasProcessedUrlParams.current = true
+      
       // Fetch and select the asset from URL
       const selectAssetFromUrl = async () => {
         try {
@@ -417,6 +436,7 @@ function MoveAssetPageContent() {
             
             if (hasActiveLease) {
               toast.error(`Asset "${asset.assetTagId}" is currently leased and cannot be moved`)
+              clearUrlParams()
               return
             }
 
@@ -431,7 +451,7 @@ function MoveAssetPageContent() {
       
       selectAssetFromUrl()
     }
-  }, [searchParams, selectedAsset, form])
+  }, [searchParams, selectedAsset, form, clearUrlParams])
 
   // Track form changes to show floating buttons - only show when asset is selected
   const isFormDirty = useMemo(() => {
@@ -453,6 +473,8 @@ function MoveAssetPageContent() {
       reason: '',
       notes: '',
     })
+    // Reset the URL params processed flag so new URL params can be processed
+    hasProcessedUrlParams.current = false
   }
 
   // Handle QR code scan result
@@ -530,6 +552,7 @@ function MoveAssetPageContent() {
       queryClient.invalidateQueries({ queryKey: ["move-stats"] })
       toast.success('Asset moved successfully')
       clearForm()
+      clearUrlParams()
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to move asset')

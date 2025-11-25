@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { useForm, Controller, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, History, QrCode } from "lucide-react"
@@ -83,11 +83,13 @@ const getStatusBadge = (status: string | null) => {
 function ReserveAssetPageContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
   const canViewAssets = hasPermission('canViewAssets')
   const canReserve = hasPermission('canReserve')
   const canManageSetup = hasPermission('canManageSetup')
+  const hasProcessedUrlParams = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
   const [assetIdInput, setAssetIdInput] = useState("")
@@ -362,11 +364,28 @@ function ReserveAssetPageContent() {
     toast.success('Asset cleared')
   }
 
+  // Clear URL parameters helper
+  const clearUrlParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('assetId')
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+    router.replace(newUrl)
+    hasProcessedUrlParams.current = false
+  }, [searchParams, router])
+
   // Handle URL query parameters for assetId
   useEffect(() => {
+    // Skip if we've already processed URL params (prevents re-population after save)
+    if (hasProcessedUrlParams.current) {
+      return
+    }
+
     const urlAssetId = searchParams.get('assetId')
 
     if (urlAssetId && !selectedAsset) {
+      // Mark as processed to prevent re-population
+      hasProcessedUrlParams.current = true
+      
       // Fetch and select the asset from URL
       const selectAssetFromUrl = async () => {
         try {
@@ -378,6 +397,7 @@ function ReserveAssetPageContent() {
             // Check if asset is available for reservation
             if (asset.status && asset.status !== "Available") {
               toast.error(`Asset "${asset.assetTagId}" is not available for reservation. Current status: ${asset.status}`)
+              clearUrlParams()
               return
             }
 
@@ -392,7 +412,7 @@ function ReserveAssetPageContent() {
       
       selectAssetFromUrl()
     }
-  }, [searchParams, selectedAsset, form])
+  }, [searchParams, selectedAsset, form, clearUrlParams])
 
   // Track form changes to show floating buttons - only show when asset is selected
   const isFormDirty = useMemo(() => {
@@ -499,6 +519,7 @@ function ReserveAssetPageContent() {
       queryClient.invalidateQueries({ queryKey: ["reserve-stats"] })
       toast.success('Asset reserved successfully')
       clearForm()
+      clearUrlParams()
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to reserve asset')

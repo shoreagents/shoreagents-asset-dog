@@ -285,6 +285,31 @@ export const editAssetSchema = z.object({
     .max(255, 'Location must be 255 characters or less')
     .optional()
     .or(z.literal('')),
+  qr: z
+    .string()
+    .max(255, 'QR code must be 255 characters or less')
+    .optional()
+    .or(z.literal('')),
+  oldAssetTag: z
+    .string()
+    .max(100, 'Old Asset Tag must be 100 characters or less')
+    .optional()
+    .or(z.literal('')),
+  pbiNumber: z
+    .string()
+    .max(100, 'PBI Number must be 100 characters or less')
+    .optional()
+    .or(z.literal('')),
+  paymentVoucherNumber: z
+    .string()
+    .max(100, 'Payment Voucher Number must be 100 characters or less')
+    .optional()
+    .or(z.literal('')),
+  depreciationMethod: z
+    .string()
+    .max(50, 'Depreciation Method must be 50 characters or less')
+    .optional()
+    .or(z.literal('')),
 
   // Optional date fields (as strings from input)
   purchaseDate: z
@@ -294,6 +319,22 @@ export const editAssetSchema = z.object({
     .refine(
       (val) => !val || !isNaN(Date.parse(val)),
       'Purchase Date must be a valid date'
+    ),
+  deliveryDate: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => !val || !isNaN(Date.parse(val)),
+      'Delivery Date must be a valid date'
+    ),
+  dateAcquired: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => !val || !isNaN(Date.parse(val)),
+      'Date Acquired must be a valid date'
     ),
 
   // Optional number fields (as strings from input, validated but kept as strings for form)
@@ -305,6 +346,34 @@ export const editAssetSchema = z.object({
       (val) => !val || (!isNaN(Number(val)) && Number(val) >= 0),
       'Cost must be a valid positive number'
     ),
+  depreciableCost: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => !val || (!isNaN(Number(val)) && Number(val) >= 0),
+      'Depreciable Cost must be a valid positive number'
+    ),
+  salvageValue: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => !val || (!isNaN(Number(val)) && Number(val) >= 0),
+      'Salvage Value must be a valid positive number'
+    ),
+  assetLifeMonths: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => !val || (!isNaN(Number(val)) && Number(val) > 0 && Number.isInteger(Number(val))),
+      'Asset Life (Months) must be a valid positive integer'
+    ),
+
+  // Boolean fields
+  depreciableAsset: z.boolean(),
+  unaccountedInventory: z.boolean(),
 
   // Required relation fields (same as add form)
   categoryId: z

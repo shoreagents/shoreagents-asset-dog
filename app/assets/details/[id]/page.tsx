@@ -513,8 +513,9 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
 
   if (assetLoading || isFetching) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spinner className="h-8 w-8" />
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <Spinner className="h-6 w-6" />
+        <p className="text-sm text-muted-foreground">Loading asset details...</p>
       </div>
     )
   }
@@ -965,7 +966,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 border rounded-lg p-4">
         {/* Thumbnail Image */}
         <div className="lg:col-span-1">
-          <div className="relative w-full h-64 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+          <div className="relative w-full h-full bg-muted rounded-lg overflow-hidden flex items-center justify-center">
             {thumbnailImage ? (
               <Image
                 src={thumbnailImage.imageUrl}

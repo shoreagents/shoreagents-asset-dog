@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     // Only cache when no search filter
     if (!search) {
       const cacheKey = 'sites-list'
-      const cached = getCached<{ sites: unknown[] }>(cacheKey)
+      const cached = await getCached<{ sites: unknown[] }>(cacheKey)
       if (cached) {
         return NextResponse.json(cached)
       }
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     
     // Cache for 10 minutes if no search filter
     if (!search) {
-      setCached('sites-list', result, 600000)
+      await setCached('sites-list', result, 600000)
     }
 
     return NextResponse.json(result)
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     )
 
     // Invalidate sites cache
-    clearCache('sites-list')
+    await clearCache('sites-list')
 
     return NextResponse.json({ site }, { status: 201 })
   } catch (error: any) {

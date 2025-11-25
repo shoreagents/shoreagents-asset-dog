@@ -90,10 +90,10 @@ export type DashboardStats = {
  * Includes caching to reduce database load
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
-  // Check cache first (5 minute TTL for dashboard stats)
+  // Check cache first (15 second TTL for dashboard stats - Redis cached)
   // This dramatically reduces database load for frequently accessed data
-  const cacheKey = 'dashboard-stats'
-  const cached = getCached<DashboardStats>(cacheKey)
+  const cacheKey = 'dashboard-stats-v3'
+  const cached = await getCached<DashboardStats>(cacheKey)
   if (cached) {
     return cached
   }
@@ -372,9 +372,9 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       },
     }
 
-    // Cache for 5 minutes (300000 ms)
+    // Cache for 15 seconds (15000 ms) - Redis cached for fast access
     // Subsequent requests will be instant until cache expires
-    setCached(cacheKey, result, 300000)
+    await setCached(cacheKey, result, 15000)
 
     return result
   } catch (error) {

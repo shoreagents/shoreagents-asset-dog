@@ -497,65 +497,65 @@ function ReturnFormDetails({ form, formData }: { form: ReturnForm; formData: For
                   <tbody>
                     {/* Others section header */}
                     <tr className="border-b-2 border-border dark:border-gray-600 print:border-black bg-muted print:bg-gray-50">
-                      <td colSpan={4} className="p-2 text-sm font-bold text-foreground print:text-black">Others:</td>
-                    </tr>
+                          <td colSpan={4} className="p-2 text-sm font-bold text-foreground print:text-black">Others:</td>
+                        </tr>
                     
                     {/* Pre-defined Other items */}
-                    {OTHER_ITEMS.map((item, idx) => {
-                      const asset = otherItems.find((a) => {
-                        const subCategoryName = a.subCategory?.name?.trim() || a.description.toLowerCase()
-                        return subCategoryName.toLowerCase() === item.toLowerCase() ||
-                          subCategoryName.toLowerCase().includes(item.toLowerCase()) ||
-                          item.toLowerCase().includes(subCategoryName.toLowerCase())
-                      })
-                      return (
-                        <tr key={`other-${idx}`} className="border-b border-border dark:border-gray-600 print:border-black">
+                        {OTHER_ITEMS.map((item, idx) => {
+                          const asset = otherItems.find((a) => {
+                            const subCategoryName = a.subCategory?.name?.trim() || a.description.toLowerCase()
+                            return subCategoryName.toLowerCase() === item.toLowerCase() ||
+                              subCategoryName.toLowerCase().includes(item.toLowerCase()) ||
+                              item.toLowerCase().includes(subCategoryName.toLowerCase())
+                          })
+                          return (
+                            <tr key={`other-${idx}`} className="border-b border-border dark:border-gray-600 print:border-black">
                           <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-xs text-foreground print:text-black">{item}</td>
                           <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-center text-xs text-foreground print:text-black">
-                            {asset ? asset.quantity || 1 : ''}
-                          </td>
+                                {asset ? asset.quantity || 1 : ''}
+                              </td>
                           <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-xs text-foreground print:text-black">
-                            {asset ? asset.assetTagId : ''}
-                          </td>
+                                {asset ? asset.assetTagId : ''}
+                              </td>
                           <td className="py-0.5 px-2 text-center">
                             {asset ? (
+                                <input
+                                  type="checkbox"
+                                checked={asset.condition || false}
+                                  readOnly
+                                  className="w-3 h-3 accent-primary print:w-3 print:h-3"
+                                />
+                            ) : (
+                              <input type="checkbox" checked={false} className="w-3 h-3 accent-primary print:w-3 print:h-3" disabled readOnly />
+                            )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+
+                    {/* Additional other items from selected assets */}
+                        {otherItems.filter((a) => {
+                          const subCategoryName = a.subCategory?.name?.trim() || a.description.toLowerCase()
+                          return !OTHER_ITEMS.some((item) => 
+                            subCategoryName.toLowerCase() === item.toLowerCase() ||
+                            subCategoryName.toLowerCase().includes(item.toLowerCase()) ||
+                            item.toLowerCase().includes(subCategoryName.toLowerCase())
+                          )
+                        }).map((asset) => (
+                          <tr key={asset.id} className="border-b border-border dark:border-gray-600 print:border-black">
+                            <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-xs text-foreground print:text-black">{asset.subCategory?.name || asset.description}</td>
+                            <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-center text-xs text-foreground print:text-black">{asset.quantity || 1}</td>
+                            <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-xs text-foreground print:text-black">{asset.assetTagId}</td>
+                            <td className="py-0.5 px-2 text-center">
                               <input
                                 type="checkbox"
                                 checked={asset.condition || false}
                                 readOnly
                                 className="w-3 h-3 accent-primary print:w-3 print:h-3"
                               />
-                            ) : (
-                              <input type="checkbox" checked={false} className="w-3 h-3 accent-primary print:w-3 print:h-3" disabled readOnly />
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-
-                    {/* Additional other items from selected assets */}
-                    {otherItems.filter((a) => {
-                      const subCategoryName = a.subCategory?.name?.trim() || a.description.toLowerCase()
-                      return !OTHER_ITEMS.some((item) => 
-                        subCategoryName.toLowerCase() === item.toLowerCase() ||
-                        subCategoryName.toLowerCase().includes(item.toLowerCase()) ||
-                        item.toLowerCase().includes(subCategoryName.toLowerCase())
-                      )
-                    }).map((asset) => (
-                      <tr key={asset.id} className="border-b border-border dark:border-gray-600 print:border-black">
-                        <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-xs text-foreground print:text-black">{asset.subCategory?.name || asset.description}</td>
-                        <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-center text-xs text-foreground print:text-black">{asset.quantity || 1}</td>
-                        <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-2 text-xs text-foreground print:text-black">{asset.assetTagId}</td>
-                        <td className="py-0.5 px-2 text-center">
-                          <input
-                            type="checkbox"
-                            checked={asset.condition || false}
-                            readOnly
-                            className="w-3 h-3 accent-primary print:w-3 print:h-3"
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                            </td>
+                          </tr>
+                        ))}
 
                     {/* IF Resigned Staff section */}
                     {formData.resignedStaff && (
@@ -800,26 +800,26 @@ function ReturnFormDetails({ form, formData }: { form: ReturnForm; formData: For
                       })
                       return (
                         <tr key={`it-admin-${idx}`} className="border-b border-border dark:border-gray-600 print:border-black">
-                          <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-1 sm:px-2 text-[10px] sm:text-xs text-foreground print:text-black">
-                            {item}
-                          </td>
-                          <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-1 sm:px-2 text-center text-[10px] sm:text-xs text-foreground print:text-black">
-                            {asset ? asset.quantity || 1 : ''}
-                          </td>
-                          <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-1 sm:px-2 text-[10px] sm:text-xs text-foreground print:text-black">
-                            {asset ? asset.assetTagId : ''}
-                          </td>
-                          <td className="py-0.5 px-1 sm:px-2 text-center">
-                            <input
-                              type="checkbox"
-                              checked={asset ? asset.condition || false : false}
-                              readOnly
-                              className="w-3 h-3 accent-primary print:w-3 print:h-3"
-                            />
-                          </td>
-                        </tr>
-                      )
-                    })}
+                              <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-1 sm:px-2 text-[10px] sm:text-xs text-foreground print:text-black">
+                                {item}
+                              </td>
+                              <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-1 sm:px-2 text-center text-[10px] sm:text-xs text-foreground print:text-black">
+                                {asset ? asset.quantity || 1 : ''}
+                              </td>
+                              <td className="border-r-2 border-border dark:border-gray-600 print:border-black py-0.5 px-1 sm:px-2 text-[10px] sm:text-xs text-foreground print:text-black">
+                                {asset ? asset.assetTagId : ''}
+                              </td>
+                              <td className="py-0.5 px-1 sm:px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={asset ? asset.condition || false : false}
+                                  readOnly
+                                  className="w-3 h-3 accent-primary print:w-3 print:h-3"
+                                />
+                              </td>
+                            </tr>
+                          )
+                        })}
                     {itEquipment.filter((a) => {
                       const subCategoryName = a.subCategory?.name?.trim() || a.description.toLowerCase()
                       return !IT_EQUIPMENT.some((item) => 
@@ -1049,7 +1049,7 @@ function ReturnFormDetails({ form, formData }: { form: ReturnForm; formData: For
                 <p className="text-xs text-muted-foreground print:text-gray-600 mb-1">Signature over Printed Name</p>
                 <div className="border-b border-border dark:border-gray-600 print:border-black mb-2 pb-1 text-foreground print:text-black min-h-[24px]">
                   {formData.itDate || ''}
-                </div>
+              </div>
                 <p className="text-xs text-muted-foreground print:text-gray-600">Date</p>
                 
               </div>

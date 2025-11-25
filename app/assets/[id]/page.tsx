@@ -6,7 +6,7 @@ import { use } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ArrowLeft, Sparkles, ImageIcon, Upload, FileText, PlusIcon, Eye, X, ArrowRight, ClipboardCheck } from "lucide-react"
+import { ArrowLeft, Sparkles, ImageIcon, Upload, FileText, PlusIcon, Eye, X, Trash2 } from "lucide-react"
 import Image from "next/image"
 import { usePermissions } from '@/hooks/use-permissions'
 import { useSidebar } from '@/components/ui/sidebar'
@@ -46,18 +46,50 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import { ImagePreviewDialog } from "@/components/image-preview-dialog"
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog"
 import { DownloadConfirmationDialog } from "@/components/download-confirmation-dialog"
-import { CheckoutManager } from "@/components/checkout-manager"
-import { AuditHistoryManager } from "@/components/audit-history-manager"
 import type { Category, SubCategory } from "@/hooks/use-categories"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 async function fetchAsset(id: string) {
   const response = await fetch(`/api/assets/${id}`)
   if (!response.ok) {
     throw new Error('Failed to fetch asset')
+  }
+  return response.json()
+}
+
+async function fetchHistoryLogs(assetId: string) {
+  const response = await fetch(`/api/assets/${assetId}/history`)
+  if (!response.ok) {
+    return { logs: [] }
+  }
+  return response.json()
+}
+
+async function fetchMaintenance(assetId: string) {
+  const response = await fetch(`/api/assets/maintenance?assetId=${assetId}`)
+  if (!response.ok) {
+    return { maintenances: [] }
+  }
+  return response.json()
+}
+
+async function fetchReserve(assetId: string) {
+  const response = await fetch(`/api/assets/reserve?assetId=${assetId}`)
+  if (!response.ok) {
+    return { reservations: [] }
   }
   return response.json()
 }
@@ -102,10 +134,30 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
   const asset = assetData?.asset
 
-  // Tab state from URL - moved up to use in queries
-  const activeTab = (searchParams.get('tab') as 'basic' | 'media' | 'purchase' | 'checkout' | 'audit') || 'basic'
+  // Fetch thumbnail image (first image) for top section
+  const { data: thumbnailData } = useQuery({
+    queryKey: ['asset-thumbnail', asset?.assetTagId],
+    queryFn: async () => {
+      if (!asset?.assetTagId) return { images: [] }
+      const response = await fetch(`/api/assets/images/${asset.assetTagId}`, {
+        cache: 'no-store',
+      })
+      if (!response.ok) return { images: [] }
+      const data = await response.json()
+      return { images: data.images || [] }
+    },
+    enabled: !!asset?.assetTagId,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  })
 
-  // Fetch existing images only when media tab is active
+  // Get the first image (most recent by createdAt desc)
+  const thumbnailImage = thumbnailData?.images?.[0]
+
+  // Tab state from URL - moved up to use in queries
+  const activeTab = (searchParams.get('tab') as 'details' | 'photos' | 'docs' | 'depreciation' | 'maintenance' | 'reserve' | 'audit' | 'history') || 'details'
+
+  // Fetch existing images only when photos tab is active
   // Add retry logic to reduce connection pool pressure
   const { data: existingImagesData, isLoading: loadingExistingImages } = useQuery({
     queryKey: ['assets', 'images', asset?.assetTagId],
@@ -119,7 +171,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
         return { images: [] }
       }
     },
-    enabled: !!asset?.assetTagId && activeTab === 'media', // Only fetch when media tab is active
+    enabled: !!asset?.assetTagId && activeTab === 'photos', // Only fetch when photos tab is active
     staleTime: 0, // Always refetch when component mounts to get latest data
     gcTime: 10 * 60 * 1000,
     retry: 2, // Retry up to 2 times on failure
@@ -128,7 +180,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
   const existingImages = existingImagesData?.images || []
 
-  // Fetch documents only when media tab is active (after images are loaded to reduce concurrent connections)
+  // Fetch documents only when docs tab is active (after images are loaded to reduce concurrent connections)
   const { data: existingDocumentsData, isLoading: loadingExistingDocuments } = useQuery({
     queryKey: ['assets', 'documents', asset?.assetTagId],
     queryFn: async () => {
@@ -141,7 +193,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
         return { documents: [] }
       }
     },
-    enabled: !!asset?.assetTagId && activeTab === 'media' && !loadingExistingImages, // Only fetch when media tab is active and images are loaded
+    enabled: !!asset?.assetTagId && activeTab === 'docs' && !loadingExistingImages, // Only fetch when docs tab is active and images are loaded
     staleTime: 0, // Always refetch when component mounts to get latest data
     gcTime: 10 * 60 * 1000,
     retry: 2, // Retry up to 2 times on failure
@@ -160,11 +212,11 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
   // Update URL parameters
   const updateURL = useCallback(
-    (updates: { tab?: 'basic' | 'media' | 'purchase' | 'checkout' | 'audit' }) => {
+    (updates: { tab?: 'details' | 'photos' | 'docs' | 'depreciation' | 'maintenance' | 'reserve' | 'audit' | 'history' }) => {
       const params = new URLSearchParams(searchParams.toString())
 
       if (updates.tab !== undefined) {
-        if (updates.tab === 'basic') {
+        if (updates.tab === 'details') {
           params.delete('tab')
         } else {
           params.set('tab', updates.tab)
@@ -178,12 +230,32 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
     [searchParams, router, resolvedParams.id, startTransition]
   )
 
-  const handleTabChange = (tab: 'basic' | 'media' | 'purchase' | 'checkout' | 'audit') => {
+  const handleTabChange = (tab: 'details' | 'photos' | 'docs' | 'depreciation' | 'maintenance' | 'reserve' | 'audit' | 'history') => {
     updateURL({ tab })
   }
 
-  // Check if asset has checkout
-  const hasCheckout = asset?.checkouts && asset.checkouts.length > 0
+  // Fetch history logs, maintenance, and reserve data for read-only tabs
+  const { data: historyData } = useQuery({
+    queryKey: ['asset-history', resolvedParams.id],
+    queryFn: () => fetchHistoryLogs(resolvedParams.id),
+    enabled: !!resolvedParams.id && activeTab === 'history',
+  })
+
+  const { data: maintenanceData } = useQuery({
+    queryKey: ['asset-maintenance', resolvedParams.id],
+    queryFn: () => fetchMaintenance(resolvedParams.id),
+    enabled: !!resolvedParams.id && activeTab === 'maintenance',
+  })
+
+  const { data: reserveData } = useQuery({
+    queryKey: ['asset-reserve', resolvedParams.id],
+    queryFn: () => fetchReserve(resolvedParams.id),
+    enabled: !!resolvedParams.id && activeTab === 'reserve',
+  })
+
+  const historyLogs = historyData?.logs || []
+  const maintenances = maintenanceData?.maintenances || []
+  const reservations = reserveData?.reservations || []
 
   // React Query hooks - lazy load categories and subcategories only when dropdowns are opened
   const { data: categories = [], isLoading: categoriesLoading } = useCategories(isCategoryDropdownOpen)
@@ -256,6 +328,18 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
   const [isDeletingDocument, setIsDeletingDocument] = useState(false)
   const [documentToDownload, setDocumentToDownload] = useState<{ id: string; documentUrl: string; fileName?: string; mimeType?: string | null; documentSize?: number | null } | null>(null)
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false)
+  const [maintenanceToDelete, setMaintenanceToDelete] = useState<string | null>(null)
+  const [isDeleteMaintenanceDialogOpen, setIsDeleteMaintenanceDialogOpen] = useState(false)
+  const [isDeletingMaintenance, setIsDeletingMaintenance] = useState(false)
+  const [reservationToDelete, setReservationToDelete] = useState<string | null>(null)
+  const [isDeleteReservationDialogOpen, setIsDeleteReservationDialogOpen] = useState(false)
+  const [isDeletingReservation, setIsDeletingReservation] = useState(false)
+  const [auditToDelete, setAuditToDelete] = useState<string | null>(null)
+  const [isDeleteAuditDialogOpen, setIsDeleteAuditDialogOpen] = useState(false)
+  const [isDeletingAudit, setIsDeletingAudit] = useState(false)
+  const [historyLogToDelete, setHistoryLogToDelete] = useState<string | null>(null)
+  const [isDeleteHistoryDialogOpen, setIsDeleteHistoryDialogOpen] = useState(false)
+  const [isDeletingHistory, setIsDeletingHistory] = useState(false)
   const [mediaBrowserOpen, setMediaBrowserOpen] = useState(false)
   const [documentBrowserOpen, setDocumentBrowserOpen] = useState(false)
   const [previewImageIndex, setPreviewImageIndex] = useState(0)
@@ -389,6 +473,18 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
       additionalInformation: "",
       categoryId: "",
       subCategoryId: "",
+      qr: "",
+      oldAssetTag: "",
+      deliveryDate: "",
+      pbiNumber: "",
+      paymentVoucherNumber: "",
+      depreciableAsset: false,
+      depreciableCost: "",
+      salvageValue: "",
+      assetLifeMonths: "",
+      depreciationMethod: "",
+      dateAcquired: "",
+      unaccountedInventory: false,
     },
   })
 
@@ -417,6 +513,18 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
         additionalInformation: asset.additionalInformation || "",
         categoryId: asset.categoryId || "",
         subCategoryId: asset.subCategoryId || "",
+        qr: asset.qr ? (asset.qr.trim().toUpperCase() === "YES" ? "YES" : asset.qr.trim().toUpperCase() === "NO" ? "NO" : "") : "",
+        oldAssetTag: asset.oldAssetTag || "",
+        deliveryDate: asset.deliveryDate ? new Date(asset.deliveryDate).toISOString().split('T')[0] : "",
+        pbiNumber: asset.pbiNumber || "",
+        paymentVoucherNumber: asset.paymentVoucherNumber || "",
+        depreciableAsset: asset.depreciableAsset || false,
+        depreciableCost: asset.depreciableCost?.toString() || "",
+        salvageValue: asset.salvageValue?.toString() || "",
+        assetLifeMonths: asset.assetLifeMonths?.toString() || "",
+        depreciationMethod: asset.depreciationMethod || "",
+        dateAcquired: asset.dateAcquired ? new Date(asset.dateAcquired).toISOString().split('T')[0] : "",
+        unaccountedInventory: asset.unaccountedInventory || false,
       }
       form.reset(resetData)
     }
@@ -702,6 +810,127 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
     }
   }
 
+  // Delete maintenance function
+  const deleteMaintenance = async () => {
+    if (!maintenanceToDelete) return
+
+    setIsDeletingMaintenance(true)
+    try {
+      const response = await fetch(`/api/assets/maintenance/${maintenanceToDelete}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        queryClient.invalidateQueries({ queryKey: ['asset-maintenance', resolvedParams.id] })
+        toast.success('Maintenance record deleted successfully')
+        setIsDeleteMaintenanceDialogOpen(false)
+        setMaintenanceToDelete(null)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData.error || 'Failed to delete maintenance record')
+        setIsDeleteMaintenanceDialogOpen(false)
+        setMaintenanceToDelete(null)
+      }
+    } catch (error) {
+      console.error('Error deleting maintenance:', error)
+      toast.error('Failed to delete maintenance record')
+      setIsDeleteMaintenanceDialogOpen(false)
+      setMaintenanceToDelete(null)
+    } finally {
+      setIsDeletingMaintenance(false)
+    }
+  }
+
+  // Delete reservation function
+  const deleteReservation = async () => {
+    if (!reservationToDelete) return
+
+    setIsDeletingReservation(true)
+    try {
+      const response = await fetch(`/api/assets/reserve/${reservationToDelete}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        queryClient.invalidateQueries({ queryKey: ['asset-reserve', resolvedParams.id] })
+        toast.success('Reservation deleted successfully')
+        setIsDeleteReservationDialogOpen(false)
+        setReservationToDelete(null)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData.error || 'Failed to delete reservation')
+        setIsDeleteReservationDialogOpen(false)
+        setReservationToDelete(null)
+      }
+    } catch (error) {
+      console.error('Error deleting reservation:', error)
+      toast.error('Failed to delete reservation')
+      setIsDeleteReservationDialogOpen(false)
+      setReservationToDelete(null)
+    } finally {
+      setIsDeletingReservation(false)
+    }
+  }
+
+  // Delete audit function
+  const deleteAudit = async () => {
+    if (!auditToDelete) return
+
+    setIsDeletingAudit(true)
+    try {
+      const response = await fetch(`/api/assets/audit/${auditToDelete}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        queryClient.invalidateQueries({ queryKey: ['asset', resolvedParams.id] })
+        queryClient.invalidateQueries({ queryKey: ['asset-details', resolvedParams.id] })
+        toast.success('Audit record deleted successfully')
+        setIsDeleteAuditDialogOpen(false)
+        setAuditToDelete(null)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData.error || 'Failed to delete audit record')
+        setIsDeleteAuditDialogOpen(false)
+        setAuditToDelete(null)
+      }
+    } catch (error) {
+      console.error('Error deleting audit:', error)
+      toast.error('Failed to delete audit record')
+      setIsDeleteAuditDialogOpen(false)
+      setAuditToDelete(null)
+    } finally {
+      setIsDeletingAudit(false)
+    }
+  }
+
+  // Delete history log function
+  const deleteHistoryLog = async () => {
+    if (!historyLogToDelete) return
+
+    setIsDeletingHistory(true)
+    try {
+      const response = await fetch(`/api/assets/history/${historyLogToDelete}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        queryClient.invalidateQueries({ queryKey: ['asset-history', resolvedParams.id] })
+        toast.success('History log deleted successfully')
+        setIsDeleteHistoryDialogOpen(false)
+        setHistoryLogToDelete(null)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData.error || 'Failed to delete history log')
+        setIsDeleteHistoryDialogOpen(false)
+        setHistoryLogToDelete(null)
+      }
+    } catch (error) {
+      console.error('Error deleting history log:', error)
+      toast.error('Failed to delete history log')
+      setIsDeleteHistoryDialogOpen(false)
+      setHistoryLogToDelete(null)
+    } finally {
+      setIsDeletingHistory(false)
+    }
+  }
+
   // Check if asset tag exists
   const checkAssetTagExists = async (assetTag: string): Promise<boolean> => {
     try {
@@ -757,6 +986,18 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
         additionalInformation: data.additionalInformation || null,
         categoryId: data.categoryId || null,
         subCategoryId: data.subCategoryId || null,
+        qr: data.qr || null,
+        oldAssetTag: data.oldAssetTag || null,
+        deliveryDate: data.deliveryDate || null,
+        pbiNumber: data.pbiNumber || null,
+        paymentVoucherNumber: data.paymentVoucherNumber || null,
+        depreciableAsset: data.depreciableAsset || false,
+        depreciableCost: data.depreciableCost ? parseFloat(data.depreciableCost) : null,
+        salvageValue: data.salvageValue ? parseFloat(data.salvageValue) : null,
+        assetLifeMonths: data.assetLifeMonths ? parseInt(data.assetLifeMonths) : null,
+        depreciationMethod: data.depreciationMethod || null,
+        dateAcquired: data.dateAcquired || null,
+        unaccountedInventory: data.unaccountedInventory || false,
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -878,36 +1119,21 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
   }
 
   // Track form changes to show floating buttons
-  const formValues = form.watch()
+  // Use React Hook Form's built-in isDirty state combined with file selections
   const isFormDirty = useMemo(() => {
     if (!asset) return false
-    return !!(
-      formValues.assetTagId?.trim() !== asset.assetTagId ||
-      formValues.description?.trim() !== asset.description ||
-      formValues.brand?.trim() !== (asset.brand || '') ||
-      formValues.model?.trim() !== (asset.model || '') ||
-      formValues.serialNo?.trim() !== (asset.serialNo || '') ||
-      formValues.cost !== (asset.cost?.toString() || '') ||
-      formValues.assetType?.trim() !== (asset.assetType || '') ||
-      formValues.location?.trim() !== (asset.location || '') ||
-      formValues.department?.trim() !== (asset.department || '') ||
-      formValues.site?.trim() !== (asset.site || '') ||
-      formValues.owner?.trim() !== (asset.owner || '') ||
-      formValues.issuedTo?.trim() !== (asset.issuedTo || '') ||
-      formValues.purchasedFrom?.trim() !== (asset.purchasedFrom || '') ||
-      formValues.purchaseDate !== (asset.purchaseDate ? new Date(asset.purchaseDate).toISOString().split('T')[0] : '') ||
-      formValues.poNumber?.trim() !== (asset.poNumber || '') ||
-      formValues.xeroAssetNo?.trim() !== (asset.xeroAssetNo || '') ||
-      formValues.remarks?.trim() !== (asset.remarks || '') ||
-      formValues.additionalInformation?.trim() !== (asset.additionalInformation || '') ||
-      formValues.categoryId !== (asset.categoryId || '') ||
-      formValues.subCategoryId !== (asset.subCategoryId || '') ||
-      selectedImages.length > 0 ||
+    
+    // Check if form is dirty using React Hook Form's built-in state
+    const formIsDirty = form.formState.isDirty
+    
+    // Check if there are pending file uploads/selections
+    const hasPendingFiles = selectedImages.length > 0 ||
       selectedDocuments.length > 0 ||
       selectedExistingImages.length > 0 ||
       selectedExistingDocuments.length > 0
-    )
-  }, [formValues, asset, selectedImages.length, selectedDocuments.length, selectedExistingImages.length, selectedExistingDocuments.length])
+    
+    return formIsDirty || hasPendingFiles
+  }, [form.formState.isDirty, asset, selectedImages.length, selectedDocuments.length, selectedExistingImages.length, selectedExistingDocuments.length])
 
   // Clear form function
   const clearForm = () => {
@@ -976,79 +1202,305 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
     )
   }
 
+  // Format utilities for display
+  const formatDate = (dateString: string | Date | null | undefined) => {
+    if (!dateString) return 'N/A'
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+      })
+    } catch {
+      return String(dateString)
+    }
+  }
+
+  const formatCurrency = (value: number | string | null | undefined) => {
+    if (value === null || value === undefined) return 'N/A'
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+    }).format(Number(value))
+  }
+
+  const formatDateTime = (dateString: string | Date | null | undefined) => {
+    if (!dateString) return 'N/A'
+    try {
+      return new Date(dateString).toLocaleString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
+    } catch {
+      return String(dateString)
+    }
+  }
+
+  const getTimeAgo = (date: Date): string => {
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+    
+    if (diffInSeconds < 60) {
+      return 'just now'
+    }
+    
+    const diffInMinutes = Math.floor(diffInSeconds / 60)
+    if (diffInMinutes < 60) {
+      return `${diffInMinutes} ${diffInMinutes === 1 ? 'minute' : 'minutes'} ago`
+    }
+    
+    const diffInHours = Math.floor(diffInMinutes / 60)
+    if (diffInHours < 24) {
+      return `${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'} ago`
+    }
+    
+    const diffInDays = Math.floor(diffInHours / 24)
+    if (diffInDays < 30) {
+      return `${diffInDays} ${diffInDays === 1 ? 'day' : 'days'} ago`
+    }
+    
+    const diffInMonths = Math.floor(diffInDays / 30)
+    if (diffInMonths < 12) {
+      return `${diffInMonths} ${diffInMonths === 1 ? 'month' : 'months'} ago`
+    }
+    
+    const diffInYears = Math.floor(diffInMonths / 12)
+    return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`
+  }
+
+  // Get assigned to user from active checkout
+  const activeCheckout = asset?.checkouts?.find(
+    (checkout: { checkins?: Array<{ id: string }> | null }) => {
+      const checkinsCount = checkout.checkins?.length ?? 0
+      return checkinsCount === 0
+    }
+  )
+  const assignedToUser = (activeCheckout?.employeeUser?.name && activeCheckout.employeeUser.name.trim()) 
+    ? activeCheckout.employeeUser.name 
+    : 'N/A'
+
+  // Get status badge
+  const getStatusBadge = (status: string | null | undefined) => {
+    if (!status) return null
+    const statusLC = status.toLowerCase()
+    let statusVariant: 'default' | 'secondary' | 'destructive' | 'outline' = 'outline'
+    let statusColor = ''
+    
+    if (statusLC === 'active' || statusLC === 'available') {
+      statusVariant = 'default'
+      statusColor = 'bg-green-500'
+    } else if (statusLC === 'checked out' || statusLC === 'in use') {
+      statusVariant = 'destructive'
+      statusColor = 'bg-blue-500'
+    } else if (statusLC === 'leased') {
+      statusVariant = 'secondary'
+      statusColor = 'bg-yellow-500'
+    } else if (statusLC === 'inactive' || statusLC === 'unavailable') {
+      statusVariant = 'secondary'
+      statusColor = 'bg-gray-500'
+    } else if (statusLC === 'maintenance' || statusLC === 'repair') {
+      statusColor = 'bg-red-600 text-white'
+    } else if (statusLC === 'lost' || statusLC === 'missing') {
+      statusVariant = 'destructive'
+      statusColor = 'bg-orange-500'
+    } else if (statusLC === 'disposed' || statusLC === 'disposal') {
+      statusVariant = 'secondary'
+      statusColor = 'bg-purple-500'
+    } else if (statusLC === 'reserved') {
+      statusVariant = 'secondary'
+      statusColor = 'bg-yellow-500'
+    } else if (statusLC === 'sold') {
+      statusVariant = 'default'
+      statusColor = 'bg-teal-500 text-white border-0'
+    } else if (statusLC === 'donated') {
+      statusVariant = 'default'
+      statusColor = 'bg-blue-500 text-white border-0'
+    } else if (statusLC === 'scrapped') {
+      statusVariant = 'default'
+      statusColor = 'bg-orange-500 text-white border-0'
+    } else if (statusLC === 'lost/missing' || statusLC.replace(/\s+/g, '').replace('/', '').toLowerCase() === 'lostmissing') {
+      statusVariant = 'default'
+      statusColor = 'bg-yellow-500 text-white border-0'
+    } else if (statusLC === 'destroyed') {
+      statusVariant = 'default'
+      statusColor = 'bg-red-500 text-white border-0'
+    }
+    
+    return <Badge variant={statusVariant} className={statusColor}>{status}</Badge>
+  }
+
   return (
     <div className="space-y-6 pb-16">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Edit Asset</h1>
           <p className="text-muted-foreground">
             Update asset details and information
           </p>
         </div>
-        <Link href="/assets">
-          <Button variant="outline">
+        <Link href="/assets" className="w-full sm:w-auto">
+          <Button variant="outline" className="w-full sm:w-auto">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Assets
+            <span className="hidden sm:inline">Back to Assets</span>
+            <span className="sm:hidden">Back</span>
           </Button>
         </Link>
       </div>
 
+      {/* Top Section with Thumbnail and Key Fields */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 border rounded-lg p-4 bg-card">
+        {/* Thumbnail Image */}
+        <div className="lg:col-span-1">
+          <div className="relative w-full h-full bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+            {thumbnailImage ? (
+              <Image
+                src={thumbnailImage.imageUrl}
+                alt={asset?.assetTagId || 'Asset'}
+                fill
+                className="object-contain p-2"
+                unoptimized
+                loading="eager"
+                priority
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <ImageIcon className="h-12 w-12 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Key Fields */}
+        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Asset Tag ID</p>
+            <p className="text-sm font-medium">{asset?.assetTagId || 'N/A'}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Purchase Date</p>
+            <p className="text-sm">{formatDate(asset?.purchaseDate || null)}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Cost</p>
+            <p className="text-sm">{formatCurrency(asset?.cost)}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Brand</p>
+            <p className="text-sm">{asset?.brand || 'N/A'}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Model</p>
+            <p className="text-sm">{asset?.model || 'N/A'}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Site</p>
+            <p className="text-sm">{asset?.site || 'N/A'}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Location</p>
+            <p className="text-sm">{asset?.location || 'N/A'}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Category</p>
+            <p className="text-sm">{asset?.category?.name || 'N/A'}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Department</p>
+            <p className="text-sm">{asset?.department || 'N/A'}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Assigned To</p>
+            <p className="text-sm">{assignedToUser}</p>
+          </div>
+          <div className="border-b pb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
+            <div className="flex items-center">
+              {getStatusBadge(asset?.status) || <span className="text-sm">N/A</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
-      <ScrollArea className="max-w-sm sm:max-w-full border-b">
-      <div className="flex items-center gap-2 ">
+      <ScrollArea className="w-full border-b">
+        <div className="flex items-center gap-2">
         <Button
           type="button"
           variant="ghost"
-          onClick={() => handleTabChange('basic')}
+            onClick={() => handleTabChange('details')}
           className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
-            activeTab === 'basic'
+              activeTab === 'details'
               ? 'border-primary text-primary'
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          Basic Details
+            Details
         </Button>
         <Button
           type="button"
           variant="ghost"
-          onClick={() => handleTabChange('media')}
+            onClick={() => handleTabChange('photos')}
           className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
-            activeTab === 'media'
+              activeTab === 'photos'
               ? 'border-primary text-primary'
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          Asset Media
+            Photos
         </Button>
         <Button
           type="button"
           variant="ghost"
-          onClick={() => handleTabChange('purchase')}
+            onClick={() => handleTabChange('docs')}
           className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
-            activeTab === 'purchase'
+              activeTab === 'docs'
               ? 'border-primary text-primary'
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          Purchase & Additional Information
+            Docs
         </Button>
-        {hasCheckout && (
           <Button
             type="button"
             variant="ghost"
-            onClick={() => handleTabChange('checkout')}
+            onClick={() => handleTabChange('depreciation')}
             className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
-              activeTab === 'checkout'
+              activeTab === 'depreciation'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            <span className="flex items-center gap-2">
-              <ArrowRight className="h-4 w-4" />
-              Checkout
-            </span>
+            Depreciation
           </Button>
-        )}
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => handleTabChange('maintenance')}
+            className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+              activeTab === 'maintenance'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Maintenance
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => handleTabChange('reserve')}
+            className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+              activeTab === 'reserve'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Reserve
+          </Button>
         <Button
           type="button"
           variant="ghost"
@@ -1059,19 +1511,30 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <span className="flex items-center gap-2">
-            <ClipboardCheck className="h-4 w-4" />
             Audit
-          </span>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => handleTabChange('history')}
+            className={`px-4 py-2 h-auto text-sm font-medium transition-colors border-b-2 rounded-none ${
+              activeTab === 'history'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            History
         </Button>
       </div>
       <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
+      {/* Tab Content */}
+      <div className="min-h-[400px]">
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-        <div className="grid gap-2.5 md:grid-cols-2 mt-6">
-          {/* Basic Information & Asset Details */}
-          {activeTab === 'basic' && (
+        <div className="grid gap-2.5 md:grid-cols-2">
+          {/* Details Tab - Basic Information & Asset Details */}
+          {activeTab === 'details' && (
           <Card className="md:col-span-2">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Basic Information & Asset Details</CardTitle>
@@ -1391,8 +1854,8 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
           </Card>
           )}
 
-          {/* Asset Images */}
-          {activeTab === 'media' && (
+          {/* Photos Tab */}
+          {activeTab === 'photos' && (
           <>
           <Card className="md:col-span-2">
             <CardHeader className="pb-3">
@@ -1586,7 +2049,12 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
               </div>
             </CardContent>
           </Card>
+          </>
+          )}
 
+          {/* Docs Tab */}
+          {activeTab === 'docs' && (
+          <>
           {/* Asset Documents */}
           <Card className="md:col-span-2">
             <CardHeader className="pb-3">
@@ -1881,8 +2349,9 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
           </>
           )}
 
-          {/* Purchase & Additional Information */}
-          {activeTab === 'purchase' && (
+          {/* Purchase & Additional Information - Part of Details Tab */}
+          {activeTab === 'details' && (
+          <>
           <Card className="md:col-span-2">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Purchase & Additional Information</CardTitle>
@@ -2002,6 +2471,99 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                 </Field>
 
                 <Field>
+                  <FieldLabel htmlFor="pbiNumber">PBI Number</FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="pbiNumber"
+                      {...form.register("pbiNumber")}
+                      placeholder="PBI number"
+                    />
+                  </FieldContent>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="paymentVoucherNumber">Payment Voucher Number</FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="paymentVoucherNumber"
+                      {...form.register("paymentVoucherNumber")}
+                      placeholder="Payment voucher number"
+                    />
+                  </FieldContent>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="deliveryDate">Delivery Date</FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="deliveryDate"
+                      type="date"
+                      {...form.register("deliveryDate")}
+                    />
+                  </FieldContent>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="qr">QR Code</FieldLabel>
+                  <FieldContent>
+                    <Controller
+                      name="qr"
+                      control={form.control}
+                      render={({ field }) => {
+                        const normalizedValue = field.value ? (field.value.trim().toUpperCase() === "YES" ? "YES" : field.value.trim().toUpperCase() === "NO" ? "NO" : "") : ""
+                        return (
+                          <Select
+                            value={normalizedValue}
+                            onValueChange={field.onChange}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select QR code status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="YES">YES</SelectItem>
+                              <SelectItem value="NO">NO</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )
+                      }}
+                    />
+                    {form.formState.errors.qr && (
+                      <FieldError>{form.formState.errors.qr.message}</FieldError>
+                    )}
+                  </FieldContent>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="oldAssetTag">Old Asset Tag</FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="oldAssetTag"
+                      {...form.register("oldAssetTag")}
+                      placeholder="Previous asset tag"
+                    />
+                  </FieldContent>
+                </Field>
+
+                <Field className="md:col-span-2">
+                  <div className="flex items-center space-x-2">
+                    <Controller
+                      name="unaccountedInventory"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Checkbox
+                          id="unaccountedInventory"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      )}
+                    />
+                    <Label htmlFor="unaccountedInventory" className="text-sm font-normal cursor-pointer">
+                      Unaccounted Inventory
+                    </Label>
+                  </div>
+                </Field>
+
+                <Field>
                   <FieldLabel htmlFor="additionalInformation">Additional Information</FieldLabel>
                   <FieldContent>
                     <textarea
@@ -2027,50 +2589,513 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
               </div>
             </CardContent>
           </Card>
+          </>
           )}
 
-          {/* Checkout History */}
-          {activeTab === 'checkout' && asset && (
+          {/* Depreciation Tab */}
+          {activeTab === 'depreciation' && (
+          <>
             <Card className="md:col-span-2">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Checkout History</CardTitle>
+              <CardTitle className="text-base">Depreciation Information</CardTitle>
                 <CardDescription className="text-xs">
-                  View and manage checkout records for this asset
+                Depreciation settings and calculations
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-2 pb-4">
-                <ScrollArea className="max-h-[450px]">
-                    <CheckoutManager 
-                    assetId={asset.id} 
-                    assetTagId={asset.assetTagId}
-                    invalidateQueryKey={['asset', asset.id]}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+                <Field className="md:col-span-2">
+                  <div className="flex items-center space-x-2">
+                    <Controller
+                      name="depreciableAsset"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Checkbox
+                          id="depreciableAsset"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      )}
                     />
-                </ScrollArea>
+                    <Label htmlFor="depreciableAsset" className="text-sm font-normal cursor-pointer">
+                      Depreciable Asset
+                    </Label>
+                  </div>
+                </Field>
+
+                {form.watch("depreciableAsset") && (
+                  <>
+                    <Field>
+                      <FieldLabel htmlFor="depreciableCost">Depreciable Cost</FieldLabel>
+                      <FieldContent>
+                        <Input
+                          id="depreciableCost"
+                          type="number"
+                          step="0.01"
+                          {...form.register("depreciableCost")}
+                          placeholder="0.00"
+                        />
+                        {form.formState.errors.depreciableCost && (
+                          <FieldError>{form.formState.errors.depreciableCost.message}</FieldError>
+                        )}
+                      </FieldContent>
+                    </Field>
+
+                    <Field>
+                      <FieldLabel htmlFor="salvageValue">Salvage Value</FieldLabel>
+                      <FieldContent>
+                        <Input
+                          id="salvageValue"
+                          type="number"
+                          step="0.01"
+                          {...form.register("salvageValue")}
+                          placeholder="0.00"
+                        />
+                        {form.formState.errors.salvageValue && (
+                          <FieldError>{form.formState.errors.salvageValue.message}</FieldError>
+                        )}
+                      </FieldContent>
+                    </Field>
+
+                    <Field>
+                      <FieldLabel htmlFor="assetLifeMonths">Asset Life (Months)</FieldLabel>
+                      <FieldContent>
+                        <Input
+                          id="assetLifeMonths"
+                          type="number"
+                          step="1"
+                          {...form.register("assetLifeMonths")}
+                          placeholder="e.g., 60"
+                        />
+                        {form.formState.errors.assetLifeMonths && (
+                          <FieldError>{form.formState.errors.assetLifeMonths.message}</FieldError>
+                        )}
+                      </FieldContent>
+                    </Field>
+
+                    <Field>
+                      <FieldLabel htmlFor="depreciationMethod">Depreciation Method</FieldLabel>
+                      <FieldContent>
+                        <Controller
+                          name="depreciationMethod"
+                          control={form.control}
+                          render={({ field }) => (
+                            <Select
+                              value={field.value || ""}
+                              onValueChange={field.onChange}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select depreciation method" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Straight Line">Straight Line</SelectItem>
+                                <SelectItem value="Declining Balance">Declining Balance</SelectItem>
+                                <SelectItem value="Sum of Years">Sum of Years</SelectItem>
+                                <SelectItem value="Units of Production">Units of Production</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                        {form.formState.errors.depreciationMethod && (
+                          <FieldError>{form.formState.errors.depreciationMethod.message}</FieldError>
+                        )}
+                      </FieldContent>
+                    </Field>
+
+                    <Field>
+                      <FieldLabel htmlFor="dateAcquired">Date Acquired</FieldLabel>
+                      <FieldContent>
+                        <Input
+                          id="dateAcquired"
+                          type="date"
+                          {...form.register("dateAcquired")}
+                    />
+                        {form.formState.errors.dateAcquired && (
+                          <FieldError>{form.formState.errors.dateAcquired.message}</FieldError>
+                        )}
+                      </FieldContent>
+                    </Field>
+                  </>
+                )}
+              </div>
               </CardContent>
             </Card>
+          </>
           )}
 
-          {/* Audit History */}
-          {activeTab === 'audit' && asset && (
-            <Card className="md:col-span-2">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Audit History</CardTitle>
-                <CardDescription className="text-xs">
-                  View and manage audit records for this asset
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-2 pb-4">
-                <ScrollArea className="max-h-[450px]">
-                    <AuditHistoryManager 
-                    assetId={asset.id} 
-                    assetTagId={asset.assetTagId}
-                    />
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </form>
+        {/* Audit Tab */}
+        {activeTab === 'audit' && (
+          <div className="space-y-4">
+            {!asset?.auditHistory || asset.auditHistory.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No audit records found.</p>
+            ) : (
+              <div className="min-w-full">
+                <ScrollArea className="h-[500px] relative">
+                  <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
+                  <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
+                    <Table className="border-b">
+                      <TableHeader className="sticky -top-1 z-20 bg-card [&_tr]:border-b-0 -mr-2.5">
+                        <TableRow className="group hover:bg-muted/50 relative border-b-0 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-[1.5px] after:h-px after:bg-border after:z-30">
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[11%]">Date</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[16%]">Audit Type</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[11%]">Status</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[16%]">Auditor</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[36%]">Notes</TableHead>
+                          <TableHead className="bg-card transition-colors sticky z-10 right-0 group-hover:bg-card before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 text-center w-[10%]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {asset.auditHistory.map((audit: { id: string; auditType: string; auditDate: string | Date; auditor: string | null; status: string | null; notes: string | null }) => (
+                          <TableRow key={audit.id} className="group relative">
+                            <TableCell className="font-medium">
+                              {formatDate(audit.auditDate || null)}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm font-medium">{audit.auditType || 'N/A'}</span>
+                            </TableCell>
+                            <TableCell>
+                              {audit.status ? (
+                                <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                  audit.status.toLowerCase() === 'completed' ? 'bg-green-500/10 text-green-500' :
+                                  audit.status.toLowerCase() === 'pending' ? 'bg-yellow-500/10 text-yellow-500' :
+                                  audit.status.toLowerCase() === 'failed' ? 'bg-red-500/10 text-red-500' :
+                                  'bg-gray-500/10 text-gray-500'
+                                }`}>
+                                  {audit.status}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">{audit.auditor || <span className="text-muted-foreground">-</span>}</span>
+                            </TableCell>
+                            <TableCell>
+                              <p className="text-sm wrap-break-word">
+                                {audit.notes || <span className="text-muted-foreground">-</span>}
+                              </p>
+                            </TableCell>
+                            <TableCell className="sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 group-hover:bg-card">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => {
+                                  setAuditToDelete(audit.id)
+                                  setIsDeleteAuditDialogOpen(true)
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <ScrollBar orientation="horizontal" />
+                  <ScrollBar orientation="vertical" className="z-50" />
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Maintenance Tab */}
+        {activeTab === 'maintenance' && (
+          <div className="space-y-4">
+            {maintenances.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No maintenance records found.</p>
+            ) : (
+              <div className="min-w-full">
+                <ScrollArea className="h-[500px] relative">
+                  <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
+                  <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
+                    <Table className="border-b">
+                      <TableHeader className="sticky -top-1 z-20 bg-card [&_tr]:border-b-0 -mr-2.5">
+                        <TableRow className="group hover:bg-muted/50 relative border-b-0 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-[1.5px] after:h-px after:bg-border after:z-30">
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[18%]">Title</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[13%]">Status</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[11%]">Due Date</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[11%]">Date Completed</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[13%]">Maintenance By</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[10%]">Cost</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[12%]">Details</TableHead>
+                          <TableHead className="bg-card transition-colors sticky z-10 right-0 group-hover:bg-card before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 text-center w-[12%]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {maintenances.map((maintenance: { 
+                          id: string
+                          title: string
+                          details?: string | null
+                          dueDate?: string | Date | null
+                          status?: string | null
+                          maintenanceBy?: string | null
+                          dateCompleted?: string | Date | null
+                          cost?: number | string | null
+                        }) => (
+                          <TableRow key={maintenance.id} className="group relative">
+                            <TableCell>
+                              <span className="text-sm font-medium">{maintenance.title || 'N/A'}</span>
+                            </TableCell>
+                            <TableCell>
+                              {maintenance.status ? (
+                                <span className={`px-2 py-1 text-xs font-medium rounded capitalize ${
+                                  maintenance.status.toLowerCase() === 'completed' ? 'bg-green-500/10 text-green-500' :
+                                  maintenance.status.toLowerCase() === 'in progress' ? 'bg-blue-500/10 text-blue-500' :
+                                  maintenance.status.toLowerCase() === 'scheduled' ? 'bg-yellow-500/10 text-yellow-500' :
+                                  maintenance.status.toLowerCase() === 'cancelled' ? 'bg-red-500/10 text-red-500' :
+                                  'bg-gray-500/10 text-gray-500'
+                                }`}>
+                                  {maintenance.status}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">{formatDate(maintenance.dueDate || null)}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">{formatDate(maintenance.dateCompleted || null)}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">{maintenance.maintenanceBy || <span className="text-muted-foreground">-</span>}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">{formatCurrency(maintenance.cost)}</span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="max-w-[200px]">
+                                <p className="text-sm wrap-break-word">
+                                  {maintenance.details || <span className="text-muted-foreground">-</span>}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 group-hover:bg-card">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => {
+                                  setMaintenanceToDelete(maintenance.id)
+                                  setIsDeleteMaintenanceDialogOpen(true)
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <ScrollBar orientation="horizontal" />
+                  <ScrollBar orientation="vertical" className="z-50" />
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reserve Tab */}
+        {activeTab === 'reserve' && (
+          <div className="space-y-4">
+            {reservations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No reservations found.</p>
+            ) : (
+              <div className="min-w-full">
+                <ScrollArea className="h-[500px] relative">
+                  <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
+                  <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
+                    <Table className="border-b">
+                      <TableHeader className="sticky -top-1 z-20 bg-card [&_tr]:border-b-0 -mr-2.5">
+                        <TableRow className="group hover:bg-muted/50 relative border-b-0 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-[1.5px] after:h-px after:bg-border after:z-30">
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[13%]">Asset ID</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[16%]">Description</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[10%]">Type</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[13%]">Reserved For</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[13%]">Purpose</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[11%]">Reservation Date</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[11%]">Time Ago</TableHead>
+                          <TableHead className="bg-card transition-colors sticky z-10 right-0 group-hover:bg-card before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 text-center w-[13%]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {reservations.map((reservation: { 
+                          id: string
+                          reservationType: string
+                          purpose?: string | null
+                          reservationDate: string | Date
+                          employeeUser?: { name: string } | null
+                          department?: string | null
+                          asset?: { assetTagId: string; description: string } | null
+                        }) => {
+                          const reservationDate = reservation.reservationDate ? new Date(reservation.reservationDate) : null
+                          const timeAgo = reservationDate ? getTimeAgo(reservationDate) : '-'
+                          
+                          return (
+                            <TableRow key={reservation.id} className="group relative">
+                              <TableCell>
+                                {reservation.asset?.assetTagId ? (
+                                  <Badge variant="outline" className="font-medium">
+                                    {reservation.asset.assetTagId}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm">{reservation.asset?.description || asset?.description || 'N/A'}</span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm capitalize">{reservation.reservationType || 'N/A'}</span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm">
+                                  {reservation.reservationType === 'Employee' && reservation.employeeUser
+                                    ? reservation.employeeUser.name
+                                    : reservation.reservationType === 'Department' && reservation.department
+                                    ? reservation.department
+                                    : <span className="text-muted-foreground">-</span>}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm">{reservation.purpose || <span className="text-muted-foreground">-</span>}</span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm">{formatDate(reservation.reservationDate)}</span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm text-muted-foreground">{timeAgo}</span>
+                              </TableCell>
+                              <TableCell className="sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 group-hover:bg-card">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => {
+                                    setReservationToDelete(reservation.id)
+                                    setIsDeleteReservationDialogOpen(true)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <ScrollBar orientation="horizontal" />
+                  <ScrollBar orientation="vertical" className="z-50" />
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            {historyLogs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No history logs found.</p>
+            ) : (
+              <div className="min-w-full">
+                <ScrollArea className="h-[500px] relative">
+                  <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
+                  <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
+                    <Table className="border-b">
+                      <TableHeader className="sticky -top-1 z-20 bg-card [&_tr]:border-b-0 -mr-2.5">
+                        <TableRow className="group hover:bg-muted/50 relative border-b-0 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-[1.5px] after:h-px after:bg-border after:z-30">
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[130px]">Date</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[110px]">Event</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[130px]">Field</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left">Changed from</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left">Changed to</TableHead>
+                          <TableHead className="bg-card transition-colors group-hover:bg-muted/50 text-left w-[160px]">Action by</TableHead>
+                          <TableHead className="bg-card transition-colors sticky z-10 right-0 group-hover:bg-card before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 text-center w-[100px]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {historyLogs.map((log: { id: string; eventType: string; eventDate: string; field?: string; changeFrom?: string; changeTo?: string; actionBy: string }) => {
+                          const eventLabel = log.eventType === 'added' ? 'Asset added' : 
+                                            log.eventType === 'edited' ? 'Asset edit' : 
+                                            'Asset deleted'
+                          
+                          return (
+                            <TableRow key={log.id} className="group relative">
+                              <TableCell className="font-medium">
+                                {formatDateTime(log.eventDate)}
+                              </TableCell>
+                              <TableCell>
+                                <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                  log.eventType === 'added' ? 'bg-green-500/10 text-green-500' :
+                                  log.eventType === 'edited' ? 'bg-blue-500/10 text-blue-500' :
+                                  'bg-red-500/10 text-red-500'
+                                }`}>
+                                  {eventLabel}
+                                </span>
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {log.field ? (
+                                  <span className="capitalize">{log.field}</span>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="max-w-[300px]">
+                                  <p className="text-sm wrap-break-word">
+                                    {log.changeFrom || <span className="text-muted-foreground">(empty)</span>}
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="max-w-[300px]">
+                                  <p className="text-sm wrap-break-word">
+                                    {log.changeTo || <span className="text-muted-foreground">(empty)</span>}
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm">{log.actionBy}</span>
+                              </TableCell>
+                              <TableCell className="sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 group-hover:bg-card">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => {
+                                    setHistoryLogToDelete(log.id)
+                                    setIsDeleteHistoryDialogOpen(true)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <ScrollBar orientation="horizontal" />
+                  <ScrollBar orientation="vertical" className="z-50" />
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Floating Action Buttons */}
       {isFormDirty && (
@@ -2156,6 +3181,46 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
         description="Are you sure you want to delete this document? This action cannot be undone."
         confirmLabel="Delete Document"
         isLoading={isDeletingDocument}
+      />
+
+      <DeleteConfirmationDialog
+        open={isDeleteMaintenanceDialogOpen}
+        onOpenChange={setIsDeleteMaintenanceDialogOpen}
+        onConfirm={deleteMaintenance}
+        title="Delete Maintenance Record"
+        description="Are you sure you want to delete this maintenance record? This action cannot be undone."
+        confirmLabel="Delete Maintenance"
+        isLoading={isDeletingMaintenance}
+      />
+
+      <DeleteConfirmationDialog
+        open={isDeleteReservationDialogOpen}
+        onOpenChange={setIsDeleteReservationDialogOpen}
+        onConfirm={deleteReservation}
+        title="Delete Reservation"
+        description="Are you sure you want to delete this reservation? This action cannot be undone."
+        confirmLabel="Delete Reservation"
+        isLoading={isDeletingReservation}
+      />
+
+      <DeleteConfirmationDialog
+        open={isDeleteAuditDialogOpen}
+        onOpenChange={setIsDeleteAuditDialogOpen}
+        onConfirm={deleteAudit}
+        title="Delete Audit Record"
+        description="Are you sure you want to delete this audit record? This action cannot be undone."
+        confirmLabel="Delete Audit"
+        isLoading={isDeletingAudit}
+      />
+
+      <DeleteConfirmationDialog
+        open={isDeleteHistoryDialogOpen}
+        onOpenChange={setIsDeleteHistoryDialogOpen}
+        onConfirm={deleteHistoryLog}
+        title="Delete History Log"
+        description="Are you sure you want to delete this history log? This action cannot be undone."
+        confirmLabel="Delete History"
+        isLoading={isDeletingHistory}
       />
 
       <DownloadConfirmationDialog

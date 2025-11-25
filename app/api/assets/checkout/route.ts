@@ -95,8 +95,8 @@ export async function POST(request: NextRequest) {
     })
 
     // Invalidate dashboard and activities cache when checkout is created
-    clearCache('dashboard-stats')
-    clearCache('activities-')
+    await clearCache('dashboard-stats')
+    await clearCache('activities-')
 
     return NextResponse.json({ 
       success: true,

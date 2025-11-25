@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
+import { getCached, setCached } from '@/lib/cache-utils'
 
 export async function GET() {
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
   try {
+    const cacheKey = 'stats-dispose'
+
+    // Check cache first
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cached = await getCached<any>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const tomorrow = new Date(today)
@@ -51,10 +60,15 @@ export async function GET() {
       },
     })
 
-    return NextResponse.json({
+    const result = {
       disposedTodayCount,
       recentDisposals,
-    })
+    }
+
+    // Cache the result with 30 second TTL
+    await setCached(cacheKey, result, 30000)
+
+    return NextResponse.json(result)
   } catch (error: any) {
     console.error('Error fetching dispose stats:', error)
     return NextResponse.json(

@@ -1,24 +1,40 @@
 /**
- * Simple in-memory cache for API responses
- * For production with multiple serverless instances, consider Redis/Vercel KV
+ * Hybrid cache system: Redis (primary) + In-memory (fallback)
+ * 
+ * For production with multiple serverless instances, Redis ensures cache is shared
+ * Falls back to in-memory cache if Redis is unavailable
  * 
  * This reduces database load by caching expensive query results
  */
+
+import { getRedisCached, setRedisCached, deleteRedisCachedByPrefix, isRedisAvailable } from './redis'
 
 interface CacheEntry<T> {
   data: T
   expiresAt: number
 }
 
-// In-memory cache store
+// In-memory cache store (fallback)
 const cache = new Map<string, CacheEntry<unknown>>()
 
 /**
  * Get cached data if it exists and hasn't expired
+ * Tries Redis first, falls back to in-memory cache
  * @param key - Cache key
  * @returns Cached data or null if expired/not found
  */
-export function getCached<T>(key: string): T | null {
+export async function getCached<T>(key: string): Promise<T | null> {
+  // Always try Redis first (it will connect if needed and fallback silently if unavailable)
+  try {
+    const redisData = await getRedisCached<T>(key)
+    if (redisData !== null) {
+      return redisData
+    }
+  } catch {
+    // Silently fallback - Redis might not be available yet
+  }
+
+  // Fallback to in-memory cache
   const entry = cache.get(key) as CacheEntry<T> | undefined
   
   if (entry && entry.expiresAt > Date.now()) {
@@ -35,11 +51,22 @@ export function getCached<T>(key: string): T | null {
 
 /**
  * Store data in cache with TTL
+ * Stores in Redis if available, also stores in-memory as backup
  * @param key - Cache key
  * @param data - Data to cache
  * @param ttlMs - Time to live in milliseconds
  */
-export function setCached<T>(key: string, data: T, ttlMs: number): void {
+export async function setCached<T>(key: string, data: T, ttlMs: number): Promise<void> {
+  const ttlSeconds = Math.ceil(ttlMs / 1000)
+
+  // Always try Redis first (it will connect if needed and fail silently if unavailable)
+  try {
+    await setRedisCached(key, data, ttlSeconds)
+  } catch {
+    // Silently fallback - Redis might not be available yet
+  }
+
+  // Always store in-memory as fallback
   cache.set(key, {
     data,
     expiresAt: Date.now() + ttlMs,
@@ -48,9 +75,26 @@ export function setCached<T>(key: string, data: T, ttlMs: number): void {
 
 /**
  * Clear cache entries
+ * Clears from both Redis and in-memory cache
  * @param keyPrefix - Optional prefix to clear specific entries. If omitted, clears all.
  */
-export function clearCache(keyPrefix?: string): void {
+export async function clearCache(keyPrefix?: string): Promise<void> {
+  // Clear from Redis if available
+  if (isRedisAvailable()) {
+    try {
+      if (keyPrefix) {
+        await deleteRedisCachedByPrefix(keyPrefix)
+      } else {
+        // Note: clearAllRedisCache() clears entire database - use with caution
+        // For now, we'll only clear by prefix to be safe
+        await deleteRedisCachedByPrefix('')
+      }
+    } catch (error) {
+      console.error(`[CACHE] Redis clear failed:`, error)
+    }
+  }
+
+  // Clear from in-memory cache
   if (!keyPrefix) {
     cache.clear()
     return
@@ -65,12 +109,13 @@ export function clearCache(keyPrefix?: string): void {
 
 /**
  * Get cache statistics
- * @returns Cache size and entries
+ * @returns Cache size and keys (from in-memory cache only)
  */
-export function getCacheStats(): { size: number; keys: string[] } {
+export function getCacheStats(): { size: number; keys: string[]; redisAvailable: boolean } {
   return {
     size: cache.size,
     keys: Array.from(cache.keys()),
+    redisAvailable: isRedisAvailable(),
   }
 }
 
@@ -88,7 +133,7 @@ if (typeof setInterval !== 'undefined') {
     }
     
     if (cleaned > 0) {
-      console.log(`[CACHE] Cleaned ${cleaned} expired entries`)
+      console.log(`[CACHE] Cleaned ${cleaned} expired entries from memory`)
     }
   }, 300000) // 5 minutes
 }

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     // Only cache when no search filter
     if (!search) {
       const cacheKey = 'departments-list'
-      const cached = getCached<{ departments: unknown[] }>(cacheKey)
+      const cached = await getCached<{ departments: unknown[] }>(cacheKey)
       if (cached) {
         return NextResponse.json(cached)
       }
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     
     // Cache for 10 minutes if no search filter
     if (!search) {
-      setCached('departments-list', result, 600000)
+      await setCached('departments-list', result, 600000)
     }
 
     return NextResponse.json(result)
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     )
 
     // Invalidate departments cache
-    clearCache('departments-list')
+    await clearCache('departments-list')
 
     return NextResponse.json({ department }, { status: 201 })
   } catch (error: any) {

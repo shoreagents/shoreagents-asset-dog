@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
 import { retryDbOperation } from '@/lib/db-utils'
+import { getCached, setCached, clearCache } from '@/lib/cache-utils'
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAuth()
@@ -16,6 +17,16 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10)
     const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
     const skip = (page - 1) * pageSize
+
+    // Generate cache key based on all query parameters
+    const cacheKey = `employees-${page}-${pageSize}-${search || ''}-${searchType}-${excludeWithCheckedOutAssets}`
+
+    // Check cache first
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cached = await getCached<any>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
     
     let whereClause = {}
     
@@ -144,7 +155,7 @@ export async function GET(request: NextRequest) {
 
     const totalPages = Math.ceil(totalCount / pageSize)
 
-    return NextResponse.json({ 
+    const result = { 
       employees: employeesWithFilteredCheckouts,
       pagination: {
         page,
@@ -154,7 +165,12 @@ export async function GET(request: NextRequest) {
         hasNextPage: page < totalPages,
         hasPreviousPage: page > 1,
       }
-    })
+    }
+
+    // Cache the result with 30 second TTL
+    await setCached(cacheKey, result, 30000)
+
+    return NextResponse.json(result)
   } catch (error: unknown) {
     // Handle connection pool errors specifically
     const prismaError = error as { code?: string; message?: string }
@@ -219,6 +235,9 @@ export async function POST(request: NextRequest) {
         },
       })
     )
+
+    // Clear employees cache when a new employee is created
+    await clearCache('employees-')
 
     return NextResponse.json({ employee }, { status: 201 })
   } catch (error: any) {

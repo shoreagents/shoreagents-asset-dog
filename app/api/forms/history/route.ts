@@ -3,6 +3,7 @@ import { verifyAuth } from "@/lib/auth-utils"
 import { prisma } from "@/lib/prisma"
 import { retryDbOperation } from "@/lib/db-utils"
 import { requirePermission } from "@/lib/permission-utils"
+import { getCached, setCached } from "@/lib/cache-utils"
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAuth()
@@ -11,6 +12,20 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const formType = searchParams.get("formType") || "accountability" // "accountability" or "return"
+    const search = searchParams.get("search")
+    const searchType = searchParams.get("searchType") || "unified" // "unified", "employee", "department", "formNo"
+    const page = parseInt(searchParams.get("page") || "1", 10)
+    const pageSize = parseInt(searchParams.get("pageSize") || "100", 10)
+
+    // Generate cache key based on all query parameters
+    const cacheKey = `forms-history-${formType}-${page}-${pageSize}-${search || ''}-${searchType}`
+
+    // Check cache first
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cached = await getCached<any>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
 
     // Check permissions based on form type
     if (formType === "return") {
@@ -24,10 +39,6 @@ export async function GET(request: NextRequest) {
     return permissionCheck.error
   }
     }
-    const search = searchParams.get("search")
-    const searchType = searchParams.get("searchType") || "unified" // "unified", "employee", "department", "formNo"
-    const page = parseInt(searchParams.get("page") || "1", 10)
-    const pageSize = parseInt(searchParams.get("pageSize") || "100", 10)
     const skip = (page - 1) * pageSize
 
     // Build where clauses for both form types (for counts)
@@ -110,8 +121,7 @@ export async function GET(request: NextRequest) {
 
       const totalPages = Math.ceil((total as number) / pageSize)
 
-      return NextResponse.json(
-        {
+      const result = {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           returnForms: (returnForms as any[]).map((form: { formData?: string; [key: string]: unknown }) => ({
             ...form,
@@ -129,9 +139,12 @@ export async function GET(request: NextRequest) {
             returnForms: returnFormsCount,
             accountabilityForms: accountabilityFormsCount,
           },
-        },
-        { status: 200 }
-      )
+      }
+
+      // Cache the result with 15 second TTL
+      await setCached(cacheKey, result, 15000)
+
+      return NextResponse.json(result, { status: 200 })
     } else {
       // Accountability Forms
       const [accountabilityForms, total] = await Promise.all([
@@ -161,8 +174,7 @@ export async function GET(request: NextRequest) {
 
       const totalPages = Math.ceil((total as number) / pageSize)
 
-      return NextResponse.json(
-        {
+      const result = {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           accountabilityForms: (accountabilityForms as any[]).map((form: { formData?: string; [key: string]: unknown }) => ({
             ...form,
@@ -180,9 +192,12 @@ export async function GET(request: NextRequest) {
             returnForms: returnFormsCount,
             accountabilityForms: accountabilityFormsCount,
           },
-        },
-        { status: 200 }
-      )
+      }
+
+      // Cache the result with 15 second TTL
+      await setCached(cacheKey, result, 15000)
+
+      return NextResponse.json(result, { status: 200 })
     }
   } catch (error: unknown) {
     const prismaError = error as { code?: string; message?: string }

@@ -4,7 +4,7 @@ import { parseDate } from '@/lib/date-utils'
 import { verifyAuth } from '@/lib/auth-utils'
 import { retryDbOperation } from '@/lib/db-utils'
 import { requirePermission, getUserPermissions, hasPermission } from '@/lib/permission-utils'
-import { clearCache } from '@/lib/cache-utils'
+import { clearCache, getCached, setCached } from '@/lib/cache-utils'
 import { Prisma } from '@prisma/client'
 
 export async function GET(request: NextRequest) {
@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const withMaintenance = searchParams.get('withMaintenance') === 'true'
     const includeDeleted = searchParams.get('includeDeleted') === 'true'
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
+    const searchFieldsParam = searchParams.get('searchFields')
+    const statusesOnly = searchParams.get('statuses') === 'true'
+    const summaryOnly = searchParams.get('summary') === 'true'
 
     // Check appropriate permission based on what's being requested
     if (includeDeleted) {
@@ -45,8 +50,7 @@ export async function GET(request: NextRequest) {
     return permissionCheck.error
   }
     }
-    const page = parseInt(searchParams.get('page') || '1', 10)
-    const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
+    
     const skip = (page - 1) * pageSize
     
     const whereClause: Prisma.AssetsWhereInput = {
@@ -56,7 +60,6 @@ export async function GET(request: NextRequest) {
     
     // Search filter
     if (search) {
-      const searchFieldsParam = searchParams.get('searchFields')
       const searchFields = searchFieldsParam ? searchFieldsParam.split(',') : null
       
       const searchConditions: Prisma.AssetsWhereInput[] = []
@@ -209,6 +212,31 @@ export async function GET(request: NextRequest) {
     if (status && status !== 'all') {
       whereClause.status = { equals: status, mode: 'insensitive' }
     }
+    
+    // Generate cache key based on all query parameters
+    // Include all parameters that affect the result
+    const cacheKeyParts = [
+      'assets',
+      `page-${page}`,
+      `size-${pageSize}`,
+      search ? `search-${search}` : 'no-search',
+      category && category !== 'all' ? `cat-${category}` : 'no-cat',
+      status && status !== 'all' ? `status-${status}` : 'no-status',
+      withMaintenance ? 'with-maint' : 'no-maint',
+      includeDeleted ? 'with-deleted' : 'no-deleted',
+      searchFieldsParam ? `fields-${searchFieldsParam}` : 'no-fields',
+      statusesOnly ? 'statuses-only' : '',
+      summaryOnly ? 'summary-only' : '',
+    ].filter(Boolean)
+    
+    const cacheKey = cacheKeyParts.join('-')
+    
+    // Check cache first (10-15 second TTL for assets - Redis cached)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cached = await getCached<any>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
 
     // Get total count for pagination
     const totalCount = await retryDbOperation(() => 
@@ -300,7 +328,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if unique statuses are requested
-    const statusesOnly = searchParams.get('statuses') === 'true'
     if (statusesOnly) {
       // Return only unique statuses - fetch only status field (much faster than full assets)
       const assetsWithStatus = await retryDbOperation(() => prisma.assets.findMany({
@@ -315,13 +342,17 @@ export async function GET(request: NextRequest) {
         assetsWithStatus.map(asset => asset.status).filter(Boolean)
       )).sort()
       
-      return NextResponse.json({
+      const statusesResult = {
         statuses: uniqueStatuses,
-      })
+      }
+      
+      // Cache for 30 seconds (statuses don't change often)
+      await setCached(cacheKey, statusesResult, 30000)
+      
+      return NextResponse.json(statusesResult)
     }
 
     // Check if summary is requested
-    const summaryOnly = searchParams.get('summary') === 'true'
     if (summaryOnly) {
       // Use database aggregation for much faster summary calculation
       // Run all queries in a transaction to use a single connection and improve performance
@@ -351,14 +382,19 @@ export async function GET(request: NextRequest) {
 
       const totalValue = totalValueResult._sum.cost ? Number(totalValueResult._sum.cost) : 0
 
-      return NextResponse.json({
+      const summaryResult = {
         summary: {
           totalAssets,
           totalValue,
           availableAssets,
           checkedOutAssets,
         }
-      })
+      }
+      
+      // Cache for 15 seconds (summary changes frequently)
+      await setCached(cacheKey, summaryResult, 15000)
+      
+      return NextResponse.json(summaryResult)
     }
 
     // Compute summary statistics in parallel with assets query for main response
@@ -388,7 +424,7 @@ export async function GET(request: NextRequest) {
 
     const totalValue = totalValueResult._sum.cost ? Number(totalValueResult._sum.cost) : 0
 
-    return NextResponse.json({ 
+    const result = { 
       assets: assetsWithImageCount,
       pagination: {
         total: totalCount,
@@ -402,7 +438,12 @@ export async function GET(request: NextRequest) {
         availableAssets,
         checkedOutAssets,
       }
-    })
+    }
+    
+    // Cache for 10 seconds (assets list changes frequently)
+    await setCached(cacheKey, result, 10000)
+    
+    return NextResponse.json(result)
   } catch (error: unknown) {
     // Only log non-transient errors (not connection retries)
     const prismaError = error as { code?: string; message?: string }
@@ -479,7 +520,7 @@ export async function POST(request: NextRequest) {
     }))
 
     // Invalidate dashboard cache when new asset is created
-    clearCache('dashboard-stats')
+    await clearCache('dashboard-stats')
 
     return NextResponse.json({ asset }, { status: 201 })
   } catch (error: unknown) {

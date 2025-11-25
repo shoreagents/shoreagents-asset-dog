@@ -837,20 +837,20 @@ export default function ReturnFormPage() {
               try {
                 const blob = xhr.response
       
-                // Create download link
-                const url = window.URL.createObjectURL(blob)
-                const link = document.createElement('a')
-                link.href = url
-                link.download = `Return-of-Assets-${selectedEmployee?.name?.replace(/\s+/g, '-') || 'Employee'}-${returnDate || new Date().toISOString().split('T')[0]}.pdf`
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-                window.URL.revokeObjectURL(url)
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Return-of-Assets-${selectedEmployee?.name?.replace(/\s+/g, '-') || 'Employee'}-${returnDate || new Date().toISOString().split('T')[0]}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
 
-                toast.success('PDF downloaded successfully', { id: 'pdf-generation' })
+      toast.success('PDF downloaded successfully', { id: 'pdf-generation' })
 
                 // Save form data to database after PDF is successfully downloaded
-                try {
+      try {
                   // Determine return type based on both checkboxes
                   let returnType = 'Return to Office' // default
                   if (returnToOffice && resignedStaff) {
@@ -861,49 +861,49 @@ export default function ReturnFormPage() {
                     returnType = 'Return to Office'
                   }
                   
-                  const formData = {
-                    returnDate,
-                    position,
-                    returnToOffice,
-                    resignedStaff,
-                    controlNumber,
-                    returnerSignature,
-                    returnerDate,
-                    itSignature,
-                    itDate,
-                    selectedAssets: selectedAssets.map(asset => ({
-                      id: asset.id,
-                      assetTagId: asset.assetTagId,
-                      description: asset.description,
-                      quantity: asset.quantity,
-                      condition: asset.condition,
-                    })),
-                  }
+        const formData = {
+          returnDate,
+          position,
+          returnToOffice,
+          resignedStaff,
+          controlNumber,
+          returnerSignature,
+          returnerDate,
+          itSignature,
+          itDate,
+          selectedAssets: selectedAssets.map(asset => ({
+            id: asset.id,
+            assetTagId: asset.assetTagId,
+            description: asset.description,
+            quantity: asset.quantity,
+            condition: asset.condition,
+          })),
+        }
 
-                  const saveResponse = await fetch('/api/forms/return-form', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      employeeUserId: selectedEmployeeId,
-                      dateReturned: returnDate,
-                      department: selectedEmployee?.department || null,
-                      ctrlNo: controlNumber || null,
-                      returnType,
-                      formData,
-                    }),
-                  })
+        const saveResponse = await fetch('/api/forms/return-form', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            employeeUserId: selectedEmployeeId,
+            dateReturned: returnDate,
+            department: selectedEmployee?.department || null,
+            ctrlNo: controlNumber || null,
+            returnType,
+            formData,
+          }),
+        })
 
-                  if (!saveResponse.ok) {
-                    const error = await saveResponse.json()
-                    console.error('Failed to save return form:', error)
+        if (!saveResponse.ok) {
+          const error = await saveResponse.json()
+          console.error('Failed to save return form:', error)
                     toast.error('PDF downloaded but failed to save form history', { id: 'form-save' })
                   } else {
                     toast.success('Form saved successfully', { id: 'form-save' })
-                  }
-                } catch (saveError) {
-                  console.error('Error saving return form:', saveError)
+        }
+      } catch (saveError) {
+        console.error('Error saving return form:', saveError)
                   toast.error('PDF downloaded but failed to save form history', { id: 'form-save' })
                 }
 

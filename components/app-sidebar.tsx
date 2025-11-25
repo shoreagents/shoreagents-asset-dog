@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import Image from "next/image"
+import { useUserProfile } from "@/hooks/use-user-profile"
 
 import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
@@ -248,26 +249,8 @@ async function fetchCompanyInfo(): Promise<{ companyInfo: { primaryLogoUrl: stri
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [mounted, setMounted] = React.useState(false)
 
-  // Use React Query to fetch user data so it updates when cache is invalidated
-  const { data: userData, isPending, fetchStatus } = useQuery({
-    queryKey: ['sidebar-user'],
-    queryFn: async () => {
-        const response = await fetch('/api/auth/me')
-      if (!response.ok) {
-        throw new Error('Failed to fetch user')
-      }
-          const data = await response.json()
-      return {
-        name: data.user?.name || data.user?.user_metadata?.name || '',
-        email: data.user?.email || '',
-        avatar: data.user?.user_metadata?.avatar_url || '',
-              role: data.role || null,
-      }
-    },
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    retry: false,
-    refetchOnMount: true, // Always refetch to show loading state
-  })
+  // Use unified layout-level user profile hook (shared cache across all components)
+  const { profile, isLoading: isPending } = useUserProfile()
 
   React.useEffect(() => {
     setMounted(true)
@@ -281,7 +264,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     retry: false,
   })
 
-  const user = userData || null
+  const user = profile ? {
+    name: profile?.name || '',
+    email: profile?.email || '',
+    avatar: profile?.avatar || '',
+    role: profile?.role || 'user',
+  } : null
   const primaryLogoUrl = companyData?.companyInfo?.primaryLogoUrl || null
   const { state, isMobile } = useSidebar()
   const isCollapsed = state === "collapsed"
@@ -327,7 +315,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </ScrollArea>
       </SidebarContent>
       <SidebarFooter>
-        {!mounted ? null : (!userData || fetchStatus === 'fetching' || isPending) ? (
+        {!mounted ? null : (!profile || isPending) ? (
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" disabled>

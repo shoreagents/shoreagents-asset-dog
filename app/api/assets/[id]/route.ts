@@ -47,8 +47,10 @@ export async function DELETE(
         },
       })
       
-      // Invalidate dashboard cache when asset is deleted
-      clearCache('dashboard-stats')
+      // Invalidate caches when asset is deleted
+      await clearCache('dashboard-stats')
+      await clearCache('assets-') // Clear all assets list caches
+      await clearCache(`asset-details-${id}`) // Clear specific asset details cache
       
       return NextResponse.json({ success: true, message: 'Asset permanently deleted' })
     } else {
@@ -75,8 +77,10 @@ export async function DELETE(
         })
       })
       
-      // Invalidate dashboard cache when asset is archived
-      clearCache('dashboard-stats')
+      // Invalidate caches when asset is archived
+      await clearCache('dashboard-stats')
+      await clearCache('assets-') // Clear all assets list caches
+      await clearCache(`asset-details-${id}`) // Clear specific asset details cache
       
       return NextResponse.json({ success: true, message: 'Asset archived. It will be permanently deleted after 30 days.' })
     }
@@ -404,9 +408,11 @@ export async function PUT(
       return updatedAsset
     })
 
-    // Invalidate dashboard cache when asset is updated
+    // Invalidate caches when asset is updated
     // Especially important if status or cost changed
-    clearCache('dashboard-stats')
+    await clearCache('dashboard-stats')
+    await clearCache('assets-') // Clear all assets list caches
+    await clearCache(`asset-details-${id}`) // Clear specific asset details cache
 
     return NextResponse.json({ asset: result })
   } catch (error) {

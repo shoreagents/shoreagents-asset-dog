@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
+import { getCached, setCached } from '@/lib/cache-utils'
 
 export async function GET() {
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
   try {
+    const cacheKey = 'stats-maintenance'
+
+    // Check cache first
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cached = await getCached<any>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
     // Count scheduled maintenances today
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -57,11 +66,16 @@ export async function GET() {
       },
     })
 
-    return NextResponse.json({
+    const result = {
       scheduledTodayCount,
       inProgressCount,
       recentMaintenances,
-    })
+    }
+
+    // Cache the result with 30 second TTL
+    await setCached(cacheKey, result, 30000)
+
+    return NextResponse.json(result)
   } catch (error: any) {
     console.error('Error fetching maintenance stats:', error)
     return NextResponse.json(

@@ -24,6 +24,7 @@ export async function GET() {
       cache: {
         entries: cacheStats.size,
         keys: cacheStats.keys,
+        redisAvailable: cacheStats.redisAvailable,
       },
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV,

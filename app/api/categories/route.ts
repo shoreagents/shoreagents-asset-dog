@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   // Check cache first (10 minute TTL - categories rarely change)
   const cacheKey = 'categories-list'
-  const cached = getCached<{ categories: unknown[] }>(cacheKey)
+  const cached = await getCached<{ categories: unknown[] }>(cacheKey)
   if (cached) {
     return NextResponse.json(cached)
   }
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const result = { categories }
     
     // Cache for 10 minutes (600000 ms) - categories rarely change
-    setCached(cacheKey, result, 600000)
+    await setCached(cacheKey, result, 600000)
 
     return NextResponse.json(result)
   } catch (error: unknown) {
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     }))
 
     // Invalidate categories cache when new category is created
-    clearCache('categories-list')
+    await clearCache('categories-list')
 
     return NextResponse.json({ category }, { status: 201 })
   } catch (error: unknown) {

@@ -42,10 +42,10 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
   const pageSize = Math.min(Math.max(params.pageSize || 50, 25), 500) // Clamp between 25-500
   const activityType = params.activityType
   
-  // Check cache first (2 minute TTL for activities)
+  // Check cache first (10 second TTL for activities - Redis cached)
   // Cache key includes pagination and filter params for correct cache hits
-  const cacheKey = `activities-${activityType || 'all'}-${page}-${pageSize}`
-  const cached = getCached<ActivitiesResult>(cacheKey)
+  const cacheKey = `activities-v2-${activityType || 'all'}-${page}-${pageSize}`
+  const cached = await getCached<ActivitiesResult>(cacheKey)
   if (cached) {
     return cached
   }
@@ -114,7 +114,7 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
             }
           }
           
-          setCached(cacheKey, result, 120000)
+          await setCached(cacheKey, result, 10000)
           return result
         }
         case 'checkin': {
@@ -173,7 +173,7 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
             }
           }
           
-          setCached(cacheKey, result, 120000)
+          await setCached(cacheKey, result, 10000)
           return result
         }
         case 'move': {
@@ -232,7 +232,7 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
             }
           }
           
-          setCached(cacheKey, result, 120000)
+          await setCached(cacheKey, result, 10000)
           return result
         }
         case 'reserve': {
@@ -292,7 +292,7 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
             }
           }
           
-          setCached(cacheKey, result, 120000)
+          await setCached(cacheKey, result, 10000)
           return result
         }
         case 'lease': {
@@ -343,7 +343,7 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
             }
           }
           
-          setCached(cacheKey, result, 120000)
+          await setCached(cacheKey, result, 10000)
           return result
         }
         case 'leaseReturn': {
@@ -399,7 +399,7 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
             }
           }
           
-          setCached(cacheKey, result, 120000)
+          await setCached(cacheKey, result, 10000)
           return result
         }
         case 'dispose': {
@@ -451,7 +451,7 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
             }
           }
           
-          setCached(cacheKey, result, 120000)
+          await setCached(cacheKey, result, 10000)
           return result
         }
         case 'maintenance': {
@@ -505,7 +505,7 @@ export async function getActivities(params: GetActivitiesParams = {}): Promise<A
             }
           }
           
-          setCached(cacheKey, result, 120000)
+          await setCached(cacheKey, result, 10000)
           return result
         }
       }

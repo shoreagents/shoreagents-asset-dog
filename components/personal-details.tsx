@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Field, FieldError, FieldGroup, FieldLabel, FieldContent } from '@/components/ui/field'
-import { Spinner } from '@/components/ui/shadcn-io/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { z } from 'zod'
 
 const personalDetailsSchema = z.object({
@@ -99,9 +99,46 @@ export default function PersonalDetails() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Spinner className="h-8 w-8" />
+      <Card 
+        className="border-l-4 transition-all duration-200 hover:shadow-md" 
+        style={{ borderLeftColor: '#3b82f6' }}
+      >
+        <CardHeader>
+          <CardTitle>Personal Details</CardTitle>
+          <CardDescription>
+            Update your personal information and contact details
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="name">Full Name</FieldLabel>
+                <FieldContent>
+                  <Skeleton className="h-10 w-full" />
+                </FieldContent>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="email">Email Address</FieldLabel>
+                <FieldContent>
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-3 w-48 mt-1" />
+                </FieldContent>
+              </Field>
+
+              <Field>
+                <FieldLabel>Role</FieldLabel>
+                <FieldContent>
+                  <Skeleton className="h-10 w-full" />
+                </FieldContent>
+              </Field>
+
+              <Field>
+                <Skeleton className="h-10 w-32" />
+              </Field>
+            </FieldGroup>
+          </form>
         </CardContent>
       </Card>
     )
@@ -109,7 +146,7 @@ export default function PersonalDetails() {
 
   if (!user) {
     return (
-      <Card>
+      <Card className="border-l-4" style={{ borderLeftColor: '#3b82f6' }}>
         <CardContent className="py-12">
           <p className="text-center text-muted-foreground">Failed to load user data</p>
         </CardContent>
@@ -118,7 +155,10 @@ export default function PersonalDetails() {
   }
 
   return (
-    <Card>
+    <Card 
+      className="border-l-4 transition-all duration-200 hover:shadow-md" 
+      style={{ borderLeftColor: '#3b82f6' }} // blue-500
+    >
       <CardHeader>
         <CardTitle>Personal Details</CardTitle>
         <CardDescription>

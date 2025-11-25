@@ -5,6 +5,8 @@ export interface Category {
   name: string
   description?: string
   subCategories: SubCategory[]
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface SubCategory {

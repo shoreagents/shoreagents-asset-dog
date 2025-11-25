@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -642,7 +643,12 @@ export default function CompanyInfoPage() {
 
   if (permissionsLoading || isLoading) {
     return (
-      <div className="space-y-6">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="space-y-6"
+      >
         <div>
           <h1 className="text-3xl font-bold">Company Info</h1>
           <p className="text-muted-foreground">
@@ -681,21 +687,28 @@ export default function CompanyInfoPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </motion.div>
     )
   }
 
   if (!canManageSetup) {
     return (
-      <div className="space-y-4">
-        <Card>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="space-y-4"
+      >
+        <Card className="border-dashed border-2">
           <CardHeader>
             <CardTitle>Company Info</CardTitle>
             <CardDescription>Manage company information and logos</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+              <div className="p-4 rounded-full bg-muted/50 mb-4">
+                <Building2 className="h-12 w-12 text-muted-foreground/50" />
+              </div>
               <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
               <p className="text-sm text-muted-foreground">
                 You do not have permission to manage company info. Please contact an administrator.
@@ -703,28 +716,41 @@ export default function CompanyInfoPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Card className="max-w-md">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex items-center justify-center min-h-[400px]"
+      >
+        <Card className="max-w-md border-dashed border-2">
           <CardContent className="pt-6">
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Building2 className="h-12 w-12 text-destructive mb-4" />
             <p className="text-center text-muted-foreground">
               Failed to load company info
             </p>
+            </div>
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-6"
+    >
       <div>
-        <h1 className="text-3xl font-bold">Company Info</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Company Info</h1>
         <p className="text-muted-foreground">
           Manage your company profile details and logos
         </p>
@@ -732,9 +758,31 @@ export default function CompanyInfoPage() {
 
       <form onSubmit={form.handleSubmit(onSubmit)} className={`space-y-6 ${isFormDirty ? "pb-16" : ""}`}>
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div 
+          variants={{
+            hidden: { opacity: 0 },
+            show: {
+              opacity: 1,
+              transition: {
+                staggerChildren: 0.1
+              }
+            }
+          }}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+        >
           {/* Company Information Card */}
-          <Card>
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 20 },
+              show: { opacity: 1, y: 0 }
+            }}
+          >
+            <Card 
+              className="h-full transition-all duration-200 hover:shadow-md border-muted/60 border-l-4" 
+              style={{ borderLeftColor: '#3b82f6' }} // blue-500
+            >
             <CardHeader>
               <CardTitle>Company Information</CardTitle>
               <CardDescription>
@@ -926,9 +974,19 @@ export default function CompanyInfoPage() {
               />
             </CardContent>
           </Card>
+          </motion.div>
 
           {/* Company Logos Card */}
-          <Card>
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 20 },
+              show: { opacity: 1, y: 0 }
+            }}
+          >
+            <Card 
+              className="h-full transition-all duration-200 hover:shadow-md border-muted/60 border-l-4" 
+              style={{ borderLeftColor: '#8b5cf6' }} // violet-500
+            >
             <CardHeader>
               <CardTitle>Company Logos</CardTitle>
               <CardDescription>
@@ -980,12 +1038,18 @@ export default function CompanyInfoPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="w-full h-40 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50">
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="w-full h-40 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50 hover:bg-muted/70 transition-colors"
+                    >
                       <div className="text-center">
-                        <ImageIcon className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
+                        <div className="p-3 rounded-full bg-muted/50 mb-2 inline-block">
+                          <ImageIcon className="h-8 w-8 text-muted-foreground/50" />
+                        </div>
                         <p className="text-sm text-muted-foreground">No logo uploaded</p>
                       </div>
-                    </div>
+                    </motion.div>
                   )}
                   <input
                     ref={primaryLogoInputRef}
@@ -1052,12 +1116,18 @@ export default function CompanyInfoPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="w-full h-40 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50">
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="w-full h-40 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50 hover:bg-muted/70 transition-colors"
+                    >
                       <div className="text-center">
-                        <ImageIcon className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
+                        <div className="p-3 rounded-full bg-muted/50 mb-2 inline-block">
+                          <ImageIcon className="h-8 w-8 text-muted-foreground/50" />
+                        </div>
                         <p className="text-sm text-muted-foreground">No logo uploaded</p>
                       </div>
-                    </div>
+                    </motion.div>
                   )}
                   <input
                     ref={secondaryLogoInputRef}
@@ -1081,13 +1151,19 @@ export default function CompanyInfoPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
+          </motion.div>
+        </motion.div>
 
       </form>
 
       {/* Floating Action Buttons */}
+      <AnimatePresence>
       {isFormDirty && (
-        <div 
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.2 }}
           className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
           style={{
             left: !sidebarOpen 
@@ -1128,8 +1204,9 @@ export default function CompanyInfoPage() {
               'Save'
             )}
           </Button>
-        </div>
+          </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Remove Primary Logo Confirmation Dialog */}
       <DeleteConfirmationDialog
@@ -1150,6 +1227,6 @@ export default function CompanyInfoPage() {
         description="Are you sure you want to remove the secondary logo? This action will be saved when you click the Save button."
         confirmLabel="Remove"
       />
-    </div>
+    </motion.div>
   )
 }

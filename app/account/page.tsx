@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useTransition, useMemo, Suspense } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { User, Lock, Shield, PanelLeft, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -87,13 +88,22 @@ function AccountPageContent() {
   ]
 
   return (
-    <div className="space-y-6">
-      <div>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-6"
+    >
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.1 }}
+      >
         <h1 className="text-3xl font-bold tracking-tight">Account Settings</h1>
         <p className="text-muted-foreground">
           Manage your account settings and preferences
         </p>
-      </div>
+      </motion.div>
 
       <div className="flex flex-row gap-6">
         {/* Sidebar Navigation */}
@@ -175,13 +185,55 @@ function AccountPageContent() {
 
         {/* Content Area */}
         <div className="flex-1 min-w-0">
-          {activeTab === 'personal' && <PersonalDetails />}
-          {activeTab === 'password' && <PasswordAndSecurity />}
-          {activeTab === 'permissions' && <Permissions />}
-          {activeTab === 'preferences' && <Preferences />}
+          <AnimatePresence mode="wait">
+            {activeTab === 'personal' && (
+              <motion.div
+                key="personal"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <PersonalDetails />
+              </motion.div>
+            )}
+            {activeTab === 'password' && (
+              <motion.div
+                key="password"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <PasswordAndSecurity />
+              </motion.div>
+            )}
+            {activeTab === 'permissions' && (
+              <motion.div
+                key="permissions"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Permissions />
+              </motion.div>
+            )}
+            {activeTab === 'preferences' && (
+              <motion.div
+                key="preferences"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Preferences />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 

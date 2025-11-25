@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Shield, ShieldCheck } from 'lucide-react'
 
 interface UserPermissions {
@@ -78,9 +79,42 @@ export default function Permissions() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Spinner className="h-8 w-8" />
+      <Card 
+        className="border-l-4 transition-all duration-200 hover:shadow-md" 
+        style={{ borderLeftColor: '#8b5cf6' }}
+      >
+        <CardHeader>
+          <CardTitle>Permissions</CardTitle>
+          <CardDescription>
+            View your current permissions and access levels
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="h-5 w-5 text-muted-foreground" />
+              <h3 className="text-lg font-semibold">Role</h3>
+            </div>
+            <Skeleton className="h-6 w-20" />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+              <h3 className="text-lg font-semibold">Enabled Permissions</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                >
+                  <Skeleton className="h-4 w-4 rounded" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card>
     )
@@ -88,7 +122,7 @@ export default function Permissions() {
 
   if (!permissions) {
     return (
-      <Card>
+      <Card className="border-l-4" style={{ borderLeftColor: '#8b5cf6' }}>
         <CardContent className="py-12">
           <p className="text-center text-muted-foreground">Failed to load permissions</p>
         </CardContent>
@@ -102,7 +136,10 @@ export default function Permissions() {
     .map(([key]) => key as keyof Omit<UserPermissions, 'role'>)
 
   return (
-    <Card>
+    <Card 
+      className="border-l-4 transition-all duration-200 hover:shadow-md" 
+      style={{ borderLeftColor: '#8b5cf6' }} // violet-500
+    >
       <CardHeader>
         <CardTitle>Permissions</CardTitle>
         <CardDescription>

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Card,
   CardContent,
@@ -8,17 +9,19 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { MoreHorizontal, Trash2, Edit, Plus, Building2, ArrowUpDown, Clock, Text as TextIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { MoreHorizontal, Trash2, Edit, Plus, Building2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { BulkDeleteDialog } from '@/components/bulk-delete-dialog'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
@@ -54,6 +57,22 @@ export default function SitesPage() {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null)
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set())
   const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [sortBy, setSortBy] = useState<'name' | 'date'>('name')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+
+  const sortedSites = useMemo(() => {
+    return [...sites].sort((a, b) => {
+      if (sortBy === 'name') {
+        return sortOrder === 'asc' 
+          ? a.name.localeCompare(b.name)
+          : b.name.localeCompare(a.name)
+      } else {
+        const dateA = new Date(a.createdAt).getTime()
+        const dateB = new Date(b.createdAt).getTime()
+        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA
+      }
+    })
+  }, [sites, sortBy, sortOrder])
 
   // Site handlers
   const handleCreateSite = async (data: { name: string; description?: string }) => {
@@ -249,9 +268,14 @@ export default function SitesPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-6"
+    >
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Sites</h1>
             <p className="text-muted-foreground">
@@ -260,7 +284,7 @@ export default function SitesPage() {
           </div>
           {/* Desktop: All controls on right */}
           {!isMobile && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-end sm:self-auto">
               {isSelectionMode && (
                 <div className="flex items-center gap-2 px-2">
                   <Checkbox
@@ -278,10 +302,44 @@ export default function SitesPage() {
                   </span>
                 </div>
               )}
+              
+              {!isSelectionMode && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9">
+                      <ArrowUpDown className="mr-2 h-4 w-4" />
+                      Sort by
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as 'name' | 'date')}>
+                      <DropdownMenuRadioItem value="name">
+                        <TextIcon className="mr-2 h-4 w-4" />
+                        Name
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="date">
+                        <Clock className="mr-2 h-4 w-4" />
+                        Date Created
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioGroup value={sortOrder} onValueChange={(v) => setSortOrder(v as 'asc' | 'desc')}>
+                      <DropdownMenuRadioItem value="asc">
+                        Ascending
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="desc">
+                        Descending
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
               <Button
                 variant={isSelectionMode ? "default" : "outline"}
                 size="sm"
                 onClick={handleToggleSelectionMode}
+                className="h-9"
               >
                 {isSelectionMode ? "Cancel" : "Select"}
               </Button>
@@ -290,12 +348,13 @@ export default function SitesPage() {
                   variant="destructive"
                   size="sm"
                   onClick={() => setIsBulkDeleteDialogOpen(true)}
+                  className="h-9"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete ({selectedSites.size})
                 </Button>
               )}
-              <Button onClick={() => setIsCreateSiteDialogOpen(true)} size='sm'>
+              <Button onClick={() => setIsCreateSiteDialogOpen(true)} size='sm' className="shadow-sm hover:shadow-md transition-all h-9">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Site
               </Button>
@@ -341,15 +400,47 @@ export default function SitesPage() {
         )}
         {/* Mobile: Select and Add Site buttons when selection mode is NOT active */}
         {isMobile && !isSelectionMode && (
+          <div className="flex flex-col gap-2">
           <div className="flex items-center justify-end gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 flex-1">
+                    <ArrowUpDown className="mr-2 h-4 w-4" />
+                    Sort
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as 'name' | 'date')}>
+                    <DropdownMenuRadioItem value="name">
+                      <TextIcon className="mr-2 h-4 w-4" />
+                      Name
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="date">
+                      <Clock className="mr-2 h-4 w-4" />
+                      Date Created
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup value={sortOrder} onValueChange={(v) => setSortOrder(v as 'asc' | 'desc')}>
+                    <DropdownMenuRadioItem value="asc">
+                      Ascending
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="desc">
+                      Descending
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             <Button
               variant="outline"
               size="sm"
               onClick={handleToggleSelectionMode}
+                className="h-9 flex-1"
             >
               Select
             </Button>
-            <Button onClick={() => setIsCreateSiteDialogOpen(true)} size='sm'>
+            </div>
+            <Button onClick={() => setIsCreateSiteDialogOpen(true)} size='sm' className="w-full h-9 shadow-sm">
               <Plus className="mr-2 h-4 w-4" />
               Add Site
             </Button>
@@ -358,12 +449,18 @@ export default function SitesPage() {
       </div>
 
       {sites.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <Card className="border-dashed border-2">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="p-4 rounded-full bg-muted/50 mb-4">
+                <Building2 className="h-12 w-12 text-muted-foreground/50" />
+              </div>
             <h3 className="text-lg font-semibold mb-2">No Sites</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Get started by creating your first site
+              <p className="text-sm text-muted-foreground mb-6 max-w-sm text-center">
+                Get started by creating your first site to track where your assets are stored.
             </p>
             <Button onClick={() => setIsCreateSiteDialogOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
@@ -371,23 +468,50 @@ export default function SitesPage() {
             </Button>
           </CardContent>
         </Card>
+        </motion.div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sites.map((site) => (
+        <motion.div 
+          variants={{
+            hidden: { opacity: 0 },
+            show: {
+              opacity: 1,
+              transition: {
+                staggerChildren: 0.05
+              }
+            }
+          }}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        >
+          <AnimatePresence mode='popLayout'>
+            {sortedSites.map((site) => (
+              <motion.div 
+                key={site.id}
+                layout 
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  show: { opacity: 1, y: 0 }
+                }}
+                className="h-full"
+              >
             <Card 
-              key={site.id} 
-              className={`flex flex-col h-full group relative transition-all ${
-                isSelectionMode ? 'cursor-pointer' : ''
+                  className={`flex flex-col h-full group relative transition-all duration-200 hover:shadow-md border-muted/60 ${
+                    isSelectionMode ? 'cursor-pointer hover:border-primary/50' : ''
               } ${
                 selectedSites.has(site.id)
-                  ? 'border-primary'
+                      ? 'border-primary bg-primary/5'
                   : ''
               }`}
               onClick={() => handleCardClick(site.id)}
             >
               {/* Checkbox - visible when in selection mode */}
+                  <AnimatePresence>
               {isSelectionMode && (
-                <div 
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
                   className="absolute top-3 left-3 z-20"
                   onClick={(e) => handleSiteSelect(e, site.id)}
                 >
@@ -395,24 +519,22 @@ export default function SitesPage() {
                     checked={selectedSites.has(site.id)}
                     onCheckedChange={() => toggleSiteSelection(site.id)}
                     onClick={(e) => e.stopPropagation()}
-                    className="border-white data-[state=checked]:bg-white data-[state=checked]:text-black cursor-pointer"
+                          className="border-muted-foreground/40 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground cursor-pointer bg-background shadow-sm"
                   />
-                </div>
+                      </motion.div>
               )}
-              
-              {/* Selection overlay */}
-              {selectedSites.has(site.id) && (
-                <div className="absolute inset-0 bg-primary/10 border-2 border-primary rounded-lg pointer-events-none z-10" />
-              )}
-              
-              <CardHeader className="pb-3">
+                  </AnimatePresence>
+                  
+                  <CardHeader className={`pb-3 ${isSelectionMode ? 'pl-10' : ''} transition-all`}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className={`flex items-start gap-2 flex-1 min-w-0 pr-1 ${isSelectionMode ? 'pl-8' : ''}`}>
-                    <Building2 className="h-5 w-5 mt-0.5 shrink-0 text-primary" />
+                      <div className="flex items-start gap-3 flex-1 min-w-0 pr-1">
+                        <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0 mt-0.5">
+                          <Building2 className="h-4 w-4" />
+                        </div>
                     <div className="flex-1 min-w-0 overflow-hidden">
-                      <CardTitle className="text-base leading-tight line-clamp-2">{site.name}</CardTitle>
+                          <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{site.name}</CardTitle>
                       {site.description && (
-                        <CardDescription className="mt-1 line-clamp-2 text-xs">
+                            <CardDescription className="mt-1.5 line-clamp-2 text-xs">
                           {site.description}
                         </CardDescription>
                       )}
@@ -423,7 +545,7 @@ export default function SitesPage() {
                       <DropdownMenuTrigger asChild>
                         <Button 
                           variant="ghost" 
-                          className="h-8 w-8 p-0 shrink-0"
+                              className="h-8 w-8 p-0 shrink-0 hover:bg-background/80 data-[state=open]:bg-background/80"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <span className="sr-only">Open menu</span>
@@ -438,7 +560,7 @@ export default function SitesPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => handleDeleteSite(site)}
-                          className="text-red-600"
+                              className="text-red-600 focus:text-red-600 focus:bg-red-50"
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete
@@ -449,8 +571,10 @@ export default function SitesPage() {
                 </div>
               </CardHeader>
             </Card>
+              </motion.div>
           ))}
-        </div>
+          </AnimatePresence>
+        </motion.div>
       )}
 
       {/* Create Site Dialog */}
@@ -496,7 +620,7 @@ export default function SitesPage() {
         description={`Are you sure you want to permanently delete ${selectedSites.size} selected site(s)? This action cannot be undone.`}
         confirmLabel={`Delete ${selectedSites.size} Site(s)`}
       />
-    </div>
+    </motion.div>
   )
 }
 

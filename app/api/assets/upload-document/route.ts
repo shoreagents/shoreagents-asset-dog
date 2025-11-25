@@ -3,6 +3,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase-server'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
 import { prisma } from '@/lib/prisma'
+import { clearCache } from '@/lib/cache-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -159,6 +160,9 @@ export async function POST(request: NextRequest) {
         ;(globalThis as any).documentFilesCache = undefined
       }
 
+      // Clear assets cache so the assets list updates immediately with new document count
+      await clearCache('assets')
+
       return NextResponse.json({
         id: documentRecord.id,
         assetTagId: documentRecord.assetTagId,
@@ -302,11 +306,15 @@ export async function POST(request: NextRequest) {
       ;(globalThis as any).documentFilesCache = undefined
     }
 
+    // Clear assets cache so the assets list updates immediately with new document count
+    await clearCache('assets')
+
     return NextResponse.json({
       id: documentRecord.id,
       assetTagId: documentRecord.assetTagId,
       documentUrl: documentRecord.documentUrl,
       publicUrl: publicUrl,
+      filePath: finalFilePath,
     })
   } catch (error) {
     console.error('Error uploading/linking document:', error)

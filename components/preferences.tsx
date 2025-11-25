@@ -31,7 +31,10 @@ export default function Preferences() {
   ]
 
   return (
-    <Card>
+    <Card 
+      className="border-l-4 transition-all duration-200 hover:shadow-md" 
+      style={{ borderLeftColor: '#f59e0b' }} // amber-500
+    >
       <CardHeader>
         <CardTitle>Preferences</CardTitle>
         <CardDescription>

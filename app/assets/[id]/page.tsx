@@ -258,7 +258,9 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
   const reservations = reserveData?.reservations || []
 
   // React Query hooks - lazy load categories and subcategories only when dropdowns are opened
-  const { data: categories = [], isLoading: categoriesLoading } = useCategories(isCategoryDropdownOpen)
+  // Fetch categories when dropdown is open OR when asset has a categoryId (to display selected value)
+  const shouldFetchCategories = isCategoryDropdownOpen || !!asset?.categoryId
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories(shouldFetchCategories)
   const createCategoryMutation = useCreateCategory()
   const createSubCategoryMutation = useCreateSubCategory()
   
@@ -1091,14 +1093,15 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
       // Invalidate ALL assets queries (including paginated/filtered ones)
       // Use predicate to match all queries starting with 'assets' or 'assets-list'
       // This marks them as stale so they will refetch when the page loads
-      queryClient.invalidateQueries({ 
+      await queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey
           return Array.isArray(key) && (
             key[0] === 'assets' || 
             key[0] === 'assets-list'
           )
-        }
+        },
+        refetchType: 'active' // Refetch active queries immediately
       })
       
       // Remove cached data to force fresh fetch
@@ -2515,6 +2518,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                           <Select
                             value={normalizedValue}
                             onValueChange={field.onChange}
+                            key={`qr-${asset?.id || 'new'}-${normalizedValue || ''}`}
                           >
                             <SelectTrigger className="w-full">
                               <SelectValue placeholder="Select QR code status" />

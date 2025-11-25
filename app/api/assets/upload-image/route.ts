@@ -3,6 +3,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase-server'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
 import { prisma } from '@/lib/prisma'
+import { clearCache } from '@/lib/cache-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -132,6 +133,9 @@ export async function POST(request: NextRequest) {
         ;(globalThis as any).mediaFilesCache = undefined
       }
 
+      // Clear assets cache so the assets list updates immediately with new image count
+      await clearCache('assets')
+
       return NextResponse.json({
         id: imageRecord.id,
         assetTagId: imageRecord.assetTagId,
@@ -182,7 +186,7 @@ export async function POST(request: NextRequest) {
     const fileExtension = file.name.split('.').pop() || 'jpg'
     const sanitizedExtension = fileExtension.toLowerCase()
     const fileName = `${assetTagId}-${timestamp}.${sanitizedExtension}`
-    const filePath = `assets/${fileName}`
+    const filePath = `assets_images/${fileName}`
 
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer()
@@ -202,6 +206,7 @@ export async function POST(request: NextRequest) {
     if (uploadError) {
       // If assets bucket doesn't exist, try file-history bucket
       if (uploadError.message.includes('Bucket not found') || uploadError.message.includes('not found')) {
+        // Keep the same path structure for file-history bucket
         const fallbackPath = `assets/${filePath}`
         const { error: fallbackError } = await supabaseAdmin.storage
           .from('file-history')
@@ -265,6 +270,9 @@ export async function POST(request: NextRequest) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(globalThis as any).mediaFilesCache = undefined
     }
+
+    // Clear assets cache so the assets list updates immediately with new image count
+    await clearCache('assets')
 
     return NextResponse.json({
       id: imageRecord.id,

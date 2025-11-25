@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo, useCallback, useEffect, useRef, useTransition, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -1118,12 +1119,18 @@ function UsersPageContent() {
                     ))}
                   </TableHeader>
                   <TableBody>
+                    <AnimatePresence mode='popLayout' initial={false}>
                     {table.getRowModel().rows?.length ? (
                       table.getRowModel().rows.map((row) => (
-                        <TableRow 
+                        <motion.tr
                           key={row.id} 
+                          layout
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ duration: 0.2 }}
                           data-state={row.getIsSelected() && 'selected'}
-                          className="group relative"
+                          className="group relative hover:bg-muted/90 data-[state=selected]:bg-muted border-b transition-colors"
                         >
                           {row.getVisibleCells().map((cell) => {
                             const isActionsColumn = cell.column.id === 'actions'
@@ -1138,7 +1145,7 @@ function UsersPageContent() {
                               </TableCell>
                             )
                           })}
-                        </TableRow>
+                        </motion.tr>
                       ))
                     ) : (
                       <TableRow>
@@ -1147,6 +1154,7 @@ function UsersPageContent() {
                         </TableCell>
                       </TableRow>
                     )}
+                    </AnimatePresence>
                   </TableBody>
                 </Table>
                 </div>

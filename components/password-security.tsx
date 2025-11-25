@@ -66,7 +66,10 @@ export default function PasswordAndSecurity() {
   }
 
   return (
-    <Card>
+    <Card 
+      className="border-l-4 transition-all duration-200 hover:shadow-md" 
+      style={{ borderLeftColor: '#ef4444' }} // red-500
+    >
       <CardHeader>
         <CardTitle>Password and Security</CardTitle>
         <CardDescription>

@@ -83,41 +83,56 @@
 
 ### Pages Currently Client Components (Fetch via API)
 
-#### 1. **`/app/assets/page.tsx`**
-**Current:** `'use client'`, fetches via `/api/assets`
-**Recommendation:** Convert to RSC
-- Create `lib/data/assets.ts` (like `dashboard-stats.ts`)
-- Server Component fetches directly
-- Pass initialData to client component
-- Add `loading.tsx` for instant navigation
+> **⚠️ NOTE:** RSC conversion is only recommended for pages with minimal client-side interactivity. Pages with heavy interactivity (sorting, filtering, real-time search, complex state) should remain client components for better performance.
 
-#### 2. **`/app/lists/assets/page.tsx`**
+#### 1. **`/app/assets/page.tsx`** ❌ **NOT RECOMMENDED**
 **Current:** `'use client'`, fetches via `/api/assets`
-**Recommendation:** Convert to RSC
-- Same pattern as above
-- Server Component handles searchParams
-- Client component handles interactivity
+**Why NOT RSC:**
+- Heavy client-side interactivity (TanStack Table with sorting, filtering, column visibility)
+- Real-time search with debouncing
+- URL state synchronization
+- Multiple dialogs and modals
+- Bulk operations and export functionality
+- Complex state management
+- **Converting to RSC would make it slower** - every interaction would require server roundtrip
+**Current Optimization:** ✅ Already optimized with Redis caching on API route
 
-#### 3. **`/app/lists/maintenances/page.tsx`**
+#### 2. **`/app/lists/assets/page.tsx`** ❌ **NOT RECOMMENDED**
+**Current:** `'use client'`, fetches via `/api/assets`
+**Why NOT RSC:** Similar to `/app/assets/page.tsx` - heavy interactivity
+**Current Optimization:** ✅ Already optimized with Redis caching on API route
+
+#### 3. **`/app/lists/maintenances/page.tsx`** ❌ **NOT RECOMMENDED**
 **Current:** `'use client'`, fetches via API
-**Recommendation:** Convert to RSC
-- Create `lib/data/maintenances.ts`
-- Server Component fetches data
-- Add `loading.tsx`
+**Why NOT RSC:**
+- Uses TanStack Table with client-side sorting
+- Real-time search and filtering
+- Column visibility management
+- URL state synchronization
+- **Converting to RSC would make it slower** - every sort/filter would require server roundtrip
+**Current Optimization:** ✅ Already optimized with Redis caching on API route
 
-#### 4. **`/app/employees/page.tsx`**
+#### 4. **`/app/employees/page.tsx`** ❌ **NOT RECOMMENDED**
 **Current:** `'use client'`, fetches via `/api/employees`
-**Recommendation:** Convert to RSC
-- Create `lib/data/employees.ts`
-- Server Component fetches data
-- Add `loading.tsx`
+**Why NOT RSC:**
+- Uses TanStack Table with client-side sorting
+- Real-time search with debouncing
+- Create/edit employee forms (dialogs)
+- URL state synchronization
+- Checkout management dialogs
+- **Converting to RSC would make it slower** - every interaction would require server roundtrip
+**Current Optimization:** ✅ Already optimized with Redis caching on API route
 
-#### 5. **`/app/forms/history/page.tsx`**
+#### 5. **`/app/forms/history/page.tsx`** ❌ **NOT RECOMMENDED**
 **Current:** `'use client'`, fetches via `/api/forms/history`
-**Recommendation:** Convert to RSC
-- Already has data fetching logic
-- Convert to Server Component
-- Add `loading.tsx`
+**Why NOT RSC:**
+- Real-time search with debouncing
+- Tab switching (accountability/return forms)
+- Search type filtering (unified/employee/department/formNo)
+- Delete functionality with dialogs
+- URL state synchronization
+- **Converting to RSC would make it slower** - every search/tab change would require server roundtrip
+**Current Optimization:** ✅ Already optimized with Redis caching on API route
 
 ---
 

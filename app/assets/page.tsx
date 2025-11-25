@@ -1654,6 +1654,10 @@ function AssetsPageContent() {
   // Track initial mount to prevent unnecessary refetches
   const hasInitialized = useRef(false)
   
+  // Preserve pagination info during refetch to prevent UI flicker
+  const lastTotalPagesRef = useRef<number>(0)
+  const lastTotalCountRef = useRef<number>(0)
+  
   // Fetch assets with server-side pagination and filtering
   // Summary is now included in the same response, eliminating separate API call
   const { data, isLoading, isFetching, error } = useQuery({
@@ -1667,12 +1671,24 @@ function AssetsPageContent() {
     ),
     enabled: canViewAssets, // Only fetch if user has permission
     staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-    refetchOnMount: false, // Prevent refetch on mount - query will run once based on queryKey
+    refetchOnWindowFocus: true, // Refetch when window regains focus (e.g., navigating back)
+    refetchOnMount: true, // Refetch on mount if data is stale (ensures updates are visible)
+    placeholderData: (previousData) => previousData, // Keep previous data while fetching to prevent pagination from disappearing
   })
 
   const assets = useMemo(() => data?.assets || [], [data?.assets])
-  const totalCount = data?.pagination?.total || 0
+  const totalCount = data?.pagination?.total || lastTotalCountRef.current
+  const totalPages = data?.pagination?.totalPages || lastTotalPagesRef.current
+
+  // Update refs when data is available
+  useEffect(() => {
+    if (data?.pagination?.totalPages) {
+      lastTotalPagesRef.current = data.pagination.totalPages
+    }
+    if (data?.pagination?.total) {
+      lastTotalCountRef.current = data.pagination.total
+    }
+  }, [data?.pagination?.totalPages, data?.pagination?.total])
 
   // Summary is now included in the main assets API response
   // No need for a separate query - this eliminates the 33-second delay
@@ -1725,7 +1741,7 @@ function AssetsPageContent() {
     getSortedRowModel: getSortedRowModel(),
     getRowId: (row) => row.id, // Use asset ID as stable row identifier
     manualPagination: true, // Enable server-side pagination
-    pageCount: data?.pagination?.totalPages || 0,
+    pageCount: totalPages || 0,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
@@ -2574,7 +2590,7 @@ function AssetsPageContent() {
           </CardContent>
         </Card>
       </div>
-        <Card className="mt-6">
+        <Card className="mt-6 pb-0">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -2806,39 +2822,40 @@ function AssetsPageContent() {
                 </div>
               </div>
 
-          {isFetching && data && (
-            <div className="absolute inset-x-0 top-[83px] bottom-19 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
-              <Spinner variant="default" size={24} className="text-muted-foreground" />
-            </div>
-          )}
-          
           {/* Table Section - with loading/error states */}
-          {permissionsLoading || (isLoading && !data) ? (
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="flex flex-col items-center gap-3">
-                <Spinner variant="default" size={32} className="text-muted-foreground" />
-                <p className="text-muted-foreground text-sm">Loading...</p>
+          <div className="relative">
+            {isFetching && data && (
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+                <Spinner variant="default" size={24} className="text-muted-foreground" />
               </div>
-            </div>
-          ) : !canViewAssets ? (
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="flex flex-col items-center gap-3 text-center">
-                <Package className="h-12 w-12 text-muted-foreground opacity-50" />
-                <p className="text-lg font-medium">Access Denied</p>
-                <p className="text-sm text-muted-foreground">
-                  You do not have permission to view assets. Please contact your administrator.
+            )}
+            
+            {permissionsLoading || (isLoading && !data) ? (
+              <div className="flex items-center justify-center min-h-[400px]">
+                <div className="flex flex-col items-center gap-3">
+                  <Spinner variant="default" size={32} className="text-muted-foreground" />
+                  <p className="text-muted-foreground text-sm">Loading...</p>
+                </div>
+              </div>
+            ) : !canViewAssets ? (
+              <div className="flex items-center justify-center min-h-[400px]">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <Package className="h-12 w-12 text-muted-foreground opacity-50" />
+                  <p className="text-lg font-medium">Access Denied</p>
+                  <p className="text-sm text-muted-foreground">
+                    You do not have permission to view assets. Please contact your administrator.
+                  </p>
+                </div>
+              </div>
+            ) : error ? (
+              <div className="p-6">
+                <p className="text-destructive">
+                  {error instanceof Error ? error.message : 'Failed to fetch assets'}
                 </p>
               </div>
-            </div>
-          ) : error ? (
-            <div className="p-6">
-              <p className="text-destructive">
-                {error instanceof Error ? error.message : 'Failed to fetch assets'}
-              </p>
-            </div>
-          ) : (
-            <>
-              <ScrollArea>
+            ) : (
+              <>
+                <ScrollArea>
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
@@ -2901,7 +2918,7 @@ function AssetsPageContent() {
               <ScrollBar orientation="horizontal" className='z-10' />
               </ScrollArea>
               {/* Pagination */}
-              {table.getPageCount() > 1 && (
+              {totalPages > 1 && (
                 <div className="flex flex-col gap-2 px-6 py-4 border-t">
                   <div className="flex items-center justify-center">
                     <Pagination>
@@ -2917,9 +2934,8 @@ function AssetsPageContent() {
                         />
                       </PaginationItem>
                       
-                      {Array.from({ length: Math.min(5, table.getPageCount()) }, (_, i) => {
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                         let pageNum
-                        const totalPages = table.getPageCount()
                         const currentPage = table.getState().pagination.pageIndex + 1
                         if (totalPages <= 5) {
                           pageNum = i + 1
@@ -2947,7 +2963,7 @@ function AssetsPageContent() {
                         )
                       })}
                       
-                      {table.getPageCount() > 5 && table.getState().pagination.pageIndex + 1 < table.getPageCount() - 2 && (
+                      {totalPages > 5 && table.getState().pagination.pageIndex + 1 < totalPages - 2 && (
                         <PaginationItem>
                           <PaginationEllipsis />
                         </PaginationItem>
@@ -2981,6 +2997,7 @@ function AssetsPageContent() {
               )}
             </>
           )}
+          </div>
         </CardContent>
         </Card>
       {/* Export Fields Selection Dialog */}

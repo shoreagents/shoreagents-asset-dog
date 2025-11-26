@@ -238,65 +238,91 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached)
     }
 
-    // Get total count for pagination
-    const totalCount = await retryDbOperation(() => 
-      prisma.assets.count({ where: whereClause })
-    )
-
-    // Build include object
-    const include: Prisma.AssetsInclude = {
-      category: true,
-      subCategory: true,
-      checkouts: {
+    // Optimize: Run count and main query in parallel using Promise.all
+    // This reduces sequential query time significantly
+    const [totalCount, assets] = await Promise.all([
+      retryDbOperation(() => prisma.assets.count({ where: whereClause })),
+      retryDbOperation(() => prisma.assets.findMany({
+        where: whereClause,
         include: {
-          employeeUser: true,
-        },
-        orderBy: { checkoutDate: 'desc' },
-        take: 1,
-      },
-      leases: {
-        where: {
-          OR: [
-            { leaseEndDate: null },
-            { leaseEndDate: { gte: new Date() } },
-          ],
-        },
-        include: {
-          returns: {
+          category: {
+            select: { id: true, name: true }, // Only select needed fields
+          },
+          subCategory: {
+            select: { id: true, name: true }, // Only select needed fields
+          },
+          checkouts: {
+            select: {
+              id: true,
+              checkoutDate: true,
+              expectedReturnDate: true,
+              employeeUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+            orderBy: { checkoutDate: 'desc' },
             take: 1,
           },
+          leases: {
+            where: {
+              OR: [
+                { leaseEndDate: null },
+                { leaseEndDate: { gte: new Date() } },
+              ],
+            },
+            select: {
+              id: true,
+              leaseStartDate: true,
+              leaseEndDate: true,
+              lessee: true,
+              returns: {
+                select: {
+                  id: true,
+                  returnDate: true,
+                },
+                take: 1,
+              },
+            },
+            orderBy: { leaseStartDate: 'desc' },
+            take: 1,
+          },
+          auditHistory: {
+            select: {
+              id: true,
+              auditDate: true,
+              auditType: true,
+              auditor: true,
+            },
+            orderBy: { auditDate: 'desc' },
+            take: 5,
+          },
+          ...(withMaintenance ? {
+            maintenances: {
+              select: {
+                id: true,
+                status: true,
+                dueDate: true,
+                createdAt: true,
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          } : {}),
         },
-        orderBy: { leaseStartDate: 'desc' },
-        take: 1,
-      },
-      auditHistory: {
-        orderBy: { auditDate: 'desc' },
-        take: 5, // Include latest 5 audits
-      },
-    }
+        orderBy: [
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
+        skip,
+        take: pageSize,
+      })),
+    ])
 
-    // Include maintenance if requested
-    if (withMaintenance) {
-      include.maintenances = {
-        orderBy: { createdAt: 'desc' },
-        take: 1, // Get the most recent maintenance
-      }
-    }
-
-    // Fetch paginated assets
-    // Use stable sorting: createdAt desc, then id desc for consistent ordering
-    const assets = await retryDbOperation(() => prisma.assets.findMany({
-      where: whereClause,
-      include,
-      orderBy: [
-        { createdAt: 'desc' },
-        { id: 'desc' }, // Secondary sort by ID for stable ordering
-      ],
-      skip,
-      take: pageSize,
-    }))
-
-    // Get image counts for all assets in this page
+    // Get image counts for all assets in this page (runs after assets are fetched)
     let assetsWithImageCount = assets
     
     if (assets.length > 0) {
@@ -397,30 +423,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(summaryResult)
     }
 
-    // Compute summary statistics in parallel with assets query for main response
-    // This avoids a separate API call and improves performance
-    const [totalValueResult, availableAssets, checkedOutAssets] = await retryDbOperation(() =>
-      prisma.$transaction([
-        prisma.assets.aggregate({
-          where: whereClause,
-          _sum: {
-            cost: true,
-          },
-        }),
-        prisma.assets.count({
-          where: {
-            ...whereClause,
-            status: { equals: 'Available', mode: 'insensitive' },
-          },
-        }),
-        prisma.assets.count({
-          where: {
-            ...whereClause,
-            status: { equals: 'Checked out', mode: 'insensitive' },
-          },
-        }),
-      ])
-    )
+    // Compute summary statistics - run in parallel for better performance
+    // Using Promise.all instead of transaction for better concurrency
+    const [totalValueResult, availableAssets, checkedOutAssets] = await Promise.all([
+      retryDbOperation(() => prisma.assets.aggregate({
+        where: whereClause,
+        _sum: {
+          cost: true,
+        },
+      })),
+      retryDbOperation(() => prisma.assets.count({
+        where: {
+          ...whereClause,
+          status: { equals: 'Available', mode: 'insensitive' },
+        },
+      })),
+      retryDbOperation(() => prisma.assets.count({
+        where: {
+          ...whereClause,
+          status: { equals: 'Checked out', mode: 'insensitive' },
+        },
+      })),
+    ])
 
     const totalValue = totalValueResult._sum.cost ? Number(totalValueResult._sum.cost) : 0
 

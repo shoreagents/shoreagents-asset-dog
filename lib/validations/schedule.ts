@@ -29,8 +29,7 @@ export const scheduleSchema = z.object({
   
   scheduledDate: z
     .date({
-      required_error: 'Scheduled date is required',
-      invalid_type_error: 'Scheduled date must be a valid date',
+      message: 'Scheduled date must be a valid date',
     })
     .refine(
       (date) => {

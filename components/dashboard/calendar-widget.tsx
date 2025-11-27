@@ -245,7 +245,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
       >
         <Card className="flex flex-col h-full min-h-[500px]">
           <CardHeader className="pb-4 border-b bg-muted/20">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -264,7 +264,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                   </CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="icon"
@@ -297,17 +297,17 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="h-8 gap-2"
-                    onClick={() => {
-                      setScheduleDate(selectedDate)
-                      setIsScheduleDialogOpen(true)
-                    }}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Schedule
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 gap-2"
+                  onClick={() => {
+                    setScheduleDate(selectedDate)
+                    setIsScheduleDialogOpen(true)
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Schedule
                 </Button>
               </div>
             </div>
@@ -325,7 +325,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.05 }}
                         className={cn(
-                          "flex items-center gap-4 p-4 border rounded-lg transition-all hover:shadow-sm group",
+                          "flex items-start gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg transition-all hover:shadow-sm group",
                           event.type === 'schedule' && event.status === 'completed'
                             ? "bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-900/50 opacity-75 hover:bg-green-50 dark:hover:bg-green-950/30"
                             : event.type === 'schedule' && event.status === 'cancelled'
@@ -333,8 +333,9 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                             : "hover:bg-accent/50 hover:border-primary/50"
                         )}
                     >
+                        {/* Icon */}
                         <div className={cn(
-                          "p-2 rounded-full",
+                          "p-2.5 sm:p-2 rounded-lg shrink-0",
                         event.type === 'maintenance'
                           ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'
                             : event.type === 'schedule'
@@ -345,20 +346,25 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                               : 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
                           : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
                         )}>
-                        {event.type === 'maintenance' ? <Wrench className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                        {event.type === 'maintenance' ? <Wrench className="h-5 w-5 sm:h-4 sm:w-4" /> : <Clock className="h-5 w-5 sm:h-4 sm:w-4" />}
                       </div>
-                      <div className="flex-1">
-                          <div className={cn(
-                            "font-medium flex items-center gap-2",
-                            event.type === 'schedule' && (event.status === 'completed' || event.status === 'cancelled')
-                              ? "line-through opacity-70"
-                              : ""
-                          )}>
+                      
+                      {/* Content */}
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                          {/* Asset Tag ID and Badge */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={cn(
+                              "font-semibold text-sm sm:text-base break-all",
+                              event.type === 'schedule' && (event.status === 'completed' || event.status === 'cancelled')
+                                ? "line-through opacity-70"
+                                : ""
+                            )}>
                           {event.assetTagId}
+                            </span>
                             <Badge 
                               variant="outline" 
                               className={cn(
-                                "text-[10px] h-5",
+                                "text-[10px] px-2 py-0.5 h-5 shrink-0",
                                 event.type === 'schedule' && event.status === 'completed'
                                   ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
                                   : event.type === 'schedule' && event.status === 'cancelled'
@@ -379,8 +385,10 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                                 : 'Lease Expiring'}
                           </Badge>
                           </div>
+                          
+                          {/* Description */}
                           <div className={cn(
-                            "text-sm mt-1",
+                            "text-xs sm:text-sm break-all",
                             event.type === 'schedule' && (event.status === 'completed' || event.status === 'cancelled')
                               ? "text-muted-foreground opacity-60"
                               : "text-muted-foreground"
@@ -392,13 +400,15 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                               : 'Lease contract expires'}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                           {event.type === 'schedule' && event.scheduleId && (!event.status || event.status === 'pending') && (
                             <>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/30"
+                                className="h-9 w-9 sm:h-8 sm:w-8 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/30 touch-manipulation"
                                 onClick={(e) => {
                                   e.preventDefault()
                                   e.stopPropagation()
@@ -409,12 +419,12 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                                 disabled={updateScheduleStatusMutation.isPending}
                                 title="Mark as completed"
                               >
-                                <CheckCircle2 className="h-4 w-4" />
+                                <CheckCircle2 className="h-5 w-5 sm:h-4 sm:w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                className="h-9 w-9 sm:h-8 sm:w-8 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30 touch-manipulation"
                                 onClick={(e) => {
                                   e.preventDefault()
                                   e.stopPropagation()
@@ -425,16 +435,17 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                                 disabled={updateScheduleStatusMutation.isPending}
                                 title="Cancel schedule"
                               >
-                                <XCircle className="h-4 w-4" />
+                                <XCircle className="h-5 w-5 sm:h-4 sm:w-4" />
                               </Button>
                             </>
                           )}
                           <Link
                             href={`/assets?search=${encodeURIComponent(event.assetTagId)}`}
                             onClick={(e) => e.stopPropagation()}
+                            className="flex items-center justify-center h-9 w-9 sm:h-8 sm:w-8 rounded-md hover:bg-accent touch-manipulation transition-colors"
                           >
                             <ChevronRight className={cn(
-                              "h-4 w-4 transition-transform",
+                              "h-5 w-5 sm:h-4 sm:w-4 transition-transform",
                               event.type === 'schedule' && (event.status === 'completed' || event.status === 'cancelled')
                                 ? "text-muted-foreground opacity-50"
                                 : "text-muted-foreground group-hover:translate-x-1"
@@ -561,7 +572,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
     >
       <Card className="flex flex-col h-full min-h-[500px]">
         <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
                 <CalendarIcon className="h-5 w-5 text-primary" />
@@ -571,23 +582,23 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                   Lease expiries, maintenance, and scheduled operations
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-muted/30 p-0.5">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-1 bg-muted/30 flex-1 sm:flex-initial">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-8"
                 onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-sm font-medium min-w-[100px] text-center">
+              <span className="text-sm font-medium flex-1 text-center sm:min-w-[100px]">
                 {format(currentMonth, 'MMMM yyyy')}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-8"
                 onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
               >
                 <ChevronRight className="h-4 w-4" />
@@ -596,9 +607,9 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
               <Popover open={eventsPopoverOpen} onOpenChange={setEventsPopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="h-8 gap-2"
+                    className="h-10 sm:h-8 gap-2 flex-1 sm:flex-initial"
                   >
                     <List className="h-4 w-4" />
                     <span className="hidden sm:inline">Events</span>

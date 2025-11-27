@@ -112,6 +112,7 @@ function CheckoutPageContent() {
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
   const [assetIdInput, setAssetIdInput] = useState("")
+  const [debouncedAssetIdInput, setDebouncedAssetIdInput] = useState("")
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [selectedAssets, setSelectedAssets] = useState<CheckoutAsset[]>([])
@@ -120,6 +121,7 @@ function CheckoutPageContent() {
   const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
   const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
   const isInitialMount = useRef(true)
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const form = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutSchema),
@@ -139,13 +141,30 @@ function CheckoutPageContent() {
     name: 'checkoutDate',
   })
 
-  // Fetch asset suggestions based on input (only Available assets)
+  // Debounce input to reduce API calls
+  useEffect(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+    }
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      setDebouncedAssetIdInput(assetIdInput)
+    }, 300) // 300ms debounce
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+    }
+  }, [assetIdInput])
+
+  // Fetch asset suggestions based on debounced input (only Available assets)
   const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-suggestions", assetIdInput, selectedAssets.length, showSuggestions],
+    queryKey: ["asset-suggestions", debouncedAssetIdInput.trim(), selectedAssets.length, showSuggestions],
     queryFn: async () => {
-      // Fetch all assets with large page size to get all available assets
-      const searchTerm = assetIdInput.trim() || ''
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10000`)
+      const searchTerm = debouncedAssetIdInput.trim() || ''
+      // Fetch only 50 items to account for filtering Available assets, then slice to 10
+      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=50&status=Available`)
         if (!response.ok) {
           throw new Error('Failed to fetch assets')
         }
@@ -165,7 +184,8 @@ function CheckoutPageContent() {
       return filtered
     },
     enabled: showSuggestions && canViewAssets && canCheckout,
-    staleTime: 300,
+    staleTime: 1000, // Cache for 1 second
+    placeholderData: (previousData) => previousData, // Show previous results while loading
   })
 
   // Close suggestions when clicking outside
@@ -187,10 +207,10 @@ function CheckoutPageContent() {
     }
   }, [])
 
-  // Asset lookup by ID
+  // Asset lookup by ID - optimized to fetch only 10 items
   const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
     try {
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}`)
+      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`)
       const data = await response.json()
       const assets = data.assets as Asset[]
       
@@ -530,20 +550,28 @@ function CheckoutPageContent() {
     setSelectedSuggestionIndex(-1)
   }
 
-  // Fetch all available assets for statistics
-  const { data: allAssets = [], isLoading: isLoadingAssets } = useQuery<Asset[]>({
-    queryKey: ["assets", "checkout-stats"],
+  // Fetch summary statistics (much faster than fetching all assets)
+  const { data: summaryData, isLoading: isLoadingAssets } = useQuery<{
+    summary: {
+      totalAssets: number
+      availableAssets: number
+      checkedOutAssets: number
+    }
+  }>({
+    queryKey: ["assets", "checkout-stats-summary"],
     queryFn: async () => {
-      const response = await fetch('/api/assets?search=&pageSize=10000')
-      const data = await response.json()
-      return data.assets as Asset[]
+      const response = await fetch('/api/assets?summary=true')
+      if (!response.ok) {
+        throw new Error('Failed to fetch asset summary')
+      }
+      return response.json()
     },
     enabled: canViewAssets,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
   // Calculate summary statistics
-  const totalAvailableAssets = allAssets.filter(a => !a.status || a.status === "Available").length
+  const totalAvailableAssets = summaryData?.summary?.availableAssets || 0
   const selectedAssetsCount = selectedAssets.length
   
   // Fetch employees count for statistics

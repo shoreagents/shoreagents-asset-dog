@@ -116,6 +116,7 @@ function CheckinPageContent() {
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
   const [assetIdInput, setAssetIdInput] = useState("")
+  const [debouncedAssetIdInput, setDebouncedAssetIdInput] = useState("")
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [selectedAssets, setSelectedAssets] = useState<CheckinAsset[]>([])
@@ -124,6 +125,7 @@ function CheckinPageContent() {
   const [qrDisplayDialogOpen, setQrDisplayDialogOpen] = useState(false)
   const [selectedAssetTagForQR, setSelectedAssetTagForQR] = useState<string>("")
   const isInitialMount = useRef(true)
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const form = useForm<CheckinFormData>({
     resolver: zodResolver(checkinSchema),
@@ -133,13 +135,30 @@ function CheckinPageContent() {
     },
   })
 
-  // Fetch asset suggestions based on input (only Checked out assets)
+  // Debounce input to reduce API calls
+  useEffect(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+    }
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      setDebouncedAssetIdInput(assetIdInput)
+    }, 300) // 300ms debounce
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+    }
+  }, [assetIdInput])
+
+  // Fetch asset suggestions based on debounced input (only Checked out assets)
   const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-checkin-suggestions", assetIdInput, selectedAssets.length, showSuggestions],
+    queryKey: ["asset-checkin-suggestions", debouncedAssetIdInput.trim(), selectedAssets.length, showSuggestions],
     queryFn: async () => {
-      // Fetch all assets with large page size to get all checked out assets
-      const searchTerm = assetIdInput.trim() || ''
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10000`)
+      const searchTerm = debouncedAssetIdInput.trim() || ''
+      // Fetch only 50 items to account for filtering Checked out assets, then slice
+      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=50&status=Checked out`)
         if (!response.ok) {
           throw new Error('Failed to fetch assets')
         }
@@ -161,8 +180,9 @@ function CheckinPageContent() {
       }
       return filtered.slice(0, 10)
     },
-    enabled: showSuggestions,
-    staleTime: 300,
+    enabled: showSuggestions && canViewAssets && canCheckin,
+    staleTime: 1000, // Cache for 1 second
+    placeholderData: (previousData) => previousData, // Show previous results while loading
   })
 
   // Close suggestions when clicking outside
@@ -184,10 +204,10 @@ function CheckinPageContent() {
     }
   }, [])
 
-  // Asset lookup by ID
+  // Asset lookup by ID - optimized to fetch only 10 items
   const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
     try {
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10000`)
+      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`)
       const data = await response.json()
       const assets = data.assets as Asset[]
       
@@ -596,28 +616,49 @@ function CheckinPageContent() {
     setShowSuggestions(true)
   }
 
-  // Fetch all checked out assets for statistics
-  const { data: allAssets = [], isLoading: isLoadingAssets } = useQuery<Asset[]>({
-    queryKey: ["assets", "checkin-stats"],
+  // Fetch summary statistics (much faster than fetching all assets)
+  const { data: summaryData, isLoading: isLoadingAssets } = useQuery<{
+    summary: {
+      totalAssets: number
+      availableAssets: number
+      checkedOutAssets: number
+    }
+  }>({
+    queryKey: ["assets", "checkin-stats-summary"],
     queryFn: async () => {
-      const response = await fetch('/api/assets?search=&pageSize=10000')
+      const response = await fetch('/api/assets?summary=true')
+      if (!response.ok) {
+        throw new Error('Failed to fetch asset summary')
+      }
+      return response.json()
+    },
+    enabled: canViewAssets,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  })
+
+  // Fetch checked out assets for value calculation
+  const { data: checkedOutAssetsForValue = [] } = useQuery<Asset[]>({
+    queryKey: ["assets", "checkin-value-calculation"],
+    queryFn: async () => {
+      const response = await fetch('/api/assets?status=Checked out&pageSize=1000')
+      if (!response.ok) {
+        throw new Error('Failed to fetch checked out assets')
+      }
       const data = await response.json()
       return data.assets as Asset[]
     },
     enabled: canViewAssets,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
   // Calculate summary statistics
-  const totalCheckedOutAssets = allAssets.filter(a => a.status === "Checked out").length
+  const totalCheckedOutAssets = summaryData?.summary?.checkedOutAssets || 0
   const selectedAssetsCount = selectedAssets.length
   const totalValueOfCheckoutAssets = useMemo(() => {
-    return allAssets
-      .filter(a => a.status === "Checked out")
-      .reduce((sum, asset) => {
+    return checkedOutAssetsForValue.reduce((sum, asset) => {
         return sum + (asset.cost ? Number(asset.cost) : 0)
       }, 0)
-  }, [allAssets])
+  }, [checkedOutAssetsForValue])
 
   // Format currency
   const formatCurrency = (value: number) => {

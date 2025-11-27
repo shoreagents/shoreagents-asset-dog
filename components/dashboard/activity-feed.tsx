@@ -134,7 +134,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                                     {checkout.asset.assetTagId}
                                   </Link>
                                 </TableCell>
-                                <TableCell>{checkout.asset.description}</TableCell>
+                                <TableCell className="max-w-[200px] truncate" title={checkout.asset.description}>
+                                  {checkout.asset.description}
+                                </TableCell>
                                 <TableCell>
                                   {format(new Date(checkout.checkoutDate), 'MMM dd, yyyy')}
                                 </TableCell>
@@ -211,7 +213,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                                     {checkin.asset.assetTagId}
                                   </Link>
                                 </TableCell>
-                                <TableCell>{checkin.asset.description}</TableCell>
+                                <TableCell className="max-w-[200px] truncate" title={checkin.asset.description}>
+                                  {checkin.asset.description}
+                                </TableCell>
                                 <TableCell>
                                   {format(new Date(checkin.checkinDate), 'MMM dd, yyyy')}
                                 </TableCell>
@@ -280,7 +284,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                                     {maintenance.asset.assetTagId}
                                   </Link>
                                 </TableCell>
-                                <TableCell>{maintenance.asset.description}</TableCell>
+                                <TableCell className="max-w-[200px] truncate" title={maintenance.asset.description}>
+                                  {maintenance.asset.description}
+                                </TableCell>
                                 <TableCell>
                                   {maintenance.dueDate
                                     ? format(parseDateOnlyString(maintenance.dueDate) || new Date(), 'MMM dd, yyyy')
@@ -349,7 +355,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                                     {move.asset.assetTagId}
                                   </Link>
                                 </TableCell>
-                                <TableCell>{move.asset.description}</TableCell>
+                                <TableCell className="max-w-[200px] truncate" title={move.asset.description}>
+                                  {move.asset.description}
+                                </TableCell>
                                 <TableCell>
                                   {format(new Date(move.moveDate), 'MMM dd, yyyy')}
                                 </TableCell>
@@ -423,7 +431,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                                     {reserve.asset.assetTagId}
                                   </Link>
                                 </TableCell>
-                                <TableCell>{reserve.asset.description}</TableCell>
+                                <TableCell className="max-w-[200px] truncate" title={reserve.asset.description}>
+                                  {reserve.asset.description}
+                                </TableCell>
                                 <TableCell>
                                   {format(new Date(reserve.reservationDate), 'MMM dd, yyyy')}
                                 </TableCell>
@@ -499,7 +509,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                                     {lease.asset.assetTagId}
                                   </Link>
                                 </TableCell>
-                                <TableCell>{lease.asset.description}</TableCell>
+                                <TableCell className="max-w-[200px] truncate" title={lease.asset.description}>
+                                  {lease.asset.description}
+                                </TableCell>
                                 <TableCell>
                                   {format(new Date(lease.leaseStartDate), 'MMM dd, yyyy')}
                                 </TableCell>
@@ -567,7 +579,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                                     {returnItem.asset.assetTagId}
                                   </Link>
                                 </TableCell>
-                                <TableCell>{returnItem.asset.description}</TableCell>
+                                <TableCell className="max-w-[200px] truncate" title={returnItem.asset.description}>
+                                  {returnItem.asset.description}
+                                </TableCell>
                                 <TableCell>
                                   {format(new Date(returnItem.returnDate), 'MMM dd, yyyy')}
                                 </TableCell>
@@ -626,7 +640,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                                     {dispose.asset.assetTagId}
                                   </Link>
                                 </TableCell>
-                                <TableCell>{dispose.asset.description}</TableCell>
+                                <TableCell className="max-w-[200px] truncate" title={dispose.asset.description}>
+                                  {dispose.asset.description}
+                                </TableCell>
                                 <TableCell>
                                   {format(new Date(dispose.disposeDate), 'MMM dd, yyyy')}
                                 </TableCell>

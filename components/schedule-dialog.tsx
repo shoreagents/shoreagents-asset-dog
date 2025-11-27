@@ -84,12 +84,14 @@ export function ScheduleDialog({
   initialData,
 }: ScheduleDialogProps) {
   const [assetIdInput, setAssetIdInput] = useState('')
+  const [debouncedAssetIdInput, setDebouncedAssetIdInput] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const form = useForm<ScheduleFormData>({
     resolver: zodResolver(scheduleSchema),
@@ -106,12 +108,32 @@ export function ScheduleDialog({
     },
   })
 
-  // Fetch asset suggestions based on input
+  // Debounce input to reduce API calls
+  useEffect(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+    }
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      setDebouncedAssetIdInput(assetIdInput)
+    }, 300) // 300ms debounce
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+    }
+  }, [assetIdInput])
+
+  // Fetch asset suggestions based on debounced input
   const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ['asset-suggestions-schedule', assetIdInput, selectedAsset?.id],
+    queryKey: ['asset-suggestions-schedule', debouncedAssetIdInput.trim(), selectedAsset?.id],
     queryFn: async () => {
-      const searchTerm = assetIdInput.trim() || ''
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=100`)
+      const searchTerm = debouncedAssetIdInput.trim()
+      
+      // Only fetch 10 items since we only show 10
+      // Use pageSize=10 to reduce data transfer
+      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10`)
       if (!response.ok) {
         throw new Error('Failed to fetch assets')
       }
@@ -120,19 +142,20 @@ export function ScheduleDialog({
       
       // Filter out already selected asset
       const filtered = selectedAsset
-        ? assets.filter(a => a.id.toLowerCase() !== selectedAsset.id.toLowerCase()).slice(0, 10)
-        : assets.slice(0, 10)
+        ? assets.filter(a => a.id.toLowerCase() !== selectedAsset.id.toLowerCase())
+        : assets
       
       return filtered
     },
-    enabled: showSuggestions,
-    staleTime: 300,
+    enabled: showSuggestions && debouncedAssetIdInput.trim().length >= 0, // Allow empty search to show recent assets
+    staleTime: 1000, // Cache for 1 second
+    placeholderData: (previousData) => previousData, // Show previous results while loading
   })
 
-  // Asset lookup by ID
+  // Asset lookup by ID - optimized to fetch only 10 items
   const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
     try {
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}`)
+      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`)
       const data = await response.json()
       const assets = data.assets as Asset[]
       
@@ -187,7 +210,7 @@ export function ScheduleDialog({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setAssetIdInput(value)
-    setShowSuggestions(value.length > 0)
+    setShowSuggestions(true) // Show suggestions on any input
     setSelectedSuggestionIndex(-1)
   }
 

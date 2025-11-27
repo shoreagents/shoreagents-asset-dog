@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DashboardStats } from '@/types/dashboard'
-import { Box, DollarSign, ShoppingCart, TrendingUp } from 'lucide-react'
+import { Box, DollarSign, ShoppingCart } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface SummaryCardsProps {
@@ -64,7 +64,7 @@ export function SummaryCards({ data, isLoading }: SummaryCardsProps) {
       borderColor: '#22c55e', // green-500
     },
     {
-      title: 'Purchases in Fiscal Year',
+      title: 'New Assets This Year',
       value: data?.purchasesInFiscalYear.toLocaleString() || '0',
       description: 'Assets purchased this year',
       icon: ShoppingCart,

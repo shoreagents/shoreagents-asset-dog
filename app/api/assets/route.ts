@@ -263,43 +263,43 @@ export async function GET(request: NextRequest) {
                   email: true,
                 },
               },
-            },
-            orderBy: { checkoutDate: 'desc' },
-            take: 1,
-          },
-          leases: {
-            where: {
-              OR: [
-                { leaseEndDate: null },
-                { leaseEndDate: { gte: new Date() } },
-              ],
-            },
+        },
+        orderBy: { checkoutDate: 'desc' },
+        take: 1,
+      },
+      leases: {
+        where: {
+          OR: [
+            { leaseEndDate: null },
+            { leaseEndDate: { gte: new Date() } },
+          ],
+        },
             select: {
               id: true,
               leaseStartDate: true,
               leaseEndDate: true,
               lessee: true,
-              returns: {
+          returns: {
                 select: {
                   id: true,
                   returnDate: true,
                 },
-                take: 1,
-              },
-            },
-            orderBy: { leaseStartDate: 'desc' },
             take: 1,
           },
-          auditHistory: {
+        },
+        orderBy: { leaseStartDate: 'desc' },
+        take: 1,
+      },
+      auditHistory: {
             select: {
               id: true,
               auditDate: true,
               auditType: true,
               auditor: true,
             },
-            orderBy: { auditDate: 'desc' },
+        orderBy: { auditDate: 'desc' },
             take: 5,
-          },
+      },
           ...(withMaintenance ? {
             maintenances: {
               select: {
@@ -308,17 +308,17 @@ export async function GET(request: NextRequest) {
                 dueDate: true,
                 createdAt: true,
               },
-              orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
               take: 1,
             },
           } : {}),
         },
-        orderBy: [
-          { createdAt: 'desc' },
+      orderBy: [
+        { createdAt: 'desc' },
           { id: 'desc' },
-        ],
-        skip,
-        take: pageSize,
+      ],
+      skip,
+      take: pageSize,
       })),
     ])
 
@@ -427,24 +427,24 @@ export async function GET(request: NextRequest) {
     // Using Promise.all instead of transaction for better concurrency
     const [totalValueResult, availableAssets, checkedOutAssets] = await Promise.all([
       retryDbOperation(() => prisma.assets.aggregate({
-        where: whereClause,
-        _sum: {
-          cost: true,
-        },
+          where: whereClause,
+          _sum: {
+            cost: true,
+          },
       })),
       retryDbOperation(() => prisma.assets.count({
-        where: {
-          ...whereClause,
-          status: { equals: 'Available', mode: 'insensitive' },
-        },
+          where: {
+            ...whereClause,
+            status: { equals: 'Available', mode: 'insensitive' },
+          },
       })),
       retryDbOperation(() => prisma.assets.count({
-        where: {
-          ...whereClause,
-          status: { equals: 'Checked out', mode: 'insensitive' },
-        },
+          where: {
+            ...whereClause,
+            status: { equals: 'Checked out', mode: 'insensitive' },
+          },
       })),
-    ])
+      ])
 
     const totalValue = totalValueResult._sum.cost ? Number(totalValueResult._sum.cost) : 0
 

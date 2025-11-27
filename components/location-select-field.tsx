@@ -73,6 +73,17 @@ export function LocationSelectField({
   }, [onValueChange, control])
 
   const handleCreateLocation = async (data: { name: string; description?: string }) => {
+    // Check if location name already exists (case-insensitive)
+    const trimmedName = data.name.trim()
+    const nameExists = locations.some(
+      location => location.name.toLowerCase().trim() === trimmedName.toLowerCase()
+    )
+
+    if (nameExists) {
+      toast.error('A location with this name already exists')
+      return
+    }
+
     try {
       const result = await createLocationMutation.mutateAsync({
         name: data.name.trim(),

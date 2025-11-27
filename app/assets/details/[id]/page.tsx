@@ -1644,7 +1644,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                       return (
                         <TableRow key={log.id}>
                           <TableCell className="font-medium">
-                            {formatDateTime(log.eventDate)}
+                            {formatDate(log.eventDate)}
                           </TableCell>
                           <TableCell>
                             <span className={`px-2 py-1 text-xs font-medium rounded ${

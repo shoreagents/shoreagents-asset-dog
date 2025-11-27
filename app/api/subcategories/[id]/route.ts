@@ -32,8 +32,27 @@ export async function PUT(
     })
 
     return NextResponse.json({ subcategory })
-  } catch (error) {
-    console.error('Error updating subcategory:', error)
+  } catch (error: unknown) {
+    const prismaError = error as { code?: string; message?: string }
+    
+    // Handle duplicate name error - expected error, don't log
+    if (prismaError?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'A subcategory with this name already exists in this category' },
+        { status: 409 }
+      )
+    }
+    
+    // Handle connection pool errors - expected error, don't log
+    if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+    
+    // Only log unexpected errors
+    console.error('Unexpected error updating subcategory:', error)
     return NextResponse.json(
       { error: 'Failed to update subcategory' },
       { status: 500 }

@@ -52,8 +52,72 @@ export const useCreateLocation = () => {
       }
       return response.json()
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["locations"] })
+    onMutate: async (newLocationData) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["locations"] })
+      
+      // Snapshot all previous values
+      const previousQueries = queryClient.getQueriesData({ 
+        predicate: (query) => query.queryKey[0] === "locations" 
+      })
+      
+      // Create a temporary location object for optimistic update
+      const tempId = `temp-${Date.now()}`
+      const optimisticLocation: Location = {
+        id: tempId,
+        name: newLocationData.name,
+        description: newLocationData.description || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      
+      // Optimistically update all locations queries
+      queryClient.setQueriesData<Location[]>(
+        { 
+          predicate: (query) => query.queryKey[0] === "locations" 
+        }, 
+        (old = []) => {
+          // Check if location with same name already exists (avoid duplicates)
+          if (old.some(location => location.name.toLowerCase() === newLocationData.name.toLowerCase().trim())) {
+            return old
+          }
+          return [...old, optimisticLocation]
+        }
+      )
+      
+      return { previousQueries, tempId }
+    },
+    onError: (err, newLocationData, context) => {
+      // Rollback to previous values on error (e.g., duplicate name)
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
+    onSuccess: (data, variables, context) => {
+      // Ensure dates are properly serialized
+      const newLocation: Location = {
+        ...data.location,
+        createdAt: new Date(data.location.createdAt),
+        updatedAt: new Date(data.location.updatedAt),
+      }
+      
+      // Replace the temporary optimistic location with the real one
+      queryClient.setQueriesData<Location[]>(
+        { 
+          predicate: (query) => query.queryKey[0] === "locations" 
+        }, 
+        (old = []) => {
+          // Remove temporary location if it exists
+          const filtered = old.filter(location => location.id !== context?.tempId)
+          // Check if real location already exists (avoid duplicates)
+          if (filtered.some(location => location.id === newLocation.id)) {
+            return filtered
+          }
+          return [...filtered, newLocation]
+        }
+      )
     },
   })
 }
@@ -75,8 +139,22 @@ export const useUpdateLocation = () => {
       }
       return response.json()
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["locations"] })
+    onSuccess: (data) => {
+      // Update all locations queries (with and without search) using predicate
+      queryClient.setQueriesData<Location[]>(
+        { 
+          predicate: (query) => query.queryKey[0] === "locations" 
+        }, 
+        (old = []) => {
+          return old.map(location => location.id === data.location.id ? {
+            ...data.location,
+            createdAt: new Date(data.location.createdAt),
+            updatedAt: new Date(data.location.updatedAt),
+          } : location)
+        }
+      )
+      // Mark queries as stale but don't refetch immediately (let staleTime handle it)
+      queryClient.invalidateQueries({ queryKey: ["locations"], refetchType: 'none' })
     },
   })
 }
@@ -96,8 +174,38 @@ export const useDeleteLocation = () => {
       }
       return response.json()
     },
+    onMutate: async (id) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["locations"] })
+      
+      // Snapshot all previous values
+      const previousQueries = queryClient.getQueriesData({ 
+        predicate: (query) => query.queryKey[0] === "locations" 
+      })
+      
+      // Optimistically update all locations queries to remove the location
+      queryClient.setQueriesData<Location[]>(
+        { 
+          predicate: (query) => query.queryKey[0] === "locations" 
+        }, 
+        (old = []) => {
+          return old.filter(location => location.id !== id)
+        }
+      )
+      
+      return { previousQueries }
+    },
+    onError: (err, id, context) => {
+      // Rollback to previous values on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["locations"] })
+      // Mark queries as stale but don't refetch immediately (optimistic update already handled it)
+      queryClient.invalidateQueries({ queryKey: ["locations"], refetchType: 'none' })
     },
   })
 }

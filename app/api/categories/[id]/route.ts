@@ -31,8 +31,27 @@ export async function PUT(
     })
 
     return NextResponse.json({ category })
-  } catch (error) {
-    console.error('Error updating category:', error)
+  } catch (error: unknown) {
+    const prismaError = error as { code?: string; message?: string }
+    
+    // Handle duplicate name error - expected error, don't log
+    if (prismaError?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'A category with this name already exists' },
+        { status: 409 }
+      )
+    }
+    
+    // Handle connection pool errors - expected error, don't log
+    if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+    
+    // Only log unexpected errors
+    console.error('Unexpected error updating category:', error)
     return NextResponse.json(
       { error: 'Failed to update category' },
       { status: 500 }

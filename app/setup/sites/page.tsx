@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Card,
@@ -53,6 +53,8 @@ export default function SitesPage() {
   const [isEditSiteDialogOpen, setIsEditSiteDialogOpen] = useState(false)
   const [isDeleteSiteDialogOpen, setIsDeleteSiteDialogOpen] = useState(false)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deletingCount, setDeletingCount] = useState(0)
   
   const [selectedSite, setSelectedSite] = useState<Site | null>(null)
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set())
@@ -81,6 +83,17 @@ export default function SitesPage() {
       return
     }
 
+    // Check if site name already exists (case-insensitive)
+    const trimmedName = data.name.trim()
+    const nameExists = sites.some(
+      site => site.name.toLowerCase().trim() === trimmedName.toLowerCase()
+    )
+
+    if (nameExists) {
+      toast.error('A site with this name already exists')
+      return
+    }
+
     try {
       await createSiteMutation.mutateAsync(data)
       setIsCreateSiteDialogOpen(false)
@@ -101,6 +114,17 @@ export default function SitesPage() {
 
   const handleUpdateSite = async (data: { name: string; description?: string }) => {
     if (!selectedSite || !canManageSetup) return
+
+    // Check if site name already exists (case-insensitive, excluding current site)
+    const trimmedName = data.name.trim()
+    const nameExists = sites.some(
+      site => site.id !== selectedSite.id && site.name.toLowerCase().trim() === trimmedName.toLowerCase()
+    )
+
+    if (nameExists) {
+      toast.error('A site with this name already exists')
+      return
+    }
 
     try {
       await updateSiteMutation.mutateAsync({
@@ -191,22 +215,68 @@ export default function SitesPage() {
     if (selectedSites.size === 0) return
     
     const selectedArray = Array.from(selectedSites)
+    const totalCount = selectedArray.length
+    
+    setIsDeleting(true)
+    setDeletingCount(totalCount)
     
     try {
-      // Delete sites one by one (since we need to check for associated assets)
-      for (const siteId of selectedArray) {
-        await deleteSiteMutation.mutateAsync(siteId)
+      // Use bulk delete API endpoint
+      const response = await fetch('/api/sites/bulk-delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedArray }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete sites')
       }
+
+      const result = await response.json()
       
-      toast.success(`Successfully deleted ${selectedArray.length} site(s)`)
+      // Optimistically update the cache to remove deleted sites
+      queryClient.setQueriesData<Site[]>(
+        { 
+          predicate: (query) => query.queryKey[0] === "sites" 
+        }, 
+        (old = []) => {
+          return old.filter(site => !selectedArray.includes(site.id))
+        }
+      )
+      
+      toast.success(result.message || `Successfully deleted ${result.deletedCount || selectedArray.length} site(s)`)
       setSelectedSites(new Set())
+      setIsDeleting(false)
+      setDeletingCount(0)
       setIsBulkDeleteDialogOpen(false)
-      queryClient.invalidateQueries({ queryKey: ['sites'] })
+      
+      // Invalidate queries to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["sites"], refetchType: 'none' })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete sites')
+      setIsDeleting(false)
+      setDeletingCount(0)
       setIsBulkDeleteDialogOpen(false)
     }
   }
+
+  // Countdown effect for bulk delete
+  useEffect(() => {
+    if (isDeleting && deletingCount > 0) {
+      const timer = setTimeout(() => {
+        setDeletingCount(prev => {
+          if (prev <= 1) {
+            setIsDeleting(false)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000) // Update every second
+      
+      return () => clearTimeout(timer)
+    }
+  }, [isDeleting, deletingCount])
 
   if (permissionsLoading || sitesLoading) {
     return (
@@ -489,10 +559,10 @@ export default function SitesPage() {
               <motion.div 
                 key={site.id}
                 layout 
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  show: { opacity: 1, y: 0 }
-                }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
                 className="h-full"
               >
             <Card 
@@ -616,9 +686,12 @@ export default function SitesPage() {
         onConfirm={handleBulkDelete}
         itemCount={selectedSites.size}
         itemName="Site"
-        title={`Delete ${selectedSites.size} Site(s)?`}
-        description={`Are you sure you want to permanently delete ${selectedSites.size} selected site(s)? This action cannot be undone.`}
+        title={isDeleting ? `Deleting ${deletingCount}...` : `Delete ${selectedSites.size} Site(s)?`}
+        description={isDeleting ? `Please wait while sites are being deleted...` : `Are you sure you want to permanently delete ${selectedSites.size} selected site(s)? This action cannot be undone.`}
         confirmLabel={`Delete ${selectedSites.size} Site(s)`}
+        loadingLabel={`Deleting ${deletingCount}...`}
+        isDeleting={isDeleting}
+        progress={isDeleting ? { current: selectedSites.size - deletingCount, total: selectedSites.size } : undefined}
       />
     </motion.div>
   )

@@ -73,6 +73,15 @@ export function DepartmentSelectField({
   }, [onValueChange, control])
 
   const handleCreateDepartment = async (data: { name: string; description?: string }) => {
+    // Client-side validation: check if a department with the entered name already exists
+    const duplicateDepartment = departments.find(
+      dept => dept.name.toLowerCase().trim() === data.name.toLowerCase().trim()
+    )
+    if (duplicateDepartment) {
+      toast.error('A department with this name already exists')
+      return
+    }
+
     try {
       const result = await createDepartmentMutation.mutateAsync({
         name: data.name.trim(),

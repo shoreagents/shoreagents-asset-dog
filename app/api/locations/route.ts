@@ -99,17 +99,17 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ location }, { status: 201 })
   } catch (error: unknown) {
-    console.error('Error creating location:', error)
-    
     const prismaError = error as { code?: string; message?: string }
     
-    // Handle unique constraint violation (duplicate name)
+    // Handle unique constraint violation (duplicate name) - expected error, don't log
     if (prismaError.code === 'P2002') {
       return NextResponse.json(
         { error: 'A location with this name already exists' },
         { status: 409 }
       )
     }
+    
+    // Handle database connection errors - expected error, don't log
     if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
       return NextResponse.json(
         { error: 'Database connection limit reached. Please try again in a moment.' },
@@ -117,6 +117,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Only log unexpected errors
+    console.error('Unexpected error creating location:', error)
     return NextResponse.json(
       { error: 'Failed to create location' },
       { status: 500 }

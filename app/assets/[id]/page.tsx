@@ -1228,22 +1228,6 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
     }).format(Number(value))
   }
 
-  const formatDateTime = (dateString: string | Date | null | undefined) => {
-    if (!dateString) return 'N/A'
-    try {
-      return new Date(dateString).toLocaleString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      })
-    } catch {
-      return String(dateString)
-    }
-  }
-
   const getTimeAgo = (date: Date): string => {
     const now = new Date()
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
@@ -3155,7 +3139,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                           return (
                             <TableRow key={log.id} className="group relative">
                               <TableCell className="font-medium">
-                                {formatDateTime(log.eventDate)}
+                                {formatDate(log.eventDate)}
                               </TableCell>
                               <TableCell>
                                 <span className={`px-2 py-1 text-xs font-medium rounded ${
@@ -3223,55 +3207,55 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
       {/* Floating Action Buttons */}
       <AnimatePresence>
-        {isFormDirty && (
+      {isFormDirty && (
           <motion.div 
             initial={{ opacity: 0, y: 20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 20, x: '-50%' }}
             transition={{ duration: 0.3, ease: "easeOut" }}
-            className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
-            style={{
+          className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
+          style={{
               left: isMobile 
                 ? '50%'
                 : !sidebarOpen 
-                  ? '50%'
-                  : sidebarState === 'collapsed' 
-                    ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
+              ? '50%'
+              : sidebarState === 'collapsed' 
+                ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
                     : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))'
-            }}
+          }}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={clearForm}
+            className="min-w-[120px] bg-accent!"
           >
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              onClick={clearForm}
-              className="min-w-[120px] bg-accent!"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="lg"
-              onClick={() => {
-                const formElement = document.querySelector('form') as HTMLFormElement
-                if (formElement) {
-                  formElement.requestSubmit()
-                }
-              }}
-              disabled={loading || uploadingImages || uploadingDocuments || isCheckingAssetTag}
-              className="min-w-[120px]"
-            >
-              {loading || uploadingImages || uploadingDocuments ? (
-                <>
-                  <Spinner className="mr-2 h-4 w-4" />
-                  Saving...
-                </>
-              ) : (
-                'Save'
-              )}
-            </Button>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => {
+              const formElement = document.querySelector('form') as HTMLFormElement
+              if (formElement) {
+                formElement.requestSubmit()
+              }
+            }}
+            disabled={loading || uploadingImages || uploadingDocuments || isCheckingAssetTag}
+            className="min-w-[120px]"
+          >
+            {loading || uploadingImages || uploadingDocuments ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" />
+                Saving...
+              </>
+            ) : (
+              'Save'
+            )}
+          </Button>
           </motion.div>
-        )}
+      )}
       </AnimatePresence>
 
       {/* Dialogs */}

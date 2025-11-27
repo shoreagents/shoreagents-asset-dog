@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Card,
@@ -53,6 +53,8 @@ export default function DepartmentsPage() {
   const [isEditDepartmentDialogOpen, setIsEditDepartmentDialogOpen] = useState(false)
   const [isDeleteDepartmentDialogOpen, setIsDeleteDepartmentDialogOpen] = useState(false)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deletingCount, setDeletingCount] = useState(0)
   
   const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null)
   const [selectedDepartments, setSelectedDepartments] = useState<Set<string>>(new Set())
@@ -81,6 +83,15 @@ export default function DepartmentsPage() {
       return
     }
 
+    // Client-side validation: check for duplicate department names
+    const duplicateDepartment = departments.find(
+      dept => dept.name.toLowerCase().trim() === data.name.toLowerCase().trim()
+    )
+    if (duplicateDepartment) {
+      toast.error('A department with this name already exists')
+      return
+    }
+
     try {
       await createDepartmentMutation.mutateAsync(data)
       setIsCreateDepartmentDialogOpen(false)
@@ -101,6 +112,15 @@ export default function DepartmentsPage() {
 
   const handleUpdateDepartment = async (data: { name: string; description?: string }) => {
     if (!selectedDepartment || !canManageSetup) return
+
+    // Client-side validation: check for duplicate department names (excluding current department)
+    const duplicateDepartment = departments.find(
+      dept => dept.id !== selectedDepartment.id && dept.name.toLowerCase().trim() === data.name.toLowerCase().trim()
+    )
+    if (duplicateDepartment) {
+      toast.error('A department with this name already exists')
+      return
+    }
 
     try {
       await updateDepartmentMutation.mutateAsync({
@@ -191,22 +211,71 @@ export default function DepartmentsPage() {
     if (selectedDepartments.size === 0) return
     
     const selectedArray = Array.from(selectedDepartments)
+    const totalCount = selectedArray.length
+    
+    setIsDeleting(true)
+    setDeletingCount(totalCount)
     
     try {
-      // Delete departments one by one (since we need to check for associated assets)
-      for (const departmentId of selectedArray) {
-        await deleteDepartmentMutation.mutateAsync(departmentId)
+      // Use bulk delete API endpoint
+      const response = await fetch('/api/departments/bulk-delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedArray }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete departments')
       }
+
+      const result = await response.json()
       
-      toast.success(`Successfully deleted ${selectedArray.length} department(s)`)
+      // Optimistically update the cache to remove deleted departments
+      queryClient.setQueriesData<Department[]>(
+        { 
+          predicate: (query) => query.queryKey[0] === "departments" 
+        }, 
+        (old = []) => {
+          return old.filter(department => !selectedArray.includes(department.id))
+        }
+      )
+      
+      toast.success(result.message || `Successfully deleted ${result.deletedCount || selectedArray.length} department(s)`)
       setSelectedDepartments(new Set())
+      setIsDeleting(false)
+      setDeletingCount(0)
       setIsBulkDeleteDialogOpen(false)
-      queryClient.invalidateQueries({ queryKey: ['departments'] })
+      
+      // Invalidate queries to ensure consistency
+      queryClient.invalidateQueries({ 
+        predicate: (query) => query.queryKey[0] === "departments",
+        refetchType: 'none' 
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete departments')
+      setIsDeleting(false)
+      setDeletingCount(0)
       setIsBulkDeleteDialogOpen(false)
     }
   }
+
+  // Countdown effect for bulk delete
+  useEffect(() => {
+    if (isDeleting && deletingCount > 0) {
+      const timer = setTimeout(() => {
+        setDeletingCount(prev => {
+          if (prev <= 1) {
+            setIsDeleting(false)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000) // Update every second
+      
+      return () => clearTimeout(timer)
+    }
+  }, [isDeleting, deletingCount])
 
   if (permissionsLoading || departmentsLoading) {
     return (
@@ -489,10 +558,10 @@ export default function DepartmentsPage() {
               <motion.div 
                 key={department.id}
                 layout 
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  show: { opacity: 1, y: 0 }
-                }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
                 className="h-full"
               >
             <Card 
@@ -616,9 +685,12 @@ export default function DepartmentsPage() {
         onConfirm={handleBulkDelete}
         itemCount={selectedDepartments.size}
         itemName="Department"
-        title={`Delete ${selectedDepartments.size} Department(s)?`}
-        description={`Are you sure you want to permanently delete ${selectedDepartments.size} selected department(s)? This action cannot be undone.`}
+        title={isDeleting ? `Deleting ${deletingCount}...` : `Delete ${selectedDepartments.size} Department(s)?`}
+        description={isDeleting ? `Please wait while departments are being deleted...` : `Are you sure you want to permanently delete ${selectedDepartments.size} selected department(s)? This action cannot be undone.`}
         confirmLabel={`Delete ${selectedDepartments.size} Department(s)`}
+        loadingLabel={`Deleting ${deletingCount}...`}
+        isDeleting={isDeleting}
+        progress={isDeleting ? { current: selectedDepartments.size - deletingCount, total: selectedDepartments.size } : undefined}
       />
     </motion.div>
   )

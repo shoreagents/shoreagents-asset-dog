@@ -85,6 +85,15 @@ export default function CategoriesPage() {
       return
     }
 
+    // Client-side validation: check for duplicate category names
+    const duplicateCategory = categories.find(
+      cat => cat.name.toLowerCase().trim() === data.name.toLowerCase().trim()
+    )
+    if (duplicateCategory) {
+      toast.error('A category with this name already exists')
+      return
+    }
+
     try {
       await createCategoryMutation.mutateAsync(data)
       setIsCreateCategoryDialogOpen(false)
@@ -105,6 +114,15 @@ export default function CategoriesPage() {
 
   const handleUpdateCategory = async (data: { name: string; description?: string }) => {
     if (!selectedCategory || !canManageSetup) return
+
+    // Client-side validation: check for duplicate category names (excluding current category)
+    const duplicateCategory = categories.find(
+      cat => cat.id !== selectedCategory.id && cat.name.toLowerCase().trim() === data.name.toLowerCase().trim()
+    )
+    if (duplicateCategory) {
+      toast.error('A category with this name already exists')
+      return
+    }
 
     try {
       await updateCategoryMutation.mutateAsync({
@@ -155,6 +173,18 @@ export default function CategoriesPage() {
   const handleCreateSubCategorySubmit = async (data: { name: string; description?: string; categoryId: string }) => {
     if (!canManageSetup) return
 
+    // Client-side validation: check for duplicate subcategory names within the same category
+    const category = categories.find(cat => cat.id === data.categoryId)
+    if (category) {
+      const duplicateSubCategory = category.subCategories.find(
+        sub => sub.name.toLowerCase().trim() === data.name.toLowerCase().trim()
+      )
+      if (duplicateSubCategory) {
+        toast.error('A subcategory with this name already exists in this category')
+        return
+      }
+    }
+
     try {
       await createSubCategoryMutation.mutateAsync(data)
       setIsCreateSubCategoryDialogOpen(false)
@@ -176,6 +206,18 @@ export default function CategoriesPage() {
 
   const handleUpdateSubCategory = async (data: { name: string; description?: string; categoryId: string }) => {
     if (!selectedSubCategory || !canManageSetup) return
+
+    // Client-side validation: check for duplicate subcategory names within the same category (excluding current subcategory)
+    const category = categories.find(cat => cat.id === data.categoryId)
+    if (category) {
+      const duplicateSubCategory = category.subCategories.find(
+        sub => sub.id !== selectedSubCategory.id && sub.name.toLowerCase().trim() === data.name.toLowerCase().trim()
+      )
+      if (duplicateSubCategory) {
+        toast.error('A subcategory with this name already exists in this category')
+        return
+      }
+    }
 
     try {
       await updateSubCategoryMutation.mutateAsync({
@@ -362,11 +404,11 @@ export default function CategoriesPage() {
             {sortedCategories.map((category) => (
               <motion.div 
                 key={category.id} 
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  show: { opacity: 1, y: 0 }
-                }}
-                layout
+                layout 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
                 className="h-full"
               >
                 <Card className="flex flex-col h-full hover:shadow-md transition-all duration-300 border-muted/60 group/card overflow-hidden">
@@ -432,14 +474,16 @@ export default function CategoriesPage() {
                     {category.subCategories && category.subCategories.length > 0 ? (
                       <ScrollArea className="flex-1 max-h-[240px] -mr-4 pr-4">
                         <div className="space-y-2 pb-2">
-                          {category.subCategories.map((subCategory) => (
-                            <motion.div
-                              key={subCategory.id}
-                              layout
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              className="group flex items-start justify-between gap-2 p-2.5 rounded-lg bg-muted/30 border border-transparent hover:border-border hover:bg-background hover:shadow-sm transition-all duration-200"
-                            >
+                          <AnimatePresence>
+                            {category.subCategories.map((subCategory) => (
+                              <motion.div
+                                key={subCategory.id}
+                                layout
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -10 }}
+                                className="group flex items-start justify-between gap-2 p-2.5 rounded-lg bg-muted/30 border border-transparent hover:border-border hover:bg-background hover:shadow-sm transition-all duration-200"
+                              >
                               <div className="flex-1 min-w-0 overflow-hidden pr-1">
                                 <div className="font-medium text-sm leading-tight truncate">{subCategory.name}</div>
                                 {subCategory.description && (
@@ -453,7 +497,7 @@ export default function CategoriesPage() {
                                   <DropdownMenuTrigger asChild>
                                     <Button 
                                       variant="ghost" 
-                                      className="h-6 w-6 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted"
+                                      className="h-6 w-6 p-0 shrink-0 hover:bg-muted"
                                     >
                                       <span className="sr-only">Open menu</span>
                                       <MoreHorizontal className="h-3.5 w-3.5" />
@@ -478,7 +522,8 @@ export default function CategoriesPage() {
                                 </DropdownMenu>
                               )}
                             </motion.div>
-                          ))}
+                            ))}
+                          </AnimatePresence>
                         </div>
                       </ScrollArea>
                     ) : (

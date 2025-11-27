@@ -98,18 +98,17 @@ export async function POST(request: NextRequest) {
     await clearCache('sites-list')
 
     return NextResponse.json({ site }, { status: 201 })
-  } catch (error: any) {
-    console.error('Error creating site:', error)
-    
-    // Handle unique constraint violation (duplicate name)
-    if (error.code === 'P2002') {
+  } catch (error: unknown) {
+    // Handle unique constraint violation (duplicate name) - expected error, don't log
+    const prismaError = error as { code?: string; message?: string }
+    if (prismaError?.code === 'P2002') {
       return NextResponse.json(
         { error: 'A site with this name already exists' },
         { status: 409 }
       )
     }
 
-    const prismaError = error as { code?: string; message?: string }
+    // Handle database connection errors - expected error, don't log
     if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
       return NextResponse.json(
         { error: 'Database connection limit reached. Please try again in a moment.' },
@@ -117,6 +116,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Only log unexpected errors
+    console.error('Unexpected error creating site:', error)
     return NextResponse.json(
       { error: 'Failed to create site' },
       { status: 500 }

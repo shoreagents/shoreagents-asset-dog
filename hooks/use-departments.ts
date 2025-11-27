@@ -52,8 +52,66 @@ export const useCreateDepartment = () => {
       }
       return response.json()
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["departments"] })
+    onMutate: async (newDepartment) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ 
+        predicate: (query) => query.queryKey[0] === "departments" 
+      })
+      
+      // Snapshot the previous value
+      const previousDepartments = queryClient.getQueryData<Department[]>(["departments"])
+      
+      // Optimistically update to the new value
+      queryClient.setQueriesData<Department[]>(
+        { predicate: (query) => query.queryKey[0] === "departments" },
+        (old = []) => {
+          const tempId = `temp-${Date.now()}`
+          const optimisticDepartment: Department = {
+            id: tempId,
+            name: newDepartment.name,
+            description: newDepartment.description || null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }
+          return [...old, optimisticDepartment]
+        }
+      )
+      
+      return { previousDepartments }
+    },
+    onError: (_err, _newDepartment, context) => {
+      // Rollback to the previous value
+      if (context?.previousDepartments) {
+        queryClient.setQueriesData(
+          { predicate: (query) => query.queryKey[0] === "departments" },
+          context.previousDepartments
+        )
+      }
+    },
+    onSuccess: (data) => {
+      // Replace optimistic department with real data
+      queryClient.setQueriesData<Department[]>(
+        { predicate: (query) => query.queryKey[0] === "departments" },
+        (old = []) => {
+          if (!old) return [data.department]
+          // Find and replace the temporary department with the real one
+          const tempIndex = old.findIndex(dept => dept.id.startsWith('temp-'))
+          if (tempIndex !== -1) {
+            const updated = [...old]
+            updated[tempIndex] = {
+              ...data.department,
+              createdAt: new Date(data.department.createdAt),
+              updatedAt: new Date(data.department.updatedAt),
+            }
+            return updated
+          }
+          return old
+        }
+      )
+      queryClient.invalidateQueries({ 
+        predicate: (query) => query.queryKey[0] === "departments",
+        refetchType: 'none' 
+      })
     },
   })
 }
@@ -75,8 +133,43 @@ export const useUpdateDepartment = () => {
       }
       return response.json()
     },
+    onMutate: async ({ id, ...updatedData }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ 
+        predicate: (query) => query.queryKey[0] === "departments" 
+      })
+      
+      // Snapshot the previous value
+      const previousDepartments = queryClient.getQueryData<Department[]>(["departments"])
+      
+      // Optimistically update to the new value
+      queryClient.setQueriesData<Department[]>(
+        { predicate: (query) => query.queryKey[0] === "departments" },
+        (old = []) => {
+          return old.map(department =>
+            department.id === id
+              ? { ...department, ...updatedData, updatedAt: new Date() }
+              : department
+          )
+        }
+      )
+      
+      return { previousDepartments }
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback to the previous value
+      if (context?.previousDepartments) {
+        queryClient.setQueriesData(
+          { predicate: (query) => query.queryKey[0] === "departments" },
+          context.previousDepartments
+        )
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["departments"] })
+      queryClient.invalidateQueries({ 
+        predicate: (query) => query.queryKey[0] === "departments",
+        refetchType: 'none' 
+      })
     },
   })
 }
@@ -96,8 +189,39 @@ export const useDeleteDepartment = () => {
       }
       return response.json()
     },
+    onMutate: async (id) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ 
+        predicate: (query) => query.queryKey[0] === "departments" 
+      })
+      
+      // Snapshot the previous value
+      const previousDepartments = queryClient.getQueryData<Department[]>(["departments"])
+      
+      // Optimistically update to the new value
+      queryClient.setQueriesData<Department[]>(
+        { predicate: (query) => query.queryKey[0] === "departments" },
+        (old = []) => {
+          return old.filter(department => department.id !== id)
+        }
+      )
+      
+      return { previousDepartments }
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback to the previous value
+      if (context?.previousDepartments) {
+        queryClient.setQueriesData(
+          { predicate: (query) => query.queryKey[0] === "departments" },
+          context.previousDepartments
+        )
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["departments"] })
+      queryClient.invalidateQueries({ 
+        predicate: (query) => query.queryKey[0] === "departments",
+        refetchType: 'none' 
+      })
     },
   })
 }

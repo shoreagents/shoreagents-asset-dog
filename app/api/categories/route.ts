@@ -83,15 +83,26 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ category }, { status: 201 })
   } catch (error: unknown) {
-    // Handle connection pool errors specifically
     const prismaError = error as { code?: string; message?: string }
+    
+    // Handle duplicate name error - expected error, don't log
+    if (prismaError?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'A category with this name already exists' },
+        { status: 409 }
+      )
+    }
+    
+    // Handle connection pool errors - expected error, don't log
     if (prismaError?.code === 'P1001' || prismaError?.code === 'P2024') {
       return NextResponse.json(
         { error: 'Database connection limit reached. Please try again in a moment.' },
         { status: 503 }
       )
     }
-    console.error('Error creating category:', error)
+    
+    // Only log unexpected errors
+    console.error('Unexpected error creating category:', error)
     return NextResponse.json(
       { error: 'Failed to create category' },
       { status: 500 }

@@ -1671,10 +1671,10 @@ function AssetsPageContent() {
       categoryFilter !== 'all' ? categoryFilter : undefined,
       statusFilter !== 'all' ? statusFilter : undefined
     ),
-    enabled: canViewAssets, // Only fetch if user has permission
+    enabled: !permissionsLoading && canViewAssets, // Only fetch when permissions are loaded and user has permission
     staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: true, // Refetch when window regains focus (e.g., navigating back)
-    refetchOnMount: true, // Refetch on mount if data is stale (ensures updates are visible)
+    refetchOnWindowFocus: false, // Don't refetch on window focus to reduce unnecessary requests
+    refetchOnMount: false, // Don't refetch on mount if data exists (staleTime handles freshness)
     placeholderData: (previousData) => previousData, // Keep previous data while fetching to prevent pagination from disappearing
   })
 

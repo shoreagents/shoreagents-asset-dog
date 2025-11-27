@@ -73,6 +73,17 @@ export function SiteSelectField({
   }, [onValueChange, control])
 
   const handleCreateSite = async (data: { name: string; description?: string }) => {
+    // Check if site name already exists (case-insensitive)
+    const trimmedName = data.name.trim()
+    const nameExists = sites.some(
+      site => site.name.toLowerCase().trim() === trimmedName.toLowerCase()
+    )
+
+    if (nameExists) {
+      toast.error('A site with this name already exists')
+      return
+    }
+
     try {
       const result = await createSiteMutation.mutateAsync({
         name: data.name.trim(),

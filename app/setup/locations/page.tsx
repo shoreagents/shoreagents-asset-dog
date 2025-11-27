@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Card,
@@ -53,6 +53,8 @@ export default function LocationsPage() {
   const [isEditLocationDialogOpen, setIsEditLocationDialogOpen] = useState(false)
   const [isDeleteLocationDialogOpen, setIsDeleteLocationDialogOpen] = useState(false)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deletingCount, setDeletingCount] = useState(0)
   
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set())
@@ -81,6 +83,17 @@ export default function LocationsPage() {
       return
     }
 
+    // Check if location name already exists (case-insensitive)
+    const trimmedName = data.name.trim()
+    const nameExists = locations.some(
+      location => location.name.toLowerCase().trim() === trimmedName.toLowerCase()
+    )
+
+    if (nameExists) {
+      toast.error('A location with this name already exists')
+      return
+    }
+
     try {
       await createLocationMutation.mutateAsync(data)
       setIsCreateLocationDialogOpen(false)
@@ -101,6 +114,17 @@ export default function LocationsPage() {
 
   const handleUpdateLocation = async (data: { name: string; description?: string }) => {
     if (!selectedLocation || !canManageSetup) return
+
+    // Check if location name already exists (case-insensitive, excluding current location)
+    const trimmedName = data.name.trim()
+    const nameExists = locations.some(
+      location => location.id !== selectedLocation.id && location.name.toLowerCase().trim() === trimmedName.toLowerCase()
+    )
+
+    if (nameExists) {
+      toast.error('A location with this name already exists')
+      return
+    }
 
     try {
       await updateLocationMutation.mutateAsync({
@@ -184,25 +208,75 @@ export default function LocationsPage() {
 
   // Bulk delete handler
   const handleBulkDelete = async () => {
+    if (!canManageSetup) {
+      toast.error('You do not have permission to manage locations')
+      return
+    }
     if (selectedLocations.size === 0) return
     
     const selectedArray = Array.from(selectedLocations)
+    const totalCount = selectedArray.length
+    
+    setIsDeleting(true)
+    setDeletingCount(totalCount)
     
     try {
-      // Delete locations one by one (since we need to check for associated assets)
-      for (const locationId of selectedArray) {
-        await deleteLocationMutation.mutateAsync(locationId)
+      // Use bulk delete API endpoint
+      const response = await fetch('/api/locations/bulk-delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedArray }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete locations')
       }
+
+      const result = await response.json()
       
-      toast.success(`Successfully deleted ${selectedArray.length} location(s)`)
+      // Optimistically update the cache to remove deleted locations
+      queryClient.setQueriesData<Location[]>(
+        { 
+          predicate: (query) => query.queryKey[0] === "locations" 
+        }, 
+        (old = []) => {
+          return old.filter(location => !selectedArray.includes(location.id))
+        }
+      )
+      
+      toast.success(result.message || `Successfully deleted ${result.deletedCount || selectedArray.length} location(s)`)
       setSelectedLocations(new Set())
+      setIsDeleting(false)
+      setDeletingCount(0)
       setIsBulkDeleteDialogOpen(false)
-      queryClient.invalidateQueries({ queryKey: ['locations'] })
+      
+      // Invalidate queries to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["locations"], refetchType: 'none' })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete locations')
+      setIsDeleting(false)
+      setDeletingCount(0)
       setIsBulkDeleteDialogOpen(false)
     }
   }
+
+  // Countdown effect for bulk delete
+  useEffect(() => {
+    if (isDeleting && deletingCount > 0) {
+      const timer = setTimeout(() => {
+        setDeletingCount(prev => {
+          if (prev <= 1) {
+            setIsDeleting(false)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000) // Update every second
+      
+      return () => clearTimeout(timer)
+    }
+  }, [isDeleting, deletingCount])
 
   if (permissionsLoading || locationsLoading) {
     return (
@@ -485,10 +559,10 @@ export default function LocationsPage() {
               <motion.div 
                 key={location.id}
                 layout 
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  show: { opacity: 1, y: 0 }
-                }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
                 className="h-full"
               >
             <Card 
@@ -612,9 +686,12 @@ export default function LocationsPage() {
         onConfirm={handleBulkDelete}
         itemCount={selectedLocations.size}
         itemName="Location"
-        title={`Delete ${selectedLocations.size} Location(s)?`}
-        description={`Are you sure you want to permanently delete ${selectedLocations.size} selected location(s)? This action cannot be undone.`}
+        title={isDeleting ? `Deleting ${deletingCount}...` : `Delete ${selectedLocations.size} Location(s)?`}
+        description={isDeleting ? `Please wait while locations are being deleted...` : `Are you sure you want to permanently delete ${selectedLocations.size} selected location(s)? This action cannot be undone.`}
         confirmLabel={`Delete ${selectedLocations.size} Location(s)`}
+        loadingLabel={`Deleting ${deletingCount}...`}
+        isDeleting={isDeleting}
+        progress={isDeleting ? { current: selectedLocations.size - deletingCount, total: selectedLocations.size } : undefined}
       />
     </motion.div>
   )

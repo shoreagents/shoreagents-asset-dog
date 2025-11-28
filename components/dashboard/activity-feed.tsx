@@ -167,9 +167,9 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                     checked={visibleTabs.has(tab.id as TabType)}
                     onSelect={(e) => toggleTabVisibility(tab.id as TabType, e)}
                     disabled={visibleTabs.size === 1 && visibleTabs.has(tab.id as TabType)}
-                    className="hover:bg-white/15 dark:hover:bg-white/10 focus:bg-white/15 dark:focus:bg-white/10 data-[state=checked]:bg-white/20 dark:data-[state=checked]:bg-white/10 cursor-pointer transition-colors"
+                    className="hover:bg-white/15 dark:hover:bg-white/10 focus:bg-white/15 dark:focus:bg-white/10  cursor-pointer transition-colors"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 ">
                       <tab.icon className="h-4 w-4" />
                       <span>{tab.label}</span>
                     </div>

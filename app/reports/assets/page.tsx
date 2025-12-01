@@ -50,6 +50,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 
 type ReportType = 'summary' | 'status' | 'category'
 
@@ -103,6 +105,7 @@ export default function AssetReportsPage() {
   const [isExporting, setIsExporting] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [pendingExportFormat, setPendingExportFormat] = useState<'csv' | 'excel' | 'pdf' | null>(null)
+  const [includeAssetList, setIncludeAssetList] = useState(false)
 
   // Fetch categories for name lookup
   const { data: categoriesData } = useQuery({
@@ -169,6 +172,8 @@ export default function AssetReportsPage() {
   // Export handlers
   const handleExportClick = (format: 'csv' | 'excel' | 'pdf') => {
     setPendingExportFormat(format)
+    // Reset includeAssetList when opening dialog
+    setIncludeAssetList(false)
     setShowExportDialog(true)
   }
 
@@ -204,6 +209,10 @@ export default function AssetReportsPage() {
     if (filters.department) params.set('department', filters.department)
     if (filters.startDate) params.set('startDate', filters.startDate)
     if (filters.endDate) params.set('endDate', filters.endDate)
+    // For summary reports, include the includeAssetList parameter
+    if (reportType === 'summary') {
+      params.set('includeAssetList', includeAssetList.toString())
+    }
 
     const response = await fetch(`/api/reports/assets/export?${params.toString()}`)
     
@@ -230,9 +239,9 @@ export default function AssetReportsPage() {
       return
     }
 
-    // For summary report, fetch all assets for PDF export
-    let allAssets = reportData.recentAssets
-    if (reportType === 'summary') {
+    // For summary report, fetch all assets for PDF export only if includeAssetList is checked
+    let allAssets: typeof reportData.recentAssets | undefined = undefined
+    if (reportType === 'summary' && includeAssetList) {
       try {
         const params = new URLSearchParams()
         params.set('includeAllAssets', 'true') // Fetch all assets instead of just 10
@@ -252,12 +261,12 @@ export default function AssetReportsPage() {
         }
       } catch (error) {
         console.error('Failed to fetch all assets for PDF:', error)
-        // Fall back to recent assets from reportData
+        // Fall back to undefined, which will skip the asset list
       }
     }
 
     // Generate HTML for PDF
-    const html = generateReportHTML(reportData, allAssets)
+    const html = generateReportHTML(reportData, allAssets, reportType === 'summary' ? includeAssetList : true)
 
     const response = await fetch('/api/reports/assets/pdf', {
       method: 'POST',
@@ -284,7 +293,7 @@ export default function AssetReportsPage() {
     toast.success('Report exported successfully as PDF')
   }
 
-  const generateReportHTML = (data: ReportData, allAssets?: typeof data.recentAssets) => {
+  const generateReportHTML = (data: ReportData, allAssets?: typeof data.recentAssets, includeList: boolean = false) => {
     const assetsToExport = allAssets || data.recentAssets
     const reportTypeLabel = reportType === 'status' ? 'Status Analysis' : 
                            reportType === 'category' ? 'Category Analysis' : 
@@ -467,6 +476,7 @@ export default function AssetReportsPage() {
             </tbody>
           </table>
 
+          ${includeList ? `
           <h2>Asset Details (${assetsToExport.length} assets)</h2>
           <table>
             <thead>
@@ -496,6 +506,7 @@ export default function AssetReportsPage() {
               `).join('')}
             </tbody>
           </table>
+          ` : ''}
 
           <div class="footer">
             <p>Generated on ${format(new Date(data.generatedAt), 'PPpp')}</p>
@@ -730,7 +741,7 @@ export default function AssetReportsPage() {
                     <span className="hidden sm:inline">Export</span>
                   </>
                 )}
-              </Button>
+          </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => handleExportClick('csv')} disabled={isExporting}>
@@ -799,9 +810,9 @@ export default function AssetReportsPage() {
       {/* Active Filter Badges */}
       <AnimatePresence>
         {(filters.status || filters.category || filters.location || filters.site || filters.department || filters.startDate || filters.endDate) && (
-          <motion.div
+      <motion.div
             initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+        animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
             className="flex flex-wrap gap-2"
@@ -813,7 +824,7 @@ export default function AssetReportsPage() {
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.8, opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                  >
+      >
                     <Badge variant="outline" className="gap-1.5 pr-1 bg-white/5 hover:bg-white/10 transition-colors max-w-full">
                       <span className="text-xs truncate">
                         <span className="text-muted-foreground">Status:</span> {filters.status}
@@ -826,7 +837,7 @@ export default function AssetReportsPage() {
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
-                  </motion.div>
+      </motion.div>
                 )}
                 {filters.category && (
                   <motion.div
@@ -1515,14 +1526,36 @@ export default function AssetReportsPage() {
               </div>
             </div>
 
+            {/* Include Asset List Option (for PDF, CSV, Excel summary) */}
+            {reportType === 'summary' && pendingExportFormat && (
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2 p-3 rounded-lg border border-border bg-muted/30">
+                  <Checkbox
+                    id="include-asset-list"
+                    checked={includeAssetList}
+                    onCheckedChange={(checked) => setIncludeAssetList(checked === true)}
+                  />
+                  <Label
+                    htmlFor="include-asset-list"
+                    className="text-sm font-medium cursor-pointer flex-1"
+                  >
+                    Include Asset List
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground pl-3">
+                  When checked, the export will include a detailed table of all assets. Unchecked by default - only summary statistics will be exported.
+                </p>
+              </div>
+            )}
+
             {/* Export Description */}
             <div className="bg-muted/50 p-3 rounded-lg text-sm">
               <p className="text-muted-foreground">
                 {reportType === 'summary' && pendingExportFormat === 'pdf' && (
-                  <>This will export all matching assets with summary statistics. PDF includes asset details table with key fields (8 columns).</>
+                  <>This will export summary statistics with status and category breakdowns. {includeAssetList ? 'Asset details table will be included.' : 'Asset details table will not be included.'}</>
                 )}
                 {reportType === 'summary' && (pendingExportFormat === 'csv' || pendingExportFormat === 'excel') && (
-                  <>This will export all assets with complete data (42 columns) including status, category, location, purchase details, depreciation, and more.</>
+                  <>This will export summary statistics with status and category breakdowns. {includeAssetList ? 'Asset details table with complete data (42 columns) will be included.' : 'Only summary statistics will be exported (no asset list).'}</>
                 )}
                 {reportType === 'status' && (
                   <>This will export aggregated data grouped by status with counts, total values, averages, and percentages.</>

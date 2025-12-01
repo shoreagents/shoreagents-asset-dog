@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const department = searchParams.get('department')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
+    const includeAssetList = searchParams.get('includeAssetList') === 'true'
 
     // Build where clause
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
     })
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let exportData: any[] = []
+    let exportData: any[] | { summary: any[]; assetList: any[] } = []
 
     // Prepare data based on report type
     if (reportType === 'status') {
@@ -129,9 +130,97 @@ export async function GET(request: NextRequest) {
       exportData.sort((a, b) => parseInt(b['Asset Count']) - parseInt(a['Asset Count']))
 
     } else {
-      // Summary report - Full asset export with all fields
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      exportData = assets.map((asset: any) => ({
+      // Summary report
+      // Calculate totals and groups (needed for both summary and when including asset list)
+      const totalAssets = assets.length
+      const totalValue = assets.reduce((sum, asset) => sum + (Number(asset.cost) || 0), 0)
+      
+      // Group by status
+      const statusGroups = new Map<string, { count: number; totalValue: number }>()
+      assets.forEach((asset) => {
+        const statusKey = asset.status || 'Unknown'
+        if (!statusGroups.has(statusKey)) {
+          statusGroups.set(statusKey, { count: 0, totalValue: 0 })
+        }
+        const group = statusGroups.get(statusKey)!
+        group.count++
+        group.totalValue += Number(asset.cost) || 0
+      })
+      
+      // Group by category
+      const categoryGroups = new Map<string, { count: number; totalValue: number }>()
+      assets.forEach((asset) => {
+        const categoryKey = asset.category?.name || 'Uncategorized'
+        if (!categoryGroups.has(categoryKey)) {
+          categoryGroups.set(categoryKey, { count: 0, totalValue: 0 })
+        }
+        const group = categoryGroups.get(categoryKey)!
+        group.count++
+        group.totalValue += Number(asset.cost) || 0
+      })
+      
+      // Build summary statistics data
+      const summaryData = [
+        // Summary row
+        {
+          'Metric': 'Total Assets',
+          'Value': totalAssets.toString(),
+          'Total Value': totalValue.toFixed(2),
+          'Average Value': totalAssets > 0 ? (totalValue / totalAssets).toFixed(2) : '0.00',
+          'Percentage': '100%',
+        },
+        // Separator
+        {
+          'Metric': '---',
+          'Value': '---',
+          'Total Value': '---',
+          'Average Value': '---',
+          'Percentage': '---',
+        },
+        // Assets by Status
+        {
+          'Metric': 'ASSETS BY STATUS',
+          'Value': '',
+          'Total Value': '',
+          'Average Value': '',
+          'Percentage': '',
+        },
+        ...Array.from(statusGroups.entries()).map(([status, data]) => ({
+          'Metric': `Status: ${status}`,
+          'Value': data.count.toString(),
+          'Total Value': data.totalValue.toFixed(2),
+          'Average Value': (data.totalValue / data.count).toFixed(2),
+          'Percentage': totalAssets > 0 ? ((data.count / totalAssets) * 100).toFixed(1) + '%' : '0%',
+        })),
+        // Separator
+        {
+          'Metric': '---',
+          'Value': '---',
+          'Total Value': '---',
+          'Average Value': '---',
+          'Percentage': '---',
+        },
+        // Assets by Category
+        {
+          'Metric': 'ASSETS BY CATEGORY',
+          'Value': '',
+          'Total Value': '',
+          'Average Value': '',
+          'Percentage': '',
+        },
+        ...Array.from(categoryGroups.entries()).map(([category, data]) => ({
+          'Metric': `Category: ${category}`,
+          'Value': data.count.toString(),
+          'Total Value': data.totalValue.toFixed(2),
+          'Average Value': (data.totalValue / data.count).toFixed(2),
+          'Percentage': totalAssets > 0 ? ((data.count / totalAssets) * 100).toFixed(1) + '%' : '0%',
+        })),
+      ]
+      
+      if (includeAssetList) {
+        // Full asset export with all fields + summary
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const assetListData = assets.map((asset: any) => ({
         'Asset Tag ID': asset.assetTagId || '',
         'Description': asset.description || '',
         'Purchased From': asset.purchasedFrom || '',
@@ -172,27 +261,96 @@ export async function GET(request: NextRequest) {
         'Last Auditor': asset.lastAuditor || '',
         'Audit Count': asset.auditCount?.toString() || '0',
         'Created At': new Date(asset.createdAt).toISOString().split('T')[0],
-      }))
-    }
-
-    // Check if we have data to export
-    if (exportData.length === 0) {
-      return NextResponse.json(
-        { error: 'No data to export' },
-        { status: 400 }
-      )
+        }))
+        
+        // Store summary and asset list separately
+        // For Excel: we'll create multiple sheets
+        // For CSV: we'll handle it in the CSV generation section
+        exportData = { summary: summaryData, assetList: assetListData }
+      } else {
+        // Summary statistics only
+        exportData = summaryData
+      }
     }
 
     const reportTypeLabel = reportType === 'status' ? 'Status' : reportType === 'category' ? 'Category' : 'Summary'
-    const sheetName = `Assets by ${reportTypeLabel}`
 
     if (format === 'csv') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let csvData: any[] = []
+      
+      // Handle summary report with asset list
+      if (reportType === 'summary' && includeAssetList && typeof exportData === 'object' && !Array.isArray(exportData)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const summaryData = (exportData as { summary: any[]; assetList: any[] }).summary
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const assetListData = (exportData as { summary: any[]; assetList: any[] }).assetList
+        
+        // First, output summary section
+        const summaryHeaders = Object.keys(summaryData[0] || {})
+        const summaryRows = [
+          '=== SUMMARY STATISTICS ===',
+          summaryHeaders.join(','),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...summaryData.map((row: any) =>
+            summaryHeaders.map(header => {
+              const value = row[header]
+              const stringValue = String(value || '')
+              if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+                return `"${stringValue.replace(/"/g, '""')}"`
+              }
+              return stringValue
+            }).join(',')
+          ),
+          '',
+          '=== ASSET LIST ===',
+        ]
+        
+        // Then, output asset list section
+        const assetHeaders = Object.keys(assetListData[0] || {})
+        const assetRows = [
+          assetHeaders.join(','),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...assetListData.map((row: any) =>
+            assetHeaders.map(header => {
+              const value = row[header]
+              const stringValue = String(value || '')
+              if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+                return `"${stringValue.replace(/"/g, '""')}"`
+              }
+              return stringValue
+            }).join(',')
+          ),
+        ]
+        
+        const csv = [...summaryRows, ...assetRows].join('\n')
+        
+        const filename = `asset-report-${reportType}-${new Date().toISOString().split('T')[0]}.csv`
+        
+        return new NextResponse(csv, {
+          headers: {
+            'Content-Type': 'text/csv',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          },
+        })
+      }
+      
+      // Check if we have data to export
+      if (Array.isArray(exportData) && exportData.length === 0) {
+        return NextResponse.json(
+          { error: 'No data to export' },
+          { status: 400 }
+        )
+      }
+      
+      csvData = Array.isArray(exportData) ? exportData : []
+      
       // Generate CSV
-      const headers = Object.keys(exportData[0] || {})
+      const headers = Object.keys(csvData[0] || {})
       const csvRows = [
         headers.join(','),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...exportData.map((row: any) =>
+        ...csvData.map((row: any) =>
           headers.map(header => {
             const value = row[header]
             // Escape quotes and wrap in quotes if contains comma
@@ -216,9 +374,55 @@ export async function GET(request: NextRequest) {
       })
     } else if (format === 'excel') {
       // Generate Excel
-      const ws = XLSX.utils.json_to_sheet(exportData)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      
+      if (reportType === 'summary' && includeAssetList && typeof exportData === 'object' && !Array.isArray(exportData)) {
+        // Multiple sheets: Summary, Assets by Status, Assets by Category, Asset List
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const summaryData = (exportData as { summary: any[]; assetList: any[] }).summary
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const assetListData = (exportData as { summary: any[]; assetList: any[] }).assetList
+        
+        // Summary sheet
+        const summaryWs = XLSX.utils.json_to_sheet(summaryData)
+        XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary')
+        
+        // Assets by Status sheet
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const statusData = summaryData.filter((row: any) => 
+          row.Metric && row.Metric.startsWith('Status:')
+        )
+        if (statusData.length > 0) {
+          const statusWs = XLSX.utils.json_to_sheet(statusData)
+          XLSX.utils.book_append_sheet(wb, statusWs, 'By Status')
+        }
+        
+        // Assets by Category sheet
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const categoryData = summaryData.filter((row: any) => 
+          row.Metric && row.Metric.startsWith('Category:')
+        )
+        if (categoryData.length > 0) {
+          const categoryWs = XLSX.utils.json_to_sheet(categoryData)
+          XLSX.utils.book_append_sheet(wb, categoryWs, 'By Category')
+        }
+        
+        // Asset List sheet
+        const assetListWs = XLSX.utils.json_to_sheet(assetListData)
+        XLSX.utils.book_append_sheet(wb, assetListWs, 'Asset List')
+      } else {
+        // Single sheet export
+        const dataArray = Array.isArray(exportData) ? exportData : []
+        if (dataArray.length === 0) {
+          return NextResponse.json(
+            { error: 'No data to export' },
+            { status: 400 }
+          )
+        }
+        const ws = XLSX.utils.json_to_sheet(dataArray)
+        const sheetName = `Assets by ${reportTypeLabel}`
+        XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      }
 
       // Generate buffer
       const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })

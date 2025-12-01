@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate that assets have required fields
-    const invalidAssets = assets.filter((asset, index) => {
+    const invalidAssets = assets.filter((asset) => {
       if (!asset || typeof asset !== 'object') {
         return true
       }
@@ -48,25 +48,51 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Pre-process: collect all unique categories and subcategories
+    // Pre-process: collect all unique categories, subcategories, locations, departments, and sites
     const uniqueCategories = new Set<string>()
     const uniqueSubCategories = new Set<string>()
+    const uniqueLocations = new Set<string>()
+    const uniqueDepartments = new Set<string>()
+    const uniqueSites = new Set<string>()
+    // Map subcategory name to its parent category name
+    const subCategoryToCategoryMap = new Map<string, string>()
     
     assets.forEach(asset => {
-      if (asset.category && asset.category.trim()) {
-        uniqueCategories.add(asset.category.trim())
+      const categoryName = asset.category ? asset.category.trim() : null
+      const subCategoryName = asset.subCategory ? asset.subCategory.trim() : null
+      
+      if (categoryName) {
+        uniqueCategories.add(categoryName)
       }
-      if (asset.subCategory && asset.subCategory.trim()) {
-        uniqueSubCategories.add(asset.subCategory.trim())
+      if (subCategoryName) {
+        uniqueSubCategories.add(subCategoryName)
+        // Link subcategory to its parent category
+        if (categoryName) {
+          // Only set if not already mapped (first occurrence wins)
+          if (!subCategoryToCategoryMap.has(subCategoryName)) {
+            subCategoryToCategoryMap.set(subCategoryName, categoryName)
+          }
+        }
+      }
+      if (asset.location && asset.location.trim()) {
+        uniqueLocations.add(asset.location.trim())
+      }
+      if (asset.department && asset.department.trim()) {
+        uniqueDepartments.add(asset.department.trim())
+      }
+      if (asset.site && asset.site.trim()) {
+        uniqueSites.add(asset.site.trim())
       }
     })
 
     // Batch create categories
     const categoryMap = new Map<string, string>()
     if (uniqueCategories.size > 0) {
-      // Get existing categories
+      const categoryNamesArray = Array.from(uniqueCategories)
+      
+      // Get existing categories (case-sensitive exact match)
       const existingCategories = await prisma.category.findMany({
-        where: { name: { in: Array.from(uniqueCategories) } }
+        where: { name: { in: categoryNamesArray } }
       })
       
       existingCategories.forEach(cat => {
@@ -74,7 +100,7 @@ export async function POST(request: NextRequest) {
       })
 
       // Create missing categories
-      const missingCategories = Array.from(uniqueCategories).filter(
+      const missingCategories = categoryNamesArray.filter(
         name => !categoryMap.has(name)
       )
       
@@ -87,12 +113,13 @@ export async function POST(request: NextRequest) {
           skipDuplicates: true
         })
 
-        // Get the newly created categories
-        const createdCategories = await prisma.category.findMany({
-          where: { name: { in: missingCategories } }
+        // Get the newly created categories (refresh to ensure we have all)
+        const allCategories = await prisma.category.findMany({
+          where: { name: { in: categoryNamesArray } }
         })
         
-        createdCategories.forEach(cat => {
+        // Update map with all categories (existing + newly created)
+        allCategories.forEach(cat => {
           categoryMap.set(cat.name, cat.id)
         })
       }
@@ -101,23 +128,70 @@ export async function POST(request: NextRequest) {
     // Batch create subcategories
     const subCategoryMap = new Map<string, string>()
     if (uniqueSubCategories.size > 0) {
-      // Get existing subcategories
+      // Get existing subcategories with their parent categories
       const existingSubCategories = await prisma.subCategory.findMany({
-        where: { name: { in: Array.from(uniqueSubCategories) } }
+        where: { name: { in: Array.from(uniqueSubCategories) } },
+        include: { category: true }
       })
       
+      // Only use existing subcategories if they're under the correct parent category
       existingSubCategories.forEach(subCat => {
+        const expectedParentCategory = subCategoryToCategoryMap.get(subCat.name)
+        // Only map if the parent category matches (or if no parent was specified in import)
+        if (!expectedParentCategory || subCat.category.name === expectedParentCategory) {
         subCategoryMap.set(subCat.name, subCat.id)
+        }
+        // If parent doesn't match, we'll create a new subcategory (but it will fail due to unique constraint)
+        // So we need to handle this differently - we'll skip it and let the user know
       })
 
-      // Create missing subcategories
+      // Create missing subcategories (those not in map, or those with wrong parent)
       const missingSubCategories = Array.from(uniqueSubCategories).filter(
         name => !subCategoryMap.has(name)
       )
       
       if (missingSubCategories.length > 0) {
+        // Group subcategories by their parent category
+        const subCategoriesByCategory = new Map<string, string[]>()
+        missingSubCategories.forEach(subCatName => {
+          const parentCategoryName = subCategoryToCategoryMap.get(subCatName)
+          
+          if (parentCategoryName) {
+            // Check if the parent category exists in our map (exact match)
+            if (categoryMap.has(parentCategoryName)) {
+              // Parent category exists, group by it
+              const categoryId = categoryMap.get(parentCategoryName)!
+              if (!subCategoriesByCategory.has(categoryId)) {
+                subCategoriesByCategory.set(categoryId, [])
+              }
+              subCategoriesByCategory.get(categoryId)!.push(subCatName)
+            } else {
+              // Parent category name doesn't match any in categoryMap
+              // This can happen if category name doesn't match exactly
+              // Log warning and use default
+              console.warn(
+                `Subcategory "${subCatName}" mapped to category "${parentCategoryName}" but category not found in categoryMap. ` +
+                `Available categories: ${Array.from(categoryMap.keys()).join(', ')}`
+              )
+              const defaultKey = 'default'
+              if (!subCategoriesByCategory.has(defaultKey)) {
+                subCategoriesByCategory.set(defaultKey, [])
+              }
+              subCategoriesByCategory.get(defaultKey)!.push(subCatName)
+            }
+          } else {
+            // No parent category found in import data, use default
+            const defaultKey = 'default'
+            if (!subCategoriesByCategory.has(defaultKey)) {
+              subCategoriesByCategory.set(defaultKey, [])
+            }
+            subCategoriesByCategory.get(defaultKey)!.push(subCatName)
+          }
+        })
+
         // Get default category for subcategories without parent
         let defaultCategoryId = null
+        if (subCategoriesByCategory.has('default')) {
         const defaultCategory = await prisma.category.findFirst()
         if (!defaultCategory) {
           const newDefaultCategory = await prisma.category.create({
@@ -130,23 +204,187 @@ export async function POST(request: NextRequest) {
         } else {
           defaultCategoryId = defaultCategory.id
         }
+        }
 
+        // Create subcategories grouped by their parent category
+        const subCategoriesToCreate: Array<{ name: string; categoryId: string }> = []
+        
+        subCategoriesByCategory.forEach((subCatNames, categoryIdOrDefault) => {
+          const parentCategoryId = categoryIdOrDefault === 'default' 
+            ? defaultCategoryId 
+            : categoryIdOrDefault
+
+          if (parentCategoryId) {
+            subCatNames.forEach(subCatName => {
+              subCategoriesToCreate.push({
+                name: subCatName,
+                categoryId: parentCategoryId
+              })
+            })
+          }
+        })
+
+        if (subCategoriesToCreate.length > 0) {
         await prisma.subCategory.createMany({
-          data: missingSubCategories.map(name => ({
+            data: subCategoriesToCreate.map(item => ({
+              name: item.name,
+              description: 'Auto-created during import',
+              categoryId: item.categoryId
+            })),
+            skipDuplicates: true
+          })
+
+          // Check which subcategories still need to be handled
+          // (those that exist but under wrong parent category, or newly created)
+          const allSubCategoriesAfterCreate = await prisma.subCategory.findMany({
+            where: { name: { in: missingSubCategories } },
+            include: { category: true }
+          })
+          
+          // Update subcategories that exist under wrong parent category
+          for (const subCat of allSubCategoriesAfterCreate) {
+            const expectedParentCategory = subCategoryToCategoryMap.get(subCat.name)
+            if (expectedParentCategory && subCat.category.name !== expectedParentCategory) {
+              // Subcategory exists under wrong parent - update it
+              const correctCategoryId = categoryMap.get(expectedParentCategory)
+              if (correctCategoryId) {
+                await prisma.subCategory.update({
+                  where: { id: subCat.id },
+                  data: { categoryId: correctCategoryId }
+                })
+                // Update the category name in our local reference
+                subCat.category.name = expectedParentCategory
+              }
+            }
+          }
+
+          // Refresh to get updated subcategories
+          const finalSubCategories = await prisma.subCategory.findMany({
+            where: { name: { in: missingSubCategories } },
+            include: { category: true }
+          })
+          
+          // Add to map if the parent category matches what we expect
+          finalSubCategories.forEach(subCat => {
+            const expectedParentCategory = subCategoryToCategoryMap.get(subCat.name)
+            if (expectedParentCategory && subCat.category.name === expectedParentCategory) {
+              subCategoryMap.set(subCat.name, subCat.id)
+            } else if (!expectedParentCategory) {
+              // No expected parent, just add it
+              subCategoryMap.set(subCat.name, subCat.id)
+            }
+          })
+        }
+      }
+    }
+
+    // Batch create locations
+    const locationMap = new Map<string, string>()
+    if (uniqueLocations.size > 0) {
+      // Get existing locations
+      const existingLocations = await prisma.assetsLocation.findMany({
+        where: { name: { in: Array.from(uniqueLocations) } }
+      })
+      
+      existingLocations.forEach(loc => {
+        locationMap.set(loc.name, loc.id)
+      })
+
+      // Create missing locations
+      const missingLocations = Array.from(uniqueLocations).filter(
+        name => !locationMap.has(name)
+      )
+      
+      if (missingLocations.length > 0) {
+        await prisma.assetsLocation.createMany({
+          data: missingLocations.map(name => ({
             name,
-            description: 'Auto-created during import',
-            categoryId: defaultCategoryId
+            description: 'Auto-created during import'
           })),
           skipDuplicates: true
         })
 
-        // Get the newly created subcategories
-        const createdSubCategories = await prisma.subCategory.findMany({
-          where: { name: { in: missingSubCategories } }
+        // Get the newly created locations
+        const createdLocations = await prisma.assetsLocation.findMany({
+          where: { name: { in: missingLocations } }
         })
         
-        createdSubCategories.forEach(subCat => {
-          subCategoryMap.set(subCat.name, subCat.id)
+        createdLocations.forEach(loc => {
+          locationMap.set(loc.name, loc.id)
+        })
+      }
+    }
+
+    // Batch create departments
+    const departmentMap = new Map<string, string>()
+    if (uniqueDepartments.size > 0) {
+      // Get existing departments
+      const existingDepartments = await prisma.assetsDepartment.findMany({
+        where: { name: { in: Array.from(uniqueDepartments) } }
+      })
+      
+      existingDepartments.forEach(dept => {
+        departmentMap.set(dept.name, dept.id)
+      })
+
+      // Create missing departments
+      const missingDepartments = Array.from(uniqueDepartments).filter(
+        name => !departmentMap.has(name)
+      )
+      
+      if (missingDepartments.length > 0) {
+        await prisma.assetsDepartment.createMany({
+          data: missingDepartments.map(name => ({
+            name,
+            description: 'Auto-created during import'
+          })),
+          skipDuplicates: true
+        })
+
+        // Get the newly created departments
+        const createdDepartments = await prisma.assetsDepartment.findMany({
+          where: { name: { in: missingDepartments } }
+        })
+        
+        createdDepartments.forEach(dept => {
+          departmentMap.set(dept.name, dept.id)
+        })
+      }
+    }
+
+    // Batch create sites
+    const siteMap = new Map<string, string>()
+    if (uniqueSites.size > 0) {
+      // Get existing sites
+      const existingSites = await prisma.assetsSite.findMany({
+        where: { name: { in: Array.from(uniqueSites) } }
+      })
+      
+      existingSites.forEach(site => {
+        siteMap.set(site.name, site.id)
+      })
+
+      // Create missing sites
+      const missingSites = Array.from(uniqueSites).filter(
+        name => !siteMap.has(name)
+      )
+      
+      if (missingSites.length > 0) {
+        await prisma.assetsSite.createMany({
+          data: missingSites.map(name => ({
+            name,
+            description: 'Auto-created during import'
+          })),
+          skipDuplicates: true
+        })
+
+        // Get the newly created sites
+        const createdSites = await prisma.assetsSite.findMany({
+          where: { name: { in: missingSites } }
+        })
+        
+        createdSites.forEach(site => {
+          siteMap.set(site.name, site.id)
         })
       }
     }

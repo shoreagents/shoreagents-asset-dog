@@ -12,6 +12,8 @@ import {
   FileText,
   ClipboardList,
   Cog,
+  Clock,
+  MapPin,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import Image from "next/image"
@@ -175,6 +177,18 @@ const data = {
         {
           title: "Asset Reports",
           url: "/reports/assets",
+        },
+        {
+          title: "Checkout Reports",
+          url: "/reports/checkout",
+        },
+        {
+          title: "Location Reports",
+          url: "/reports/location",
+        },
+        {
+          title: "Maintenance Reports",
+          url: "/reports/maintenance",
         },
       ],
     },

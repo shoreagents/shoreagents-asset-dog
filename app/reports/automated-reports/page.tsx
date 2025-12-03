@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { usePermissions } from '@/hooks/use-permissions'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { automatedReportScheduleSchema, type AutomatedReportScheduleFormData } from '@/lib/validations/automated-reports'
 import {
@@ -154,7 +154,7 @@ function AutomatedReportsPageContent() {
       frequency: '' as AutomatedReportScheduleFormData['frequency'],
       frequencyDay: null,
       frequencyMonth: null,
-      scheduledTime: '09:00',
+      scheduledTime: '02:00',
       format: 'pdf' as AutomatedReportScheduleFormData['format'],
       includeList: true,
     },
@@ -314,7 +314,13 @@ function AutomatedReportsPageContent() {
     setEmailRecipients([])
   }, [reset])
 
-  const onSubmit = useCallback((data: AutomatedReportScheduleFormData) => {
+  const onSubmit: SubmitHandler<AutomatedReportScheduleFormData> = useCallback((data) => {
+    // Ensure scheduledTime is set (defaults to '02:00')
+    const formData = {
+      ...data,
+      scheduledTime: data.scheduledTime || '02:00',
+    }
+
     // Validate email recipients
     if (emailRecipients.length === 0) {
       toast.error('Please add at least one email recipient')
@@ -330,9 +336,9 @@ function AutomatedReportsPageContent() {
     }
 
     if (editingSchedule) {
-      updateMutation.mutate({ id: editingSchedule.id, data })
+      updateMutation.mutate({ id: editingSchedule.id, data: formData })
     } else {
-      createMutation.mutate(data)
+      createMutation.mutate(formData)
     }
   }, [emailRecipients, editingSchedule, createMutation, updateMutation])
 
@@ -630,18 +636,6 @@ function AutomatedReportsPageContent() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="scheduledTime">Time *</Label>
-                  <Input
-                    id="scheduledTime"
-                    type="time"
-                    {...register('scheduledTime')}
-                    className={errors.scheduledTime ? 'border-destructive' : ''}
-                  />
-                  {errors.scheduledTime && (
-                    <p className="text-sm text-destructive">{errors.scheduledTime.message}</p>
-                  )}
-                </div>
               </div>
 
               {frequency === 'weekly' && (

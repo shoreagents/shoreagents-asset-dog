@@ -5,9 +5,9 @@ export function calculateNextRunAt(params: {
   frequency: string
   frequencyDay?: number | null
   frequencyMonth?: number | null
-  scheduledTime: string
+  scheduledTime?: string
 }): Date {
-  const { frequency, frequencyDay, frequencyMonth, scheduledTime } = params
+  const { frequency, frequencyDay, frequencyMonth, scheduledTime = '02:00' } = params
   
   const now = new Date()
   const [hours, minutes] = scheduledTime.split(':').map(Number)

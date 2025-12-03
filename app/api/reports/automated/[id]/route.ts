@@ -106,7 +106,7 @@ export async function PUT(
           frequency: frequency || currentSchedule.frequency,
           frequencyDay: frequencyDay !== undefined ? frequencyDay : currentSchedule.frequencyDay,
           frequencyMonth: frequencyMonth !== undefined ? frequencyMonth : currentSchedule.frequencyMonth,
-          scheduledTime: scheduledTime || currentSchedule.scheduledTime,
+          scheduledTime: scheduledTime || currentSchedule.scheduledTime || '02:00',
         })
       }
     }

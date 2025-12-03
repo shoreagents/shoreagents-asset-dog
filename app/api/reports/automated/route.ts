@@ -54,8 +54,9 @@ export async function POST(request: NextRequest) {
       includeList,
     } = body
 
-    // Validate required fields
-    if (!reportName || !reportType || !frequency || !scheduledTime || !emailRecipients || !Array.isArray(emailRecipients) || emailRecipients.length === 0) {
+    // Validate required fields (scheduledTime defaults to "02:00" if not provided)
+    const finalScheduledTime = scheduledTime || '02:00'
+    if (!reportName || !reportType || !frequency || !emailRecipients || !Array.isArray(emailRecipients) || emailRecipients.length === 0) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -73,12 +74,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calculate next run time
+    // Calculate next run time (defaults to 2 AM)
     const nextRunAt = calculateNextRunAt({
       frequency,
       frequencyDay,
       frequencyMonth,
-      scheduledTime,
+      scheduledTime: finalScheduledTime,
     })
 
     const userName = auth.user.user_metadata?.name || 
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
         frequency,
         frequencyDay: frequencyDay || null,
         frequencyMonth: frequencyMonth || null,
-        scheduledTime,
+        scheduledTime: finalScheduledTime,
         emailRecipients,
         filters: filters || {},
         format: format || 'pdf',

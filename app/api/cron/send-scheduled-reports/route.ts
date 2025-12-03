@@ -3,6 +3,22 @@ import { prisma } from '@/lib/prisma'
 import { calculateNextRunAt } from '@/lib/report-schedule-utils'
 import { sendAutomatedReportEmail } from '@/lib/report-email'
 
+/**
+ * Cron job endpoint for sending scheduled automated reports
+ * 
+ * NOTE: Vercel Hobby plan only supports one cron job per day.
+ * For more frequent execution (hourly, every 6 hours, etc.), use an external cron service:
+ * - cron-job.org
+ * - EasyCron
+ * - GitHub Actions
+ * - Or upgrade to Vercel Pro plan
+ * 
+ * To use external cron service:
+ * 1. Set CRON_SECRET environment variable
+ * 2. Configure external service to call: GET https://your-domain.vercel.app/api/cron/send-scheduled-reports
+ * 3. Add header: Authorization: Bearer {CRON_SECRET}
+ * 4. Set frequency as needed (hourly, every 6 hours, etc.)
+ */
 export async function GET(request: NextRequest) {
   // Verify cron secret (for security)
   const authHeader = request.headers.get('authorization')

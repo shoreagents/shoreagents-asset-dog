@@ -38,6 +38,7 @@ export const automatedReportScheduleSchema = z.object({
     .optional(),
   scheduledTime: z
     .string()
+    .min(1, 'Scheduled time is required')
     .regex(/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format. Use HH:mm format (24-hour)'),
   format: z.enum(['pdf', 'csv', 'excel']),
   includeList: z.boolean(),

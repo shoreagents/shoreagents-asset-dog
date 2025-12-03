@@ -60,6 +60,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get user info for history logging
+    const userName = auth.user.user_metadata?.name || 
+                     auth.user.user_metadata?.full_name || 
+                     auth.user.email?.split('@')[0] || 
+                     auth.user.email || 
+                     auth.user.id
+
     // Create move record and update asset in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Get current asset to capture previous values
@@ -88,11 +95,34 @@ export async function POST(request: NextRequest) {
 
       // Prepare asset update data based on move type
       const assetUpdateData: Record<string, unknown> = {}
+      const historyLogs: Array<{
+        field: string
+        changeFrom: string
+        changeTo: string
+      }> = []
 
       if (moveType === 'Location Transfer') {
-        assetUpdateData.location = location || null
+        const oldLocation = asset.location || ''
+        const newLocation = location || null
+        if (oldLocation !== newLocation) {
+          assetUpdateData.location = newLocation
+          historyLogs.push({
+            field: 'location',
+            changeFrom: oldLocation,
+            changeTo: newLocation || '',
+          })
+        }
       } else if (moveType === 'Department Transfer') {
-        assetUpdateData.department = department || null
+        const oldDepartment = asset.department || ''
+        const newDepartment = department || null
+        if (oldDepartment !== newDepartment) {
+          assetUpdateData.department = newDepartment
+          historyLogs.push({
+            field: 'department',
+            changeFrom: oldDepartment,
+            changeTo: newDepartment || '',
+          })
+        }
       }
 
       // For Employee Assignment, update the active checkout record
@@ -130,6 +160,11 @@ export async function POST(request: NextRequest) {
           })
           // Update asset status to "Checked out"
           assetUpdateData.status = "Checked out"
+          historyLogs.push({
+            field: 'status',
+            changeFrom: asset.status || '',
+            changeTo: 'Checked out',
+          })
         }
       }
 
@@ -139,6 +174,25 @@ export async function POST(request: NextRequest) {
           where: { id: assetId },
           data: assetUpdateData,
         })
+
+        // Create history logs for each changed field
+        if (historyLogs.length > 0) {
+          await Promise.all(
+            historyLogs.map((log) =>
+              tx.assetsHistoryLogs.create({
+                data: {
+                  assetId,
+                  eventType: 'edited',
+                  field: log.field,
+                  changeFrom: log.changeFrom,
+                  changeTo: log.changeTo,
+                  actionBy: userName,
+                  eventDate: parseDate(moveDate)!,
+                },
+              })
+            )
+          )
+        }
       }
 
       // Create move record (history tracking)

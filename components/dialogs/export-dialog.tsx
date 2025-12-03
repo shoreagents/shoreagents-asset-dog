@@ -75,8 +75,9 @@ export function ExportDialog({
 
   const formatValue = formatFilterValue || defaultFormatFilterValue
 
-  // Get active filters
-  const activeFilters = Object.entries(filters).filter(([, value]) => {
+  // Get active filters - ensure filters is always an object
+  const safeFilters = filters || {}
+  const activeFilters = Object.entries(safeFilters).filter(([, value]) => {
     if (value === null || value === undefined || value === '') return false
     if (typeof value === 'boolean') return value === true
     return true

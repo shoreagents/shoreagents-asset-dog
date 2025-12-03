@@ -60,7 +60,7 @@ Generates analytical and operational reports for decision-making.
 
 \- Status Reports – Summarizes asset statuses (available, disposed, checked out, under repair, etc.). ***************
 
-\- Transaction Reports – Full record of asset transactions (additions, disposals, movements, check-in/out).
+\- Transaction Reports – Full record of asset transactions (additions, disposals, movements, check-in/out).************
 
 \- Other Reports – Miscellaneous or combined reports for custom needs.
 

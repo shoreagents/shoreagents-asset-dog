@@ -204,6 +204,14 @@ const data = {
           title: "Reservation Reports",
           url: "/reports/reservation",
         },
+        {
+          title: "Transaction Reports",
+          url: "/reports/transaction",
+        },
+        {
+          title: "Automated Reports",
+          url: "/reports/automated-reports",
+        },
       ],
     },
     {

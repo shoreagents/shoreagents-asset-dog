@@ -28,6 +28,10 @@
     {
       "path": "/api/cron/cleanup-deleted-assets",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/send-scheduled-reports",
+      "schedule": "0 * * * *"
     }
   ],
   "headers": [

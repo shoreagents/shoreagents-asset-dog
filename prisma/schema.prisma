@@ -616,4 +616,29 @@ model AssetSchedule {
   @@map("asset_schedules")
 }
 
+model AutomatedReportSchedule {
+  id                String   @id @default(uuid())
+  reportName        String   @map("report_name") @db.VarChar(255)
+  reportType        String   @map("report_type") @db.VarChar(50) // assets, checkout, location, maintenance, audit, depreciation, lease, reservation, transaction
+  frequency         String   @map("frequency") @db.VarChar(50) // daily, weekly, monthly, yearly
+  frequencyDay      Int?     @map("frequency_day") // Day of week (0-6) for weekly, day of month (1-31) for monthly, day of year (1-365) for yearly
+  frequencyMonth    Int?     @map("frequency_month") // Month (1-12) for yearly schedules
+  scheduledTime     String   @map("scheduled_time") @db.VarChar(10) // HH:mm format (24-hour)
+  emailRecipients   String[] @map("email_recipients") // Array of email addresses
+  filters           Json?    @map("filters") // JSON object storing report-specific filters
+  format            String   @default("pdf") @map("format") @db.VarChar(10) // pdf, csv, excel
+  includeList       Boolean  @default(true) @map("include_list") // Whether to include detailed list in PDF
+  isActive          Boolean  @default(true) @map("is_active")
+  lastSentAt        DateTime? @map("last_sent_at")
+  nextRunAt         DateTime? @map("next_run_at")
+  createdBy         String?  @map("created_by") @db.VarChar(255) // User ID who created the schedule
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  
+  @@index([isActive])
+  @@index([nextRunAt])
+  @@index([reportType])
+  @@map("automated_report_schedules")
+}
+
 

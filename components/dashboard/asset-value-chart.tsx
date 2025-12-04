@@ -142,9 +142,9 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
           <div className="flex items-center justify-between w-full">
             <div>
               <CardTitle>Asset Value by {groupByLabel}</CardTitle>
-              <CardDescription>
+          <CardDescription>
                 Total asset value grouped by {groupByLabel.toLowerCase()}
-              </CardDescription>
+          </CardDescription>
             </div>
             <Select value={groupBy} onValueChange={(value) => setGroupBy(value as GroupByOption)}>
               <SelectTrigger className="w-[140px]">
@@ -172,7 +172,7 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
                     <ChartTooltip
                       cursor={false}
                       content={<ChartTooltipContent hideLabel />}
-                      formatter={(value: number) => `₱${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    formatter={(value: number) => `₱${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     />
                     <PolarGrid gridType="circle" />
                     <PolarAngleAxis dataKey="category" />
@@ -184,7 +184,7 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
                         r: 4,
                         fillOpacity: 1,
                       }}
-                    />
+                  />
                   </RadarChart>
                 </ChartContainer>
               </div>

@@ -84,7 +84,7 @@ export async function GET(request: Request) {
           where: {
             isDeleted: false,
             cost: { not: null },
-            location: { not: null, not: '' },
+            location: { not: null },
           },
           _sum: {
             cost: true,
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
         })
 
         result = assetsByLocationRaw
-          .filter((row) => row.location) // Filter out null/empty locations
+          .filter((row) => row.location && row.location.trim() !== '') // Filter out null/empty locations
           .map((row) => ({
             name: row.location || 'Unknown',
             value: row._sum.cost ? Number(row._sum.cost) : 0,
@@ -111,7 +111,7 @@ export async function GET(request: Request) {
           where: {
             isDeleted: false,
             cost: { not: null },
-            department: { not: null, not: '' },
+            department: { not: null },
           },
           _sum: {
             cost: true,
@@ -124,7 +124,7 @@ export async function GET(request: Request) {
         })
 
         result = assetsByDepartmentRaw
-          .filter((row) => row.department) // Filter out null/empty departments
+          .filter((row) => row.department && row.department.trim() !== '') // Filter out null/empty departments
           .map((row) => ({
             name: row.department || 'Unknown',
             value: row._sum.cost ? Number(row._sum.cost) : 0,
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
           where: {
             isDeleted: false,
             cost: { not: null },
-            site: { not: null, not: '' },
+            site: { not: null },
           },
           _sum: {
             cost: true,
@@ -151,7 +151,7 @@ export async function GET(request: Request) {
         })
 
         result = assetsBySiteRaw
-          .filter((row) => row.site) // Filter out null/empty sites
+          .filter((row) => row.site && row.site.trim() !== '') // Filter out null/empty sites
           .map((row) => ({
             name: row.site || 'Unknown',
             value: row._sum.cost ? Number(row._sum.cost) : 0,

@@ -494,53 +494,75 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    const asset = await retryDbOperation(() => prisma.assets.create({
-      data: {
-        assetTagId: body.assetTagId,
-        description: body.description,
-        purchasedFrom: body.purchasedFrom,
-        purchaseDate: parseDate(body.purchaseDate),
-        brand: body.brand,
-        cost: body.cost ? parseFloat(body.cost) : null,
-        model: body.model,
-        serialNo: body.serialNo,
-        additionalInformation: body.additionalInformation,
-        xeroAssetNo: body.xeroAssetNo,
-        owner: body.owner,
-        pbiNumber: body.pbiNumber,
-        status: body.status || "Available",
-        issuedTo: body.issuedTo,
-        poNumber: body.poNumber,
-        paymentVoucherNumber: body.paymentVoucherNumber,
-        assetType: body.assetType,
-        deliveryDate: parseDate(body.deliveryDate),
-        unaccountedInventory: body.unaccountedInventory || false,
-        remarks: body.remarks,
-        qr: body.qr,
-        oldAssetTag: body.oldAssetTag,
-        depreciableAsset: body.depreciableAsset || false,
-        depreciableCost: body.depreciableCost ? parseFloat(body.depreciableCost) : null,
-        salvageValue: body.salvageValue ? parseFloat(body.salvageValue) : null,
-        assetLifeMonths: body.assetLifeMonths ? parseInt(body.assetLifeMonths) : null,
-        depreciationMethod: body.depreciationMethod,
-        dateAcquired: parseDate(body.dateAcquired),
-        categoryId: body.categoryId || null,
-        subCategoryId: body.subCategoryId || null,
-        department: body.department,
-        site: body.site,
-        location: body.location,
-      },
-      include: {
-        category: true,
-        subCategory: true,
-        checkouts: {
-          include: {
-            employeeUser: true,
-          },
-          orderBy: { checkoutDate: 'desc' },
-          take: 1,
+    // Get user info for history logging - use name from metadata, fallback to email
+    const userName = auth.user.user_metadata?.name || 
+                     auth.user.user_metadata?.full_name || 
+                     auth.user.email?.split('@')[0] || 
+                     auth.user.email || 
+                     auth.user.id
+    
+    // Create asset and history log in a transaction
+    const asset = await retryDbOperation(() => prisma.$transaction(async (tx) => {
+      // Create the asset
+      const newAsset = await tx.assets.create({
+        data: {
+          assetTagId: body.assetTagId,
+          description: body.description,
+          purchasedFrom: body.purchasedFrom,
+          purchaseDate: parseDate(body.purchaseDate),
+          brand: body.brand,
+          cost: body.cost ? parseFloat(body.cost) : null,
+          model: body.model,
+          serialNo: body.serialNo,
+          additionalInformation: body.additionalInformation,
+          xeroAssetNo: body.xeroAssetNo,
+          owner: body.owner,
+          pbiNumber: body.pbiNumber,
+          status: body.status || "Available",
+          issuedTo: body.issuedTo,
+          poNumber: body.poNumber,
+          paymentVoucherNumber: body.paymentVoucherNumber,
+          assetType: body.assetType,
+          deliveryDate: parseDate(body.deliveryDate),
+          unaccountedInventory: body.unaccountedInventory || false,
+          remarks: body.remarks,
+          qr: body.qr,
+          oldAssetTag: body.oldAssetTag,
+          depreciableAsset: body.depreciableAsset || false,
+          depreciableCost: body.depreciableCost ? parseFloat(body.depreciableCost) : null,
+          salvageValue: body.salvageValue ? parseFloat(body.salvageValue) : null,
+          assetLifeMonths: body.assetLifeMonths ? parseInt(body.assetLifeMonths) : null,
+          depreciationMethod: body.depreciationMethod,
+          dateAcquired: parseDate(body.dateAcquired),
+          categoryId: body.categoryId || null,
+          subCategoryId: body.subCategoryId || null,
+          department: body.department,
+          site: body.site,
+          location: body.location,
         },
-      },
+        include: {
+          category: true,
+          subCategory: true,
+          checkouts: {
+            include: {
+              employeeUser: true,
+            },
+            orderBy: { checkoutDate: 'desc' },
+            take: 1,
+          },
+        },
+      })
+
+      // Create history log for asset creation
+      await tx.assetsHistoryLogs.create({
+        data: {
+          assetId: newAsset.id,
+          eventType: 'added',
+          actionBy: userName,
+        },
+      })
+
+      return newAsset
     }))
 
     // Invalidate dashboard cache when new asset is created

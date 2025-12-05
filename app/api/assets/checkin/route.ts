@@ -32,6 +32,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get user info for history logging - use name from metadata, fallback to email
+    const userName = auth.user.user_metadata?.name || 
+                     auth.user.user_metadata?.full_name || 
+                     auth.user.email?.split('@')[0] || 
+                     auth.user.email || 
+                     auth.user.id
+
     // Create checkin records and update assets in a transaction
     const result = await prisma.$transaction(async (tx) => {
       const checkinRecords = await Promise.all(
@@ -75,20 +82,67 @@ export async function POST(request: NextRequest) {
             throw new Error(`Checkout record for asset ${asset.assetTagId} does not have an employee assigned`)
           }
 
+          // Prepare history logs
+          const historyLogs: Array<{
+            field: string
+            changeFrom: string
+            changeTo: string
+          }> = []
+
+          // Log status change from "Checked out" to "Available"
+          // We know status is "Checked out" from the validation above
+          historyLogs.push({
+            field: 'status',
+            changeFrom: asset.status,
+            changeTo: 'Available',
+          })
+
           // Update asset status to Available and location if provided
           const assetUpdateData: Record<string, unknown> = {
             status: "Available",
           }
 
           // Update location if return location is provided
+          const newLocation = assetUpdate.returnLocation !== undefined 
+            ? (assetUpdate.returnLocation || null)
+            : asset.location
+
           if (assetUpdate.returnLocation !== undefined) {
-            assetUpdateData.location = assetUpdate.returnLocation || null
+            assetUpdateData.location = newLocation
+
+            // Log location change if different from current location
+            if (String(asset.location || '') !== String(newLocation || '')) {
+              historyLogs.push({
+                field: 'location',
+                changeFrom: asset.location || '',
+                changeTo: newLocation || '',
+              })
+            }
           }
 
           await tx.assets.update({
             where: { id: assetId },
             data: assetUpdateData,
           })
+
+          // Create history logs for each changed field
+          if (historyLogs.length > 0) {
+            await Promise.all(
+              historyLogs.map((log) =>
+                tx.assetsHistoryLogs.create({
+                  data: {
+                    assetId,
+                    eventType: 'edited',
+                    field: log.field,
+                    changeFrom: log.changeFrom,
+                    changeTo: log.changeTo,
+                    actionBy: userName,
+                    eventDate: parseDate(checkinDate)!,
+                  },
+                })
+              )
+            )
+          }
 
           // Create checkin record (history tracking)
           const checkin = await tx.assetsCheckin.create({

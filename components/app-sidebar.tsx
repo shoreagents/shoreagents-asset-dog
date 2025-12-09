@@ -115,10 +115,6 @@ const data = {
           title: "Maintenances",
           url: "/lists/maintenances",
         },
-        {
-          title: "Warranties",
-          url: "/lists/warranties",
-        },
       ],
     },
     {

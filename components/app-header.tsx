@@ -70,7 +70,6 @@ const routeLabels: Record<string, string> = {
   '/lists': 'Lists',
   '/lists/assets': 'Assets List',
   '/lists/maintenances': 'Maintenances List',
-  '/lists/warranties': 'Warranties List',
   '/tools': 'Tools',
   '/tools/media': 'Media',
   '/tools/audit': 'Audit',

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { usePermissions } from '@/hooks/use-permissions'
-import { useForm, Controller, type SubmitHandler } from 'react-hook-form'
+import { useForm, Controller, useWatch, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { automatedReportScheduleSchema, type AutomatedReportScheduleFormData } from '@/lib/validations/automated-reports'
 import {
@@ -171,10 +171,13 @@ function AutomatedReportsPageContent() {
     shouldUnregister: false, // Keep form state when dialog closes
   })
 
-  const { register, handleSubmit, control, reset, watch, setValue, clearErrors, formState: { errors } } = form
-  const frequency = watch('frequency')
-  const reportType = watch('reportType')
-  const emailRecipientsValue = watch('emailRecipients')
+  const { register, handleSubmit, control, reset, setValue, clearErrors, formState: { errors } } = form
+  
+  // Use useWatch for reactive form field watching
+  const frequency = useWatch({ control, name: 'frequency' })
+  const reportType = useWatch({ control, name: 'reportType' })
+  const emailRecipientsValue = useWatch({ control, name: 'emailRecipients' })
+  const includeList = useWatch({ control, name: 'includeList' })
   const formEmailRecipients = useMemo(() => emailRecipientsValue || [], [emailRecipientsValue])
 
   const createMutation = useMutation({
@@ -888,7 +891,7 @@ function AutomatedReportsPageContent() {
                     <Checkbox
                       id="includeList"
                       {...register('includeList')}
-                      checked={watch('includeList')}
+                      checked={includeList}
                       onCheckedChange={(checked) => setValue('includeList', checked as boolean)}
                     />
                     <Label htmlFor="includeList" className="cursor-pointer">

@@ -610,19 +610,6 @@ function AssetEventsPageContent() {
     setIsDeleteDialogOpen(true)
   }, [isAdmin])
 
-  const handleBulkDelete = useCallback(() => {
-    if (!isAdmin) {
-      toast.error('You do not have permission to delete events')
-      return
-    }
-    const selectedIds = Object.keys(rowSelection)
-    if (selectedIds.length === 0) {
-      toast.error('Please select at least one event to delete')
-      return
-    }
-    setIsBulkDeleteDialogOpen(true)
-  }, [isAdmin, rowSelection])
-
   const columns = useMemo(() => createColumns(handleDelete, isAdmin || false), [handleDelete, isAdmin])
 
   const logs = useMemo(() => data?.logs || [], [data?.logs])
@@ -655,6 +642,20 @@ function AssetEventsPageContent() {
 
   const selectedRows = table.getFilteredSelectedRowModel().rows
   const selectedCount = selectedRows.length
+
+  const handleBulkDelete = useCallback(() => {
+    if (!isAdmin) {
+      toast.error('You do not have permission to delete events')
+      return
+    }
+    const selectedRows = table.getFilteredSelectedRowModel().rows
+    const selectedIds = selectedRows.map(row => row.original.id)
+    if (selectedIds.length === 0) {
+      toast.error('Please select at least one event to delete')
+      return
+    }
+    setIsBulkDeleteDialogOpen(true)
+  }, [isAdmin, table])
 
   return (
     <motion.div 
@@ -988,7 +989,8 @@ function AssetEventsPageContent() {
         open={isBulkDeleteDialogOpen}
         onOpenChange={setIsBulkDeleteDialogOpen}
         onConfirm={() => {
-          const selectedIds = Object.keys(rowSelection)
+          const selectedRows = table.getFilteredSelectedRowModel().rows
+          const selectedIds = selectedRows.map(row => row.original.id)
           if (selectedIds.length > 0) {
             bulkDeleteMutation.mutate(selectedIds)
           }

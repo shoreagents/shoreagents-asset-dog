@@ -221,6 +221,23 @@ const formatCurrency = (value: number | string | null | undefined) => {
   }
 }
 
+const formatDateTime = (date: string | Date | null | undefined) => {
+  if (!date) return 'N/A'
+  try {
+    const d = typeof date === 'string' ? new Date(date) : date
+    return d.toLocaleString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
+  } catch {
+    return 'N/A'
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -236,7 +253,19 @@ export async function POST(
 
   try {
     const { id } = await params
-    // No need to parse request body - we fetch all data server-side
+    // Parse request body for PDF sections selection
+    const body = await request.json().catch(() => ({}))
+    const sections = body.sections || {
+      basicDetails: true,
+      checkout: true,
+      creation: true,
+      auditHistory: true,
+      maintenance: true,
+      reservations: true,
+      historyLogs: true,
+      photos: true,
+      documents: true,
+    }
 
     // Fetch all asset data
     const asset = await prisma.assets.findFirst({
@@ -353,6 +382,7 @@ export async function POST(
           <h1>Asset Details: ${asset.assetTagId}</h1>
           <p><strong>Description:</strong> ${asset.description || 'N/A'}</p>
 
+          ${sections.basicDetails ? `
           <!-- Basic Details Table -->
           <h2>Basic Details</h2>
           <table>
@@ -385,8 +415,9 @@ export async function POST(
             <tr><td class="field-label">Unaccounted Inventory</td><td>${asset.unaccountedInventory || 'N/A'}</td></tr>
             <tr><td class="field-label">Description</td><td>${asset.description || 'N/A'}</td></tr>
           </table>
+          ` : ''}
 
-          ${activeCheckout ? `
+          ${sections.checkout && activeCheckout ? `
           <!-- Check out Section -->
           <h2>Check out</h2>
           <table>
@@ -400,16 +431,18 @@ export async function POST(
           </table>
           ` : ''}
 
+          ${sections.creation ? `
           <!-- Creation Section -->
           <h2>Creation</h2>
           <table>
             <tr><td class="field-label">Created By</td><td>${createdBy}</td></tr>
-            <tr><td class="field-label">Created At</td><td>${formatDate(asset.createdAt)}</td></tr>
-            <tr><td class="field-label">Updated At</td><td>${formatDate(asset.updatedAt)}</td></tr>
+            <tr><td class="field-label">Created At</td><td>${formatDateTime(asset.createdAt)}</td></tr>
+            <tr><td class="field-label">Updated At</td><td>${formatDateTime(asset.updatedAt)}</td></tr>
           </table>
+          ` : ''}
 
+          ${sections.auditHistory && asset.auditHistory && asset.auditHistory.length > 0 ? `
           <!-- Audit History Table -->
-          ${asset.auditHistory && asset.auditHistory.length > 0 ? `
           <h2>Audit History</h2>
           <table>
             <tr>
@@ -429,10 +462,10 @@ export async function POST(
               </tr>
             `).join('')}
           </table>
-          ` : '<p><em>No audit records found.</em></p>'}
+          ` : ''}
 
+          ${sections.maintenance && maintenances.length > 0 ? `
           <!-- Maintenance Table -->
-          ${maintenances.length > 0 ? `
           <h2>Maintenance Records</h2>
           <table>
             <tr>
@@ -456,10 +489,10 @@ export async function POST(
               </tr>
             `).join('')}
           </table>
-          ` : '<p><em>No maintenance records found.</em></p>'}
+          ` : ''}
 
+          ${sections.reservations && reservations.length > 0 ? `
           <!-- Reserve Table -->
-          ${reservations.length > 0 ? `
           <h2>Reservations</h2>
           <table>
             <tr>
@@ -481,10 +514,10 @@ export async function POST(
               </tr>
             `).join('')}
           </table>
-          ` : '<p><em>No reservations found.</em></p>'}
+          ` : ''}
 
+          ${sections.historyLogs && historyLogs.length > 0 ? `
           <!-- History Logs Table -->
-          ${historyLogs.length > 0 ? `
           <h2>History Logs</h2>
           <table>
             <tr>
@@ -506,10 +539,10 @@ export async function POST(
               </tr>
             `).join('')}
           </table>
-          ` : '<p><em>No history logs found.</em></p>'}
+          ` : ''}
 
+          ${sections.photos && images.length > 0 ? `
           <!-- Photos Table -->
-          ${images.length > 0 ? `
           <h2>Photos</h2>
           <table>
             <tr>
@@ -527,10 +560,10 @@ export async function POST(
               </tr>
             `).join('')}
           </table>
-          ` : '<p><em>No photos found.</em></p>'}
+          ` : ''}
 
+          ${sections.documents && documents.length > 0 ? `
           <!-- Documents Table -->
-          ${documents.length > 0 ? `
           <h2>Documents</h2>
           <table>
             <tr>

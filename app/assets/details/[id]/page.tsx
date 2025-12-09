@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/table'
 import { ImagePreviewDialog } from '@/components/dialogs/image-preview-dialog'
 import { DownloadConfirmationDialog } from '@/components/dialogs/download-confirmation-dialog'
+import { PdfSectionsDialog, type PdfSections } from '@/components/dialogs/pdf-sections-dialog'
 import { toast } from 'sonner'
 import Image from 'next/image'
 // Format utilities
@@ -416,6 +417,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
   const [activeTab, setActiveTab] = useState<'details' | 'photos' | 'docs' | 'depreciation' | 'maintenance' | 'reserve' | 'audit' | 'history'>('details')
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
+  const [isPdfSectionsDialogOpen, setIsPdfSectionsDialogOpen] = useState(false)
 
   const canEditAssets = hasPermission('canEditAssets')
   const canAudit = hasPermission('canAudit')
@@ -582,8 +584,13 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
   // Issued To: Original issued to field from the asset (static field)
   const issuedToUser = asset.issuedTo || 'N/A'
 
-  // Handle PDF download
-  const handleDownloadPDF = async () => {
+  // Handle PDF download - opens dialog first
+  const handleDownloadPDF = () => {
+    setIsPdfSectionsDialogOpen(true)
+  }
+
+  // Actually download PDF with selected sections
+  const downloadPDFWithSections = async (sections: PdfSections) => {
     setIsGeneratingPDF(true)
     
     // Use XMLHttpRequest to track download progress
@@ -609,6 +616,9 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
         xhr.open('POST', `/api/assets/${asset.id}/pdf`, true)
         xhr.setRequestHeader('Content-Type', 'application/json')
         xhr.responseType = 'blob'
+        
+        // Send sections in request body
+        xhr.send(JSON.stringify({ sections }))
 
         // Track real download progress (70-100%)
         xhr.addEventListener('progress', (event) => {
@@ -714,8 +724,6 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
           setIsGeneratingPDF(false)
           reject(new Error('Cancelled'))
         })
-
-        xhr.send()
       } catch (error) {
         if (progressInterval) {
           clearInterval(progressInterval)
@@ -1268,11 +1276,11 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                 </div>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">Checkout Date</p>
-                  <p className="text-sm">{formatDateTime(activeCheckout.checkoutDate || null)}</p>
+                  <p className="text-sm">{formatDate(activeCheckout.checkoutDate || null)}</p>
                 </div>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">Expected Return Date</p>
-                  <p className="text-sm">{activeCheckout.expectedReturnDate ? formatDateTime(activeCheckout.expectedReturnDate) : 'N/A'}</p>
+                  <p className="text-sm">{activeCheckout.expectedReturnDate ? formatDate(activeCheckout.expectedReturnDate) : 'N/A'}</p>
                 </div>
                 {activeCheckout.employeeUser && (
                   <>
@@ -1737,6 +1745,13 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
         )}
         </AnimatePresence>
       </div>
+      
+      {/* PDF Sections Selection Dialog */}
+      <PdfSectionsDialog
+        open={isPdfSectionsDialogOpen}
+        onOpenChange={setIsPdfSectionsDialogOpen}
+        onConfirm={downloadPDFWithSections}
+      />
     </motion.div>
   )
 }

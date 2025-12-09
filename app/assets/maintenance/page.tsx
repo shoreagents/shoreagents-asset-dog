@@ -610,7 +610,7 @@ function MaintenancePageContent() {
     })
     // Only reset the flag if URL params are already cleared (allows new URL params to be processed)
     if (!searchParams.get('assetId')) {
-      hasProcessedUrlParams.current = false
+    hasProcessedUrlParams.current = false
     }
   }
 

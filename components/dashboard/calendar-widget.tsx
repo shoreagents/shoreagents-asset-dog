@@ -13,8 +13,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Wrench, Clock, Plus, CheckCircle2, XCircle, List } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Wrench, Clock, Plus, CheckCircle2, XCircle, List, MoreVertical, Eye } from 'lucide-react'
 import { DashboardStats } from '@/types/dashboard'
 import { motion } from 'framer-motion'
 import { useTheme } from 'next-themes'
@@ -403,54 +409,62 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                         
                         {/* Actions */}
                         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                          {event.type === 'schedule' && event.scheduleId && (!event.status || event.status === 'pending') && (
-                            <>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-9 w-9 sm:h-8 sm:w-8 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/30 touch-manipulation"
+                                className="h-9 w-9 sm:h-8 sm:w-8 touch-manipulation"
                                 onClick={(e) => {
                                   e.preventDefault()
                                   e.stopPropagation()
-                                  if (event.scheduleId) {
-                                    updateScheduleStatusMutation.mutate({ scheduleId: event.scheduleId, status: 'completed' })
-                                  }
                                 }}
-                                disabled={updateScheduleStatusMutation.isPending}
-                                title="Mark as completed"
                               >
-                                <CheckCircle2 className="h-5 w-5 sm:h-4 sm:w-4" />
+                                <MoreVertical className="h-5 w-5 sm:h-4 sm:w-4" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 sm:h-8 sm:w-8 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30 touch-manipulation"
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  if (event.scheduleId) {
-                                    updateScheduleStatusMutation.mutate({ scheduleId: event.scheduleId, status: 'cancelled' })
-                                  }
-                                }}
-                                disabled={updateScheduleStatusMutation.isPending}
-                                title="Cancel schedule"
-                              >
-                                <XCircle className="h-5 w-5 sm:h-4 sm:w-4" />
-                              </Button>
-                            </>
-                          )}
-                          <Link
-                            href={`/assets?search=${encodeURIComponent(event.assetTagId)}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center justify-center h-9 w-9 sm:h-8 sm:w-8 rounded-md hover:bg-accent touch-manipulation transition-colors"
-                          >
-                            <ChevronRight className={cn(
-                              "h-5 w-5 sm:h-4 sm:w-4 transition-transform",
-                              event.type === 'schedule' && (event.status === 'completed' || event.status === 'cancelled')
-                                ? "text-muted-foreground opacity-50"
-                                : "text-muted-foreground group-hover:translate-x-1"
-                            )} />
-                          </Link>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              {event.type === 'schedule' && event.scheduleId && (!event.status || event.status === 'pending') && (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      if (event.scheduleId) {
+                                        updateScheduleStatusMutation.mutate({ scheduleId: event.scheduleId, status: 'completed' })
+                                      }
+                                    }}
+                                    disabled={updateScheduleStatusMutation.isPending}
+                                  >
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    Complete
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      if (event.scheduleId) {
+                                        updateScheduleStatusMutation.mutate({ scheduleId: event.scheduleId, status: 'cancelled' })
+                                      }
+                                    }}
+                                    disabled={updateScheduleStatusMutation.isPending}
+                                  >
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                    Cancel
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  href={`/assets?search=${encodeURIComponent(event.assetTagId)}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View
+                                </Link>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </motion.div>
                       </div>

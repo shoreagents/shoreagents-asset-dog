@@ -404,44 +404,44 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
                   </div>
                 )}
 
-                {/* Current Assignment Display */}
-                {activeCheckout && (
-                  <div className="space-y-2 pb-4 border-b">
-                    <label className="text-sm font-medium text-muted-foreground">Current Assignment</label>
-                    <div className="text-sm">
-                      {activeCheckout.employeeUser ? (
-                        <>
-                          <div>
-                            Assigned to: <span className="font-medium">{activeCheckout.employeeUser.name}</span>
-                            {activeCheckout.checkoutDate && (
-                              <span className="text-muted-foreground ml-2">
-                                • {new Date(activeCheckout.checkoutDate).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                                })}
-                              </span>
-                            )}
-                                  </div>
-                          {(activeCheckout.employeeUser.email || activeCheckout.employeeUser.department) && (
-                                    <div className="text-xs text-muted-foreground mt-0.5">
-                            {activeCheckout.employeeUser.email}
-                            {activeCheckout.employeeUser.department && ` • ${activeCheckout.employeeUser.department}`}
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground">No employee assigned</span>
-                            )}
-                          </div>
+            {/* Current Assignment Display */}
+            {activeCheckout && (
+              <div className="space-y-2 pb-4 border-b">
+                <label className="text-sm font-medium text-muted-foreground">Current Assignment</label>
+                <div className="text-sm">
+                  {activeCheckout.employeeUser ? (
+                    <>
+                      <div>
+                        Assigned to: <span className="font-medium">{activeCheckout.employeeUser.name}</span>
+                        {activeCheckout.checkoutDate && (
+                          <span className="text-muted-foreground ml-2">
+                            • {new Date(activeCheckout.checkoutDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                            })}
+                          </span>
+                        )}
+                              </div>
+                      {(activeCheckout.employeeUser.email || activeCheckout.employeeUser.department) && (
+                                <div className="text-xs text-muted-foreground mt-0.5">
+                          {activeCheckout.employeeUser.email}
+                          {activeCheckout.employeeUser.department && ` • ${activeCheckout.employeeUser.department}`}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">No employee assigned</span>
+                          )}
                         </div>
-                )}
+                      </div>
+            )}
 
-                {!activeCheckout && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No active checkout record found.</p>
-                    <p className="text-xs mt-1">Check out this asset first to assign an employee.</p>
-                  </div>
+            {!activeCheckout && (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-sm">No active checkout record found.</p>
+                <p className="text-xs mt-1">Check out this asset first to assign an employee.</p>
+              </div>
                 )}
               </>
             )}

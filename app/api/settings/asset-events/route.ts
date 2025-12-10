@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
-import { requireAdmin } from '@/lib/permission-utils'
+import { requireAdmin, requirePermission } from '@/lib/permission-utils'
 import { retryDbOperation } from '@/lib/db-utils'
+import { Prisma } from '@prisma/client'
 
 export async function GET(request: NextRequest) {
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  const adminCheck = await requireAdmin()
-  if (!adminCheck.allowed && adminCheck.error) {
-    return adminCheck.error
+  // Allow viewing asset events with canViewAssets permission
+  // Only require admin for deleting events (DELETE)
+  const permissionCheck = await requirePermission('canViewAssets')
+  if (!permissionCheck.allowed && permissionCheck.error) {
+    return permissionCheck.error
   }
 
   try {
@@ -22,7 +25,7 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
     const skip = (page - 1) * pageSize
 
-    let whereClause: any = {}
+    const whereClause: Prisma.AssetsHistoryLogsWhereInput = {}
 
     // Search filter
     if (search) {

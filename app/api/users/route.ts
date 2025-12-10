@@ -47,19 +47,24 @@ export async function GET(request: NextRequest) {
         take: 10000, // Reasonable limit for search
       }))
 
-      // Fetch emails from Supabase Auth for all users
+      // Fetch emails and names from Supabase Auth for all users
       const usersWithEmailData = await Promise.all(
         allUsers.map(async (user) => {
           try {
             const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(user.userId)
+            const userName = authUser?.user?.user_metadata?.name || 
+                            authUser?.user?.user_metadata?.full_name || 
+                            null
             return {
               ...user,
               email: authUser?.user?.email || null,
+              name: userName,
             }
           } catch {
             return {
               ...user,
               email: null,
+              name: null,
             }
           }
         })
@@ -86,7 +91,7 @@ export async function GET(request: NextRequest) {
       totalCount = filteredUsers.length
       
       // Apply pagination
-      users = filteredUsers.slice(skip, skip + pageSize) as Array<{ id: string; userId: string; role: string; email?: string | null; [key: string]: unknown }>
+      users = filteredUsers.slice(skip, skip + pageSize) as Array<{ id: string; userId: string; role: string; email?: string | null; name?: string | null; [key: string]: unknown }>
     } else {
       // No search term - normal query with pagination
       totalCount = await retryDbOperation(() => prisma.assetUser.count({ where: baseWhereClause }))
@@ -101,24 +106,30 @@ export async function GET(request: NextRequest) {
       }))
     }
 
-    // Fetch emails from Supabase Auth for each user (if not already fetched)
-    const usersWithEmail = search 
+    // Fetch emails and names from Supabase Auth for each user (if not already fetched)
+    const usersWithEmailAndName = search 
       ? users.map(user => ({
           ...user,
-          email: user.email || '-',
+          email: (user as { email?: string | null }).email || '-',
+          name: (user as { name?: string | null }).name || null,
         }))
       : await Promise.all(
           users.map(async (user) => {
             try {
               const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(user.userId)
+              const userName = authUser?.user?.user_metadata?.name || 
+                              authUser?.user?.user_metadata?.full_name || 
+                              null
               return {
                 ...user,
                 email: authUser?.user?.email || '-',
+                name: userName,
               }
             } catch {
               return {
                 ...user,
                 email: '-',
+                name: null,
               }
             }
           })
@@ -127,7 +138,7 @@ export async function GET(request: NextRequest) {
     const totalPages = Math.ceil(totalCount / pageSize)
 
     return NextResponse.json({ 
-      users: usersWithEmail,
+      users: usersWithEmailAndName,
       pagination: {
         page,
         pageSize,
@@ -177,7 +188,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { email, password, role, permissions } = body
+    const { email, password, role, permissions, name } = body
 
     if (!email || !role) {
       return NextResponse.json(
@@ -216,11 +227,21 @@ export async function POST(request: NextRequest) {
     // Create user in Supabase Auth
     const supabaseAdmin = createAdminSupabaseClient()
     
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const createUserData: { email: string; password: string; email_confirm: boolean; user_metadata?: Record<string, unknown> } = {
       email,
       password: userPassword,
       email_confirm: true,
-    })
+    }
+    
+    // Add name to user metadata if provided
+    if (name) {
+      createUserData.user_metadata = {
+        name: name,
+        full_name: name, // Also set full_name for compatibility
+      }
+    }
+    
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser(createUserData)
 
     if (authError) {
       if (authError.message?.includes('already registered') || authError.message?.includes('already exists')) {

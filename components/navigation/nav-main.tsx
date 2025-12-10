@@ -134,14 +134,14 @@ export function NavMain({
                       
                       // Not active
                       return (
-                        <SidebarMenuSubItem key={subItem.title}>
+                    <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton asChild isActive={false}>
-                            <Link href={subItem.url}>
+                        <Link href={subItem.url}>
                               {subItem.icon && <subItem.icon />}
-                              <span>{subItem.title}</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
+                          <span>{subItem.title}</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
                       )
                     })}
                 </SidebarMenuSub>

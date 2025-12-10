@@ -791,9 +791,12 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {canEditAssets && (
                 <DropdownMenuItem 
                   onClick={() => {
+                  if (!canEditAssets) {
+                    toast.error('You do not have permission to edit assets')
+                    return
+                  }
                     router.push(`/assets/${asset.id}`)
                   }}
                   disabled={isGeneratingPDF}
@@ -801,10 +804,12 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Asset
                 </DropdownMenuItem>
-              )}
-              {canAudit && (
                 <DropdownMenuItem 
                   onClick={() => {
+                  if (!canAudit) {
+                    toast.error('You do not have permission to manage audits')
+                    return
+                  }
                     router.push(`/tools/audit?assetId=${asset.id}`)
                   }}
                   disabled={isGeneratingPDF}
@@ -812,10 +817,12 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Manage Audits
                 </DropdownMenuItem>
-              )}
-              {canCheckout && (
                 <DropdownMenuItem 
                   onClick={() => {
+                  if (!canCheckout) {
+                    toast.error('You do not have permission to checkout assets')
+                    return
+                  }
                     router.push(`/assets/checkout?assetId=${asset.id}`)
                   }}
                   disabled={isGeneratingPDF}
@@ -823,10 +830,12 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   <ArrowRight className="mr-2 h-4 w-4" />
                   Checkout
                 </DropdownMenuItem>
-              )}
-              {canCheckin && (
                 <DropdownMenuItem 
                   onClick={() => {
+                  if (!canCheckin) {
+                    toast.error('You do not have permission to checkin assets')
+                    return
+                  }
                     router.push(`/assets/checkin?assetId=${asset.id}`)
                   }}
                   disabled={isGeneratingPDF}
@@ -834,10 +843,12 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Checkin
                 </DropdownMenuItem>
-              )}
-              {canMove && (
                 <DropdownMenuItem 
                   onClick={() => {
+                  if (!canMove) {
+                    toast.error('You do not have permission to move assets')
+                    return
+                  }
                     router.push(`/assets/move?assetId=${asset.id}`)
                   }}
                   disabled={isGeneratingPDF}
@@ -845,10 +856,12 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   <Move className="mr-2 h-4 w-4" />
                   Move
                 </DropdownMenuItem>
-              )}
-              {canReserve && (
                 <DropdownMenuItem 
                   onClick={() => {
+                  if (!canReserve) {
+                    toast.error('You do not have permission to reserve assets')
+                    return
+                  }
                     router.push(`/assets/reserve?assetId=${asset.id}`)
                   }}
                   disabled={isGeneratingPDF}
@@ -856,11 +869,12 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   <Package className="mr-2 h-4 w-4" />
                   Reserve
                 </DropdownMenuItem>
-              )}
-              {canLease && (
-                <>
                   <DropdownMenuItem 
                     onClick={() => {
+                  if (!canLease) {
+                    toast.error('You do not have permission to lease assets')
+                    return
+                  }
                       router.push(`/assets/lease?assetId=${asset.id}`)
                     }}
                     disabled={isGeneratingPDF}
@@ -870,6 +884,10 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={() => {
+                  if (!canLease) {
+                    toast.error('You do not have permission to return leased assets')
+                    return
+                  }
                       router.push(`/assets/lease-return?assetId=${asset.id}`)
                     }}
                     disabled={isGeneratingPDF}
@@ -877,9 +895,6 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     <FileTextIcon className="mr-2 h-4 w-4" />
                     Lease Return
                   </DropdownMenuItem>
-                </>
-              )}
-              {canDispose && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger disabled={isGeneratingPDF}>
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -888,6 +903,10 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   <DropdownMenuSubContent>
                     <DropdownMenuItem
                       onClick={() => {
+                      if (!canDispose) {
+                        toast.error('You do not have permission to dispose assets')
+                        return
+                      }
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Sold`)
                       }}
                       disabled={isGeneratingPDF}
@@ -896,6 +915,10 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
+                      if (!canDispose) {
+                        toast.error('You do not have permission to dispose assets')
+                        return
+                      }
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Donated`)
                       }}
                       disabled={isGeneratingPDF}
@@ -904,6 +927,10 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
+                      if (!canDispose) {
+                        toast.error('You do not have permission to dispose assets')
+                        return
+                      }
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Scrapped`)
                       }}
                       disabled={isGeneratingPDF}
@@ -912,6 +939,10 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
+                      if (!canDispose) {
+                        toast.error('You do not have permission to dispose assets')
+                        return
+                      }
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Lost/Missing`)
                       }}
                       disabled={isGeneratingPDF}
@@ -920,6 +951,10 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
+                      if (!canDispose) {
+                        toast.error('You do not have permission to dispose assets')
+                        return
+                      }
                         router.push(`/assets/dispose?assetId=${asset.id}&method=Destroyed`)
                       }}
                       disabled={isGeneratingPDF}
@@ -928,8 +963,6 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-              )}
-              {canManageMaintenance && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger disabled={isGeneratingPDF}>
                     <Wrench className="mr-2 h-4 w-4" />
@@ -938,6 +971,10 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                   <DropdownMenuSubContent>
                     <DropdownMenuItem
                       onClick={() => {
+                      if (!canManageMaintenance) {
+                        toast.error('You do not have permission to manage maintenance')
+                        return
+                      }
                         router.push(`/assets/maintenance?assetId=${asset.id}&status=Scheduled`)
                       }}
                       disabled={isGeneratingPDF}
@@ -946,6 +983,10 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
+                      if (!canManageMaintenance) {
+                        toast.error('You do not have permission to manage maintenance')
+                        return
+                      }
                         router.push(`/assets/maintenance?assetId=${asset.id}&status=In progress`)
                       }}
                       disabled={isGeneratingPDF}
@@ -954,12 +995,13 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-              )}
-              {canDeleteAssets && (
-                <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => {
+                  if (!canDeleteAssets) {
+                    toast.error('You do not have permission to delete assets')
+                    return
+                  }
                       router.push(`/assets?delete=${asset.id}`)
                     }}
                     className="text-destructive focus:text-destructive"
@@ -968,8 +1010,6 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
                     <Trash2 className="mr-2 h-4 w-4" />
                     Move to Trash
                   </DropdownMenuItem>
-                </>
-              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <Link href="/assets" className="w-full sm:w-auto">

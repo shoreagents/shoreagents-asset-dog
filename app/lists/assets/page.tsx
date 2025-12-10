@@ -1455,13 +1455,6 @@ const AssetActions = React.memo(function AssetActions({ asset }: { asset: Asset 
     router.push(`/assets/maintenance?assetId=${asset.id}&status=${status}`)
   }, [hasPermission, router, asset.id])
 
-  const canCheckout = hasPermission('canCheckout')
-  const canCheckin = hasPermission('canCheckin')
-  const canMove = hasPermission('canMove')
-  const canReserve = hasPermission('canReserve')
-  const canLease = hasPermission('canLease')
-  const canDispose = hasPermission('canDispose')
-  const canManageMaintenance = hasPermission('canManageMaintenance')
 
   return (
     <>
@@ -1471,7 +1464,7 @@ const AssetActions = React.memo(function AssetActions({ asset }: { asset: Asset 
               <Button 
                 variant="ghost" 
                 size="icon"
-                className="h-8 w-8 p-0 hover:bg-transparent!"
+                className="h-8 w-8 p-0 rounded-full"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -1506,32 +1499,22 @@ const AssetActions = React.memo(function AssetActions({ asset }: { asset: Asset 
                   More Actions
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  {canCheckout && (
                     <DropdownMenuItem onClick={handleCheckoutAction}>
                       <ArrowRight className="mr-2 h-4 w-4" />
                       Checkout
                     </DropdownMenuItem>
-                  )}
-                  {canCheckin && (
                     <DropdownMenuItem onClick={handleCheckin}>
                       <ArrowLeft className="mr-2 h-4 w-4" />
                       Checkin
                     </DropdownMenuItem>
-                  )}
-                  {canMove && (
                     <DropdownMenuItem onClick={handleMove}>
                       <Move className="mr-2 h-4 w-4" />
                       Move
                     </DropdownMenuItem>
-                  )}
-                  {canReserve && (
                     <DropdownMenuItem onClick={handleReserve}>
                       <Package className="mr-2 h-4 w-4" />
                       Reserve
                     </DropdownMenuItem>
-                  )}
-                  {canLease && (
-                    <>
                       <DropdownMenuItem onClick={handleLease}>
                         <FileTextIcon className="mr-2 h-4 w-4" />
                         Lease
@@ -1540,9 +1523,6 @@ const AssetActions = React.memo(function AssetActions({ asset }: { asset: Asset 
                         <FileTextIcon className="mr-2 h-4 w-4" />
                         Lease Return
                       </DropdownMenuItem>
-                    </>
-                  )}
-                  {canDispose && (
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger>
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -1566,8 +1546,6 @@ const AssetActions = React.memo(function AssetActions({ asset }: { asset: Asset 
                         </DropdownMenuItem>
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
-                  )}
-                  {canManageMaintenance && (
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger>
                         <Wrench className="mr-2 h-4 w-4" />
@@ -1582,7 +1560,6 @@ const AssetActions = React.memo(function AssetActions({ asset }: { asset: Asset 
                         </DropdownMenuItem>
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
-                  )}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuSeparator />

@@ -66,6 +66,7 @@ interface AssetUser {
   id: string
   userId: string
   email?: string
+  name?: string | null
   role: string
   canDeleteAssets: boolean
   canManageImport: boolean
@@ -151,7 +152,7 @@ async function fetchUsers(search?: string, searchType: string = 'unified', page:
   return { users: data.users, pagination: data.pagination }
 }
 
-async function createUser(data: { email: string; password?: string; role: string; permissions?: UserPermissions }) {
+async function createUser(data: { email: string; password?: string; name?: string | null; role: string; permissions?: UserPermissions }) {
   const response = await fetch('/api/users', {
     method: 'POST',
     headers: {
@@ -166,7 +167,7 @@ async function createUser(data: { email: string; password?: string; role: string
   return response.json()
 }
 
-async function updateUser(id: string, data: { role: string; permissions?: UserPermissions; isActive?: boolean; isApproved?: boolean }) {
+async function updateUser(id: string, data: { role: string; permissions?: UserPermissions; isActive?: boolean; isApproved?: boolean; name?: string | null }) {
   const response = await fetch(`/api/users/${id}`, {
     method: 'PUT',
     headers: {
@@ -215,7 +216,7 @@ const createColumns = (
   onApprove: (user: AssetUser) => void
 ): ColumnDef<AssetUser>[] => [
   {
-    accessorKey: 'userId',
+    accessorKey: 'name',
     header: ({ column }) => {
       return (
         <Button
@@ -223,7 +224,7 @@ const createColumns = (
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           className="h-8 px-0 hover:bg-transparent! has-[>svg]:px-0"
         >
-          User ID
+          Name
           {column.getIsSorted() === 'asc' ? (
             <ArrowUp className="ml-2 h-4 w-4" />
           ) : column.getIsSorted() === 'desc' ? (
@@ -234,7 +235,14 @@ const createColumns = (
         </Button>
       )
     },
-    cell: ({ row }) => <div className="font-medium">{row.original.userId}</div>,
+    cell: ({ row }) => {
+      const name = row.original.name
+      return (
+        <div className={name ? "font-medium" : "font-medium text-muted-foreground italic"}>
+          {name || 'Not set'}
+        </div>
+      )
+    },
     enableSorting: true,
   },
   {
@@ -351,7 +359,7 @@ const createColumns = (
         <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-transparent!">
+              <Button variant="ghost" className="h-8 w-8 p-0 rounded-full">
                 <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -438,6 +446,7 @@ function UsersPageContent() {
     defaultValues: {
       email: '',
       password: '',
+      name: null,
       role: 'user',
       permissions: {
         canDeleteAssets: false,
@@ -472,6 +481,7 @@ function UsersPageContent() {
   const [formData, setFormData] = useState<{
     email: string
     password: string
+    name: string | null
     role: string
     isActive: boolean
     isApproved: boolean
@@ -479,6 +489,7 @@ function UsersPageContent() {
   }>({
     email: '',
     password: '',
+    name: null,
     role: 'user',
     isActive: true,
     isApproved: false,
@@ -666,7 +677,7 @@ function UsersPageContent() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { role: string; permissions?: UserPermissions; isActive?: boolean; isApproved?: boolean } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { role: string; permissions?: UserPermissions; isActive?: boolean; isApproved?: boolean; name?: string | null } }) =>
       updateUser(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -678,6 +689,7 @@ function UsersPageContent() {
       setFormData({
         email: '',
         password: '',
+        name: null,
         role: 'user',
         isActive: true,
         isApproved: false,
@@ -759,6 +771,7 @@ function UsersPageContent() {
     createMutation.mutate({
       email: data.email,
       password: data.password || undefined, // Password is optional (can be auto-generated)
+      name: data.name || null,
       role: data.role,
       permissions: data.role === 'user' ? data.permissions : undefined,
     })
@@ -773,6 +786,7 @@ function UsersPageContent() {
       setFormData({
         email: '', // Email is not editable, only shown in display
         password: '',
+        name: user.name || null,
         role: user.role,
         isActive: user.isActive,
         isApproved: user.isApproved,
@@ -834,6 +848,7 @@ function UsersPageContent() {
         role: formData.role,
         isActive: formData.isActive,
         isApproved: formData.isApproved,
+        name: formData.name,
         permissions: formData.role === 'user' ? formData.permissions : undefined,
       },
     })
@@ -885,6 +900,7 @@ function UsersPageContent() {
     setFormData({
       email: '', // Email is not editable, only shown in display
       password: '',
+      name: user.name || null,
       role: user.role,
       isActive: true, // Pre-set to active for approval
       isApproved: true, // Mark as approved
@@ -1277,6 +1293,34 @@ function UsersPageContent() {
             <ScrollArea className='h-[70vh]'>
             <div className="grid gap-4 py-4">
               <Field>
+                <FieldLabel htmlFor="name">
+                  Name
+                </FieldLabel>
+                <FieldContent>
+                  <Controller
+                    name="name"
+                    control={createForm.control}
+                    render={({ field, fieldState }) => (
+                      <>
+                        <Input
+                          id="name"
+                          type="text"
+                          {...field}
+                          value={field.value || ''}
+                          onChange={(e) => field.onChange(e.target.value || null)}
+                          placeholder="Enter user name"
+                          aria-invalid={fieldState.error ? 'true' : 'false'}
+                        />
+                        {fieldState.error && (
+                          <FieldError>{fieldState.error.message}</FieldError>
+                        )}
+                      </>
+                    )}
+                  />
+                </FieldContent>
+              </Field>
+
+              <Field>
                 <FieldLabel htmlFor="email">
                   Email <span className="text-destructive">*</span>
                 </FieldLabel>
@@ -1530,12 +1574,24 @@ function UsersPageContent() {
                 : 'Update user role, status, and permissions.'}
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className='h-[70vh]'>
+          <ScrollArea className='h-[50vh]'>
           <div className="grid gap-4 py-4">
             <Field>
               <FieldLabel>Account Information</FieldLabel>
               <FieldContent>
                 <div className="space-y-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="edit-name" className="text-xs font-medium text-muted-foreground">
+                      Name
+                    </Label>
+                    <Input
+                      id="edit-name"
+                      value={formData.name || ''}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value || null })}
+                      placeholder="Enter name"
+                      className="text-sm"
+                    />
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="edit-email" className="text-xs font-medium text-muted-foreground">
                       Email Address
@@ -1543,17 +1599,6 @@ function UsersPageContent() {
                     <Input
                       id="edit-email"
                       value={selectedUser?.email || 'N/A'}
-                      disabled
-                      className="bg-muted font-mono text-sm"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="edit-userId" className="text-xs font-medium text-muted-foreground">
-                      User ID
-                    </Label>
-                    <Input
-                      id="edit-userId"
-                      value={selectedUser?.userId || ''}
                       disabled
                       className="bg-muted font-mono text-sm"
                     />

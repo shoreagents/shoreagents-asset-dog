@@ -125,7 +125,7 @@ function AccountPageContent() {
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
-              className="h-7 w-7"
+              className="h-7 w-7 rounded-full"
             >
               <PanelLeft className={cn(
                 'h-4 w-4 transition-transform',
@@ -145,7 +145,7 @@ function AccountPageContent() {
                     type="button"
                     onClick={() => handleTabChange(tab.id)}
                     className={cn(
-                      'w-full flex items-center text-sm font-medium rounded-md transition-colors',
+                      'w-full flex items-center text-sm font-medium rounded-md transition-colors cursor-pointer',
                       isActive
                         ? 'bg-primary text-primary-foreground'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground',

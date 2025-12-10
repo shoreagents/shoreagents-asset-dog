@@ -665,7 +665,7 @@ function TrashPageContent() {
             <DropdownMenuTrigger asChild>
               <Button 
                 variant="ghost" 
-                className="h-8 w-8 p-0"
+                className="h-8 w-8 p-0 rounded-full"
               >
                 <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />

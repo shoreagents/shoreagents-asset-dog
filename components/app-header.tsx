@@ -650,7 +650,7 @@ export function AppHeader() {
     <>
     <header className="sticky top-0 z-50 flex h-16 shrink-0 items-center justify-between gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 border-b bg-background">
       <div className="flex items-center gap-2 px-4">
-        <SidebarTrigger className="-ml-1" />
+        <SidebarTrigger className="-ml-1 rounded-full p-4" />
         <Separator
           orientation="vertical"
           className="mr-2 data-[orientation=vertical]:h-4"
@@ -680,7 +680,7 @@ export function AppHeader() {
           {canViewAssets && (
           <Button
             type="button"
-            className="hover:bg-transparent!"
+            className="rounded-full"
             variant="ghost"
             size="icon"
             onClick={() => {
@@ -861,16 +861,19 @@ export function AppHeader() {
                       <Button 
                         variant="ghost" 
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-8 w-8 rounded-full"
                         title="More Actions"
                       >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      {canEditAssets && (
                         <DropdownMenuItem 
                           onClick={() => {
+                          if (!canEditAssets) {
+                            toast.error('You do not have permission to edit assets')
+                            return
+                          }
                             router.push(`/assets/${scannedAsset.id}`)
                             setQrDialogOpen(false)
                           }}
@@ -878,10 +881,12 @@ export function AppHeader() {
                           <Edit className="mr-2 h-4 w-4" />
                           Edit Asset
                         </DropdownMenuItem>
-                      )}
-                      {canAudit && (
                         <DropdownMenuItem 
                           onClick={() => {
+                          if (!canAudit) {
+                            toast.error('You do not have permission to manage audits')
+                            return
+                          }
                             router.push(`/tools/audit?assetId=${scannedAsset.id}`)
                             setQrDialogOpen(false)
                           }}
@@ -889,10 +894,12 @@ export function AppHeader() {
                           <CheckCircle2 className="mr-2 h-4 w-4" />
                           Manage Audits
                         </DropdownMenuItem>
-                      )}
-                      {canCheckout && (
                         <DropdownMenuItem 
                           onClick={() => {
+                          if (!canCheckout) {
+                            toast.error('You do not have permission to checkout assets')
+                            return
+                          }
                             router.push(`/assets/checkout?assetId=${scannedAsset.id}`)
                             setQrDialogOpen(false)
                           }}
@@ -900,10 +907,12 @@ export function AppHeader() {
                           <ArrowRight className="mr-2 h-4 w-4" />
                           Checkout
                         </DropdownMenuItem>
-                      )}
-                      {canCheckin && (
                         <DropdownMenuItem 
                           onClick={() => {
+                          if (!canCheckin) {
+                            toast.error('You do not have permission to checkin assets')
+                            return
+                          }
                             router.push(`/assets/checkin?assetId=${scannedAsset.id}`)
                             setQrDialogOpen(false)
                           }}
@@ -911,10 +920,12 @@ export function AppHeader() {
                           <ArrowLeft className="mr-2 h-4 w-4" />
                           Checkin
                         </DropdownMenuItem>
-                      )}
-                      {canMove && (
                         <DropdownMenuItem 
                           onClick={() => {
+                          if (!canMove) {
+                            toast.error('You do not have permission to move assets')
+                            return
+                          }
                             router.push(`/assets/move?assetId=${scannedAsset.id}`)
                             setQrDialogOpen(false)
                           }}
@@ -922,10 +933,12 @@ export function AppHeader() {
                           <Move className="mr-2 h-4 w-4" />
                           Move
                         </DropdownMenuItem>
-                      )}
-                      {canReserve && (
                         <DropdownMenuItem 
                           onClick={() => {
+                          if (!canReserve) {
+                            toast.error('You do not have permission to reserve assets')
+                            return
+                          }
                             router.push(`/assets/reserve?assetId=${scannedAsset.id}`)
                             setQrDialogOpen(false)
                           }}
@@ -933,11 +946,12 @@ export function AppHeader() {
                           <Package className="mr-2 h-4 w-4" />
                           Reserve
                         </DropdownMenuItem>
-                      )}
-                      {canLease && (
-                        <>
                           <DropdownMenuItem 
                             onClick={() => {
+                          if (!canLease) {
+                            toast.error('You do not have permission to lease assets')
+                            return
+                          }
                               router.push(`/assets/lease?assetId=${scannedAsset.id}`)
                               setQrDialogOpen(false)
                             }}
@@ -947,6 +961,10 @@ export function AppHeader() {
                           </DropdownMenuItem>
                           <DropdownMenuItem 
                             onClick={() => {
+                          if (!canLease) {
+                            toast.error('You do not have permission to return leased assets')
+                            return
+                          }
                               router.push(`/assets/lease-return?assetId=${scannedAsset.id}`)
                               setQrDialogOpen(false)
                             }}
@@ -954,9 +972,6 @@ export function AppHeader() {
                             <FileText className="mr-2 h-4 w-4" />
                             Lease Return
                           </DropdownMenuItem>
-                        </>
-                      )}
-                      {canDispose && (
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -965,6 +980,10 @@ export function AppHeader() {
                           <DropdownMenuSubContent>
                             <DropdownMenuItem
                               onClick={() => {
+                              if (!canDispose) {
+                                toast.error('You do not have permission to dispose assets')
+                                return
+                              }
                                 router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Sold`)
                                 setQrDialogOpen(false)
                               }}
@@ -973,6 +992,10 @@ export function AppHeader() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
+                              if (!canDispose) {
+                                toast.error('You do not have permission to dispose assets')
+                                return
+                              }
                                 router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Donated`)
                                 setQrDialogOpen(false)
                               }}
@@ -981,6 +1004,10 @@ export function AppHeader() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
+                              if (!canDispose) {
+                                toast.error('You do not have permission to dispose assets')
+                                return
+                              }
                                 router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Scrapped`)
                                 setQrDialogOpen(false)
                               }}
@@ -989,6 +1016,10 @@ export function AppHeader() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
+                              if (!canDispose) {
+                                toast.error('You do not have permission to dispose assets')
+                                return
+                              }
                                 router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Lost/Missing`)
                                 setQrDialogOpen(false)
                               }}
@@ -997,6 +1028,10 @@ export function AppHeader() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
+                              if (!canDispose) {
+                                toast.error('You do not have permission to dispose assets')
+                                return
+                              }
                                 router.push(`/assets/dispose?assetId=${scannedAsset.id}&method=Destroyed`)
                                 setQrDialogOpen(false)
                               }}
@@ -1005,8 +1040,6 @@ export function AppHeader() {
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
-                      )}
-                      {canManageMaintenance && (
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Wrench className="mr-2 h-4 w-4" />
@@ -1015,6 +1048,10 @@ export function AppHeader() {
                           <DropdownMenuSubContent>
                             <DropdownMenuItem
                               onClick={() => {
+                              if (!canManageMaintenance) {
+                                toast.error('You do not have permission to manage maintenance')
+                                return
+                              }
                                 router.push(`/assets/maintenance?assetId=${scannedAsset.id}&status=Scheduled`)
                                 setQrDialogOpen(false)
                               }}
@@ -1023,6 +1060,10 @@ export function AppHeader() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
+                              if (!canManageMaintenance) {
+                                toast.error('You do not have permission to manage maintenance')
+                                return
+                              }
                                 router.push(`/assets/maintenance?assetId=${scannedAsset.id}&status=In progress`)
                                 setQrDialogOpen(false)
                               }}
@@ -1031,12 +1072,13 @@ export function AppHeader() {
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
-                      )}
-                      {canDeleteAssets && (
-                        <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => {
+                          if (!canDeleteAssets) {
+                            toast.error('You do not have permission to delete assets')
+                            return
+                          }
                               router.push(`/assets?delete=${scannedAsset.id}`)
                               setQrDialogOpen(false)
                             }}
@@ -1045,8 +1087,6 @@ export function AppHeader() {
                             <Trash2 className="mr-2 h-4 w-4" />
                             Move to Trash
                           </DropdownMenuItem>
-                        </>
-                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

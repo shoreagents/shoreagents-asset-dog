@@ -1205,7 +1205,7 @@ function MediaPageContent() {
                 {isMounted && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full">
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -1282,7 +1282,7 @@ function MediaPageContent() {
                 {isMounted && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full">
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -1803,7 +1803,7 @@ function MediaPageContent() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 hover:bg-transparent!"
+                          className="h-8 w-8 rounded-full"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <MoreVertical className="h-4 w-4 text-white" />
@@ -1811,7 +1811,7 @@ function MediaPageContent() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenuItem onClick={(e) => handleDetailsClick(e, image)}>
-                          <Eye className="mr-2 h-4 w-4" />
+                          <Eye className="mr-2 h-4 w-4 text-black" />
                           Details
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -1824,7 +1824,7 @@ function MediaPageContent() {
                             handleDeleteClick(e, image)
                           }}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
+                          <Trash2 className="mr-2 h-4 w-4 text-black" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -2140,7 +2140,7 @@ function MediaPageContent() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 hover:bg-transparent!"
+                          className="h-8 w-8 rounded-full"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <MoreVertical className="h-4 w-4 text-white" />
@@ -2148,7 +2148,7 @@ function MediaPageContent() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenuItem onClick={(e) => handleDocumentDetailsClick(e, document)}>
-                          <Eye className="mr-2 h-4 w-4" />
+                          <Eye className="mr-2 h-4 w-4 text-black" />
                           Details
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -2161,7 +2161,7 @@ function MediaPageContent() {
                             handleDocumentDeleteClick(e, document)
                           }}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
+                          <Trash2 className="mr-2 h-4 w-4 text-black" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>

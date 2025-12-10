@@ -615,7 +615,7 @@ export default function LocationsPage() {
                       <DropdownMenuTrigger asChild>
                         <Button 
                           variant="ghost" 
-                              className="h-8 w-8 p-0 shrink-0 hover:bg-background/80 data-[state=open]:bg-background/80"
+                              className="h-8 w-8 p-0 shrink-0 hover:bg-background/80 data-[state=open]:bg-background/80 rounded-full"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <span className="sr-only">Open menu</span>

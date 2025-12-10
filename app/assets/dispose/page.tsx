@@ -498,6 +498,24 @@ function DisposeAssetPageContent() {
 
             setSelectedAssets([disposeAsset])
             setAssetIdInput(asset.assetTagId)
+            
+            // Set disposal method from URL parameter after asset is loaded
+            if (urlMethod) {
+              // Map URL method to form method values
+              const methodMap: Record<string, string> = {
+                'Sold': 'Sold',
+                'Donated': 'Donated',
+                'Scrapped': 'Scrapped',
+                'Lost/Missing': 'Lost/Missing',
+                'Destroyed': 'Destroyed',
+              }
+              
+              const mappedMethod = methodMap[urlMethod] || urlMethod
+              
+              // Set the method immediately after setting assets
+              form.setValue('disposalMethod', mappedMethod)
+              form.setValue('disposeReason', mappedMethod)
+            }
           }
         } catch (error) {
           console.error('Error fetching asset from URL:', error)
@@ -505,10 +523,8 @@ function DisposeAssetPageContent() {
       }
       
       addAssetFromUrl()
-    }
-
-    // Set disposal method from URL parameter
-    if (urlMethod && !hasProcessedUrlParams.current && !form.getValues('disposalMethod')) {
+    } else if (urlMethod && !form.getValues('disposalMethod')) {
+      // Set disposal method from URL parameter even if no assetId
       // Map URL method to form method values
       const methodMap: Record<string, string> = {
         'Sold': 'Sold',

@@ -1538,13 +1538,6 @@ const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
     router.push(`/assets/maintenance?assetId=${asset.id}&status=${status}`)
   }, [hasPermission, router, asset.id])
 
-  const canCheckout = hasPermission('canCheckout')
-  const canCheckin = hasPermission('canCheckin')
-  const canMove = hasPermission('canMove')
-  const canReserve = hasPermission('canReserve')
-  const canLease = hasPermission('canLease')
-  const canDispose = hasPermission('canDispose')
-  const canManageMaintenance = hasPermission('canManageMaintenance')
 
   return (
     <>
@@ -1553,7 +1546,7 @@ const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
           <Button 
             variant="ghost" 
             size="icon"
-            className="h-8 w-8 p-0 hover:bg-transparent!"
+            className="h-8 w-8 p-0 rounded-full"
           >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
@@ -1588,32 +1581,22 @@ const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
               More Actions
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              {canCheckout && (
                 <DropdownMenuItem onClick={handleCheckoutAction}>
                   <ArrowRight className="mr-2 h-4 w-4" />
                   Checkout
                 </DropdownMenuItem>
-              )}
-              {canCheckin && (
                 <DropdownMenuItem onClick={handleCheckin}>
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Checkin
                 </DropdownMenuItem>
-              )}
-              {canMove && (
                 <DropdownMenuItem onClick={handleMove}>
                   <Move className="mr-2 h-4 w-4" />
                   Move
                 </DropdownMenuItem>
-              )}
-              {canReserve && (
                 <DropdownMenuItem onClick={handleReserve}>
                   <Package className="mr-2 h-4 w-4" />
                   Reserve
                 </DropdownMenuItem>
-              )}
-              {canLease && (
-                <>
                   <DropdownMenuItem onClick={handleLease}>
                     <FileTextIcon className="mr-2 h-4 w-4" />
                     Lease
@@ -1622,9 +1605,6 @@ const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
                     <FileTextIcon className="mr-2 h-4 w-4" />
                     Lease Return
                   </DropdownMenuItem>
-                </>
-              )}
-              {canDispose && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -1648,8 +1628,6 @@ const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-              )}
-              {canManageMaintenance && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
                     <Wrench className="mr-2 h-4 w-4" />
@@ -1664,7 +1642,6 @@ const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-              )}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSeparator />
@@ -3012,7 +2989,7 @@ function AssetsPageContent() {
           {/* Table Section - with loading/error states */}
           <div className="relative">
             {isFetching && data && (
-              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center rounded-b-2xl">
                 <Spinner variant="default" size={24} className="text-muted-foreground" />
               </div>
             )}
@@ -3093,11 +3070,13 @@ function AssetsPageContent() {
                       >
                         {row.getVisibleCells().map((cell) => {
                           const isActionsColumn = cell.column.id === 'actions'
+                          const isLastRow = index === table.getRowModel().rows.length - 1
                           return (
                             <TableCell 
                               key={cell.id}
                               className={cn(
-                                isActionsColumn && "sticky text-center right-0 bg-card z-10 after:content-[''] after:absolute after:left-0 after:top-0 after:bottom-0 after:w-px after:bg-border after:z-30 "
+                                isActionsColumn && "sticky text-center right-0 bg-card z-10 after:content-[''] after:absolute after:left-0 after:top-0 after:bottom-0 after:w-px after:bg-border after:z-30",
+                                isActionsColumn && isLastRow && "rounded-br-2xl"
                               )}
                             >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}

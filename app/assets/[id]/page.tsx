@@ -2837,7 +2837,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
                                 onClick={() => {
                                   setAuditToDelete(audit.id)
                                   setIsDeleteAuditDialogOpen(true)
@@ -2953,7 +2953,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
                                 onClick={() => {
                                   setMaintenanceToDelete(maintenance.id)
                                   setIsDeleteMaintenanceDialogOpen(true)
@@ -3068,7 +3068,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
                                   onClick={() => {
                                     setReservationToDelete(reservation.id)
                                     setIsDeleteReservationDialogOpen(true)
@@ -3179,7 +3179,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full"
                                   onClick={() => {
                                     setHistoryLogToDelete(log.id)
                                     setIsDeleteHistoryDialogOpen(true)

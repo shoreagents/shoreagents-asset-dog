@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth-utils'
 import { requirePermission } from '@/lib/permission-utils'
+import { retryDbOperation } from '@/lib/db-utils'
+import { clearCache } from '@/lib/cache-utils'
 
 export async function GET(
   request: NextRequest,
@@ -145,7 +147,8 @@ export async function PUT(
       )
     }
 
-    const employee = await prisma.employeeUser.update({
+    const employee = await retryDbOperation(() =>
+      prisma.employeeUser.update({
       where: {
         id,
       },
@@ -155,10 +158,13 @@ export async function PUT(
         department: department || null,
       },
     })
+    )
+
+    // Clear employees cache when an employee is updated
+    await clearCache('employees-')
 
     return NextResponse.json({ employee })
   } catch (error: unknown) {
-    console.error('Error updating employee:', error)
     const prismaError = error as { code?: string; message?: string }
     
     // Handle unique constraint violation (duplicate email)
@@ -177,6 +183,16 @@ export async function PUT(
       )
     }
 
+    // Handle connection pool errors
+    if (prismaError.code === 'P1001' || prismaError.code === 'P2024') {
+      return NextResponse.json(
+        { error: 'Database connection limit reached. Please try again in a moment.' },
+        { status: 503 }
+      )
+    }
+
+    // Only log unexpected errors
+    console.error('Unexpected error updating employee:', error)
     return NextResponse.json(
       { error: 'Failed to update employee' },
       { status: 500 }

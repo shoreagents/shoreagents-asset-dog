@@ -63,10 +63,16 @@ export async function GET() {
 
       // Check if user account is inactive
       if (userData && userData.isActive === false) {
+        const userName = user.user_metadata?.name || user.user_metadata?.full_name || ''
         return NextResponse.json(
           { 
             error: 'User account is inactive',
-            user,
+            user: {
+              id: user.id,
+              email: user.email,
+              name: userName,
+              avatar: user.user_metadata?.avatar_url || null,
+            },
             role: null,
             permissions: null,
             isActive: false,
@@ -83,11 +89,15 @@ export async function GET() {
     // Extract name from user_metadata (check both 'name' and 'full_name' for compatibility)
     const userName = user.user_metadata?.name || user.user_metadata?.full_name || ''
 
+    // Sanitize user object - only return what's needed by the frontend
+    // Don't expose sensitive Supabase internal fields (aud, role: "authenticated", identities, etc.)
     return NextResponse.json(
       { 
         user: {
-          ...user,
-          name: userName,  // Add name property for easier access
+          id: user.id,
+          email: user.email,
+          name: userName,
+          avatar: user.user_metadata?.avatar_url || null,
         },
         role: userData?.role || null,  // User role (for backward compatibility)
         permissions: userData,  // Full permissions object

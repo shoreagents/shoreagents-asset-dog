@@ -42,7 +42,7 @@ interface CheckoutManagerProps {
   onOpenChange?: (open: boolean) => void // Handle dialog open/close
 }
 
-export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['assets'], open, onOpenChange }: CheckoutManagerProps) {
+export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['assets'], readOnly = false, open, onOpenChange }: CheckoutManagerProps) {
   const queryClient = useQueryClient()
   const [editingCheckoutId, setEditingCheckoutId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'assign' | 'history'>('assign')
@@ -448,6 +448,8 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
 
             {activeCheckout && (
                <>
+                 {!readOnly && (
+               <>
                  <div className="space-y-2">
                    <label className="text-sm font-medium">Change Assignment</label>
                  <Command>
@@ -549,6 +551,8 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
                     )}
                   </Button>
                 </div>
+                   </>
+                 )}
               </>
             )}
           </div>

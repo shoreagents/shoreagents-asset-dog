@@ -936,7 +936,7 @@ export default function AuditPage() {
                                   e.stopPropagation()
                                   handleRemoveAsset(asset.assetTagId)
                                 }}
-                                className="text-muted-foreground hover:text-destructive shrink-0"
+                                className="text-muted-foreground hover:text-destructive shrink-0 rounded-full"
                               >
                                 <X className="h-3.5 w-3.5" />
                               </Button>

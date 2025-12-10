@@ -21,6 +21,7 @@ import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { toast } from 'sonner'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useSidebar } from '@/components/ui/sidebar'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { Upload, X, Image as ImageIcon, Building2 } from 'lucide-react'
 import Image from 'next/image'
 import { CountrySelectField } from '@/components/fields/country-select-field'
@@ -131,6 +132,7 @@ export default function CompanyInfoPage() {
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const canManageSetup = hasPermission('canManageSetup')
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
+  const isMobile = useIsMobile()
 
   const primaryLogoInputRef = useRef<HTMLInputElement>(null)
   const secondaryLogoInputRef = useRef<HTMLInputElement>(null)
@@ -1160,18 +1162,19 @@ export default function CompanyInfoPage() {
       <AnimatePresence>
       {isFormDirty && (
           <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, y: 20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, x: '-50%' }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
           className="fixed bottom-6 z-50 flex items-center justify-center gap-3"
           style={{
-            left: !sidebarOpen 
+              left: isMobile 
+                ? '50%'
+                : !sidebarOpen 
               ? '50%'
               : sidebarState === 'collapsed' 
                 ? 'calc(var(--sidebar-width-icon, 3rem) + ((100vw - var(--sidebar-width-icon, 3rem)) / 2))'
-                : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))',
-            transform: 'translateX(-50%)'
+                    : 'calc(var(--sidebar-width, 16rem) + ((100vw - var(--sidebar-width, 16rem)) / 2))'
           }}
         >
           <Button

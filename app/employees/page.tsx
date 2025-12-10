@@ -36,6 +36,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -48,7 +51,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { MoreHorizontal, Trash2, Edit, Search, UserPlus, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Package, Calendar, MapPin, X, RefreshCw } from 'lucide-react'
+import { MoreHorizontal, Trash2, Edit, Search, UserPlus, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Package, Calendar, MapPin, X, RefreshCw, ChevronLeft, Move, Eye, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { DeleteConfirmationDialog } from '@/components/dialogs/delete-confirmation-dialog'
@@ -316,7 +319,7 @@ const createColumns = (
             <DropdownMenuTrigger asChild>
               <Button 
                 variant="ghost" 
-                className="h-8 w-8 p-0 hover:bg-transparent!"
+                className="h-8 w-8 p-0 rounded-full"
               >
                 <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />
@@ -448,6 +451,8 @@ function EmployeesPageContent() {
     queryKey: ['employees', searchQuery, searchType, page, pageSize],
     queryFn: () => fetchEmployees(searchQuery || undefined, searchType, page, pageSize),
     placeholderData: (previousData) => previousData, // Keep previous data while fetching new data
+    staleTime: 0, // Always consider data stale to ensure fresh data after mutations
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   })
 
   // Reset manual refresh flag after successful fetch
@@ -538,14 +543,51 @@ function EmployeesPageContent() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { name: string; email: string; department?: string } }) =>
       updateEmployee(id, data),
+    onMutate: async ({ id, data }) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ['employees'] })
+
+      // Snapshot all previous employee queries
+      const queryCache = queryClient.getQueryCache()
+      const previousQueries = new Map()
+      
+      // Get all employee queries and snapshot them
+      queryCache.findAll({ queryKey: ['employees'] }).forEach(query => {
+        const previousData = queryClient.getQueryData<{ employees: Employee[], pagination: PaginationInfo }>(query.queryKey)
+        if (previousData) {
+          previousQueries.set(JSON.stringify(query.queryKey), previousData)
+          
+          // Optimistically update each query that contains this employee
+          const updatedData = {
+            ...previousData,
+            employees: previousData.employees.map(employee =>
+              employee.id === id
+                ? { ...employee, name: data.name, email: data.email, department: data.department || null }
+                : employee
+            ),
+          }
+          queryClient.setQueryData(query.queryKey, updatedData)
+        }
+      })
+
+      return { previousQueries }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      // Invalidate queries in background (don't await - let it happen async)
+      queryClient.invalidateQueries({ queryKey: ['employees'], refetchType: 'none' })
       setIsEditDialogOpen(false)
       setSelectedEmployee(null)
       editForm.reset()
       toast.success('Employee updated successfully')
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables, context) => {
+      // Rollback all queries to previous data on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach((previousData, queryKeyStr) => {
+          const queryKey = JSON.parse(queryKeyStr)
+          queryClient.setQueryData(queryKey, previousData)
+        })
+      }
       toast.error(error.message || 'Failed to update employee')
     },
   })
@@ -1176,7 +1218,8 @@ function EmployeesPageContent() {
                       <Card key={checkout.id} className='gap-0'>
                         <CardHeader className="pb-4">
                           <div className="space-y-3">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 flex-1">
                               <Package className="h-5 w-5 text-primary shrink-0" />
                               <CardTitle 
                                 className="text-lg font-semibold cursor-pointer hover:text-primary hover:underline transition-colors"
@@ -1188,6 +1231,179 @@ function EmployeesPageContent() {
                               >
                                 {checkout.asset.assetTagId}
                               </CardTitle>
+                              </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon"
+                                    className="h-8 w-8 p-0 rounded-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                  <DropdownMenuItem 
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (!hasPermission('canViewAssets')) {
+                                        toast.error('You do not have permission to view assets')
+                                        return
+                                      }
+                                      router.push(`/assets/details/${checkout.asset.id}`)
+                                      setIsCheckoutsDialogOpen(false)
+                                    }}
+                                  >
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger className="[&>svg:last-child]:hidden">
+                                      <ChevronLeft className="mr-2 h-4 w-4" />
+                                      More Actions
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                      <DropdownMenuItem 
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          if (!hasPermission('canCheckin')) {
+                                            toast.error('You do not have permission to check in assets')
+                                            return
+                                          }
+                                          router.push(`/assets/checkin?assetId=${checkout.asset.id}`)
+                                          setIsCheckoutsDialogOpen(false)
+                                        }}
+                                      >
+                                        <ArrowLeft className="mr-2 h-4 w-4" />
+                                        Checkin
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          if (!hasPermission('canMove')) {
+                                            toast.error('You do not have permission to move assets')
+                                            return
+                                          }
+                                          router.push(`/assets/move?assetId=${checkout.asset.id}`)
+                                          setIsCheckoutsDialogOpen(false)
+                                        }}
+                                      >
+                                        <Move className="mr-2 h-4 w-4" />
+                                        Move
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger onClick={(e) => e.stopPropagation()}>
+                                          <Trash2 className="mr-2 h-4 w-4" />
+                                          Dispose
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent onClick={(e) => e.stopPropagation()}>
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (!hasPermission('canDispose')) {
+                                                toast.error('You do not have permission to dispose assets')
+                                                return
+                                              }
+                                              router.push(`/assets/dispose?assetId=${checkout.asset.id}&method=Sold`)
+                                              setIsCheckoutsDialogOpen(false)
+                                            }}
+                                          >
+                                            Sold
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (!hasPermission('canDispose')) {
+                                                toast.error('You do not have permission to dispose assets')
+                                                return
+                                              }
+                                              router.push(`/assets/dispose?assetId=${checkout.asset.id}&method=Donated`)
+                                              setIsCheckoutsDialogOpen(false)
+                                            }}
+                                          >
+                                            Donated
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (!hasPermission('canDispose')) {
+                                                toast.error('You do not have permission to dispose assets')
+                                                return
+                                              }
+                                              router.push(`/assets/dispose?assetId=${checkout.asset.id}&method=Scrapped`)
+                                              setIsCheckoutsDialogOpen(false)
+                                            }}
+                                          >
+                                            Scrapped
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (!hasPermission('canDispose')) {
+                                                toast.error('You do not have permission to dispose assets')
+                                                return
+                                              }
+                                              router.push(`/assets/dispose?assetId=${checkout.asset.id}&method=Lost/Missing`)
+                                              setIsCheckoutsDialogOpen(false)
+                                            }}
+                                          >
+                                            Lost/Missing
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (!hasPermission('canDispose')) {
+                                                toast.error('You do not have permission to dispose assets')
+                                                return
+                                              }
+                                              router.push(`/assets/dispose?assetId=${checkout.asset.id}&method=Destroyed`)
+                                              setIsCheckoutsDialogOpen(false)
+                                            }}
+                                          >
+                                            Destroyed
+                                          </DropdownMenuItem>
+                                        </DropdownMenuSubContent>
+                                      </DropdownMenuSub>
+                                      <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger onClick={(e) => e.stopPropagation()}>
+                                          <Wrench className="mr-2 h-4 w-4" />
+                                          Maintenance
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent onClick={(e) => e.stopPropagation()}>
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (!hasPermission('canManageMaintenance')) {
+                                                toast.error('You do not have permission to manage maintenance')
+                                                return
+                                              }
+                                              router.push(`/assets/maintenance?assetId=${checkout.asset.id}&status=Scheduled`)
+                                              setIsCheckoutsDialogOpen(false)
+                                            }}
+                                          >
+                                            Scheduled
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (!hasPermission('canManageMaintenance')) {
+                                                toast.error('You do not have permission to manage maintenance')
+                                                return
+                                              }
+                                              router.push(`/assets/maintenance?assetId=${checkout.asset.id}&status=In progress`)
+                                              setIsCheckoutsDialogOpen(false)
+                                            }}
+                                          >
+                                            In Progress
+                                          </DropdownMenuItem>
+                                        </DropdownMenuSubContent>
+                                      </DropdownMenuSub>
+                                    </DropdownMenuSubContent>
+                                  </DropdownMenuSub>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </div>
                         </CardHeader>

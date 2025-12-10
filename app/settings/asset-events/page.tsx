@@ -162,28 +162,23 @@ const getEventTypeBadgeVariant = (eventType: string) => {
 
 // Create column definitions for TanStack Table
 const createColumns = (
-  onDelete: (event: AssetEvent) => void,
-  isAdmin: boolean
+  onDelete: (event: AssetEvent) => void
 ): ColumnDef<AssetEvent>[] => [
   {
     id: 'select',
     header: ({ table }) => (
-      isAdmin ? (
         <Checkbox
           checked={table.getIsAllPageRowsSelected()}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Select all"
         />
-      ) : null
     ),
     cell: ({ row }) => (
-      isAdmin ? (
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           aria-label="Select row"
         />
-      ) : null
     ),
     enableSorting: false,
     enableHiding: false,
@@ -375,10 +370,9 @@ const createColumns = (
       const event = row.original
       return (
         <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-          {isAdmin ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-transparent!">
+                <Button variant="ghost" className="h-8 w-8 p-0 rounded-full">
                   <span className="sr-only">Open menu</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
@@ -393,9 +387,6 @@ const createColumns = (
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          ) : (
-            <span className="text-muted-foreground text-xs">-</span>
-          )}
         </div>
       )
     },
@@ -610,7 +601,7 @@ function AssetEventsPageContent() {
     setIsDeleteDialogOpen(true)
   }, [isAdmin])
 
-  const columns = useMemo(() => createColumns(handleDelete, isAdmin || false), [handleDelete, isAdmin])
+  const columns = useMemo(() => createColumns(handleDelete), [handleDelete])
 
   const logs = useMemo(() => data?.logs || [], [data?.logs])
   const pagination = data?.pagination
@@ -633,7 +624,7 @@ function AssetEventsPageContent() {
     getSortedRowModel: getSortedRowModel(),
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
-    enableRowSelection: isAdmin || false,
+    enableRowSelection: true,
     state: {
       sorting,
       rowSelection,
@@ -768,7 +759,7 @@ function AssetEventsPageContent() {
                 </SelectContent>
               </Select>
 
-              {isAdmin && selectedCount > 0 && (
+              {selectedCount > 0 && (
                 <Button
                   variant="destructive"
                   size="sm"

@@ -1354,7 +1354,7 @@ export default function AccountabilityFormPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleRemoveReplacement(item.id)}
-                          className="h-8 w-8 shrink-0"
+                          className="h-8 w-8 shrink-0 rounded-full"
                         >
                           <XIcon className="h-4 w-4" />
                         </Button>
@@ -1503,7 +1503,7 @@ export default function AccountabilityFormPage() {
                               return newSet
                             })
                           }}
-                          className="h-8 w-8"
+                          className="h-8 w-8 rounded-full"
                         >
                           <XIcon className="h-4 w-4" />
                         </Button>
@@ -1534,7 +1534,7 @@ export default function AccountabilityFormPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleRemoveAsset(asset.id)}
-                          className="h-8 w-8 shrink-0"
+                          className="h-8 w-8 shrink-0 rounded-full"
                         >
                           <XIcon className="h-4 w-4" />
                         </Button>

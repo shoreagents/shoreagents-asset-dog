@@ -49,6 +49,12 @@ export const createUserSchema = z.object({
     .refine((val) => !val || val.length === 0 || val.length >= 8, {
       message: 'Password must be at least 8 characters long',
     }),
+  name: z
+    .string()
+    .max(255, 'Name must be 255 characters or less')
+    .trim()
+    .optional()
+    .nullable(),
   role: z
     .string()
     .min(1, 'Role is required')

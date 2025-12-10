@@ -1530,7 +1530,7 @@ const createColumns = (
             type="button"
             variant="ghost"
             size="icon"
-            className="h-8 w-8 p-0 hover:bg-transparent!"
+            className="h-8 w-8 p-0 rounded-full"
             onClick={() => {
               if (!canManageMaintenance) {
                 toast.error('You do not have permission to take actions')

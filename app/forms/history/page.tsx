@@ -698,7 +698,7 @@ function FormsHistoryPageContent() {
                                 <TableCell className="text-sm sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50">
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full">
                                         <MoreHorizontal className="h-4 w-4" />
                                     </Button>
                                     </DropdownMenuTrigger>
@@ -780,7 +780,7 @@ function FormsHistoryPageContent() {
                                 <TableCell className="text-sm sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50">
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full">
                                         <MoreHorizontal className="h-4 w-4" />
                                     </Button>
                                     </DropdownMenuTrigger>

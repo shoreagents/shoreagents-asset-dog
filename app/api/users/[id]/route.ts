@@ -68,7 +68,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { role, permissions, isActive, isApproved } = body
+    const { role, permissions, isActive, isApproved, name } = body
 
     if (!role) {
       return NextResponse.json(
@@ -158,6 +158,27 @@ export async function PUT(
       select: { userId: true },
     }))
 
+    // Update name in Supabase Auth if provided
+    const supabaseAdmin = createAdminSupabaseClient()
+    if (name !== undefined && user.userId) {
+      try {
+        const { data: currentUser } = await supabaseAdmin.auth.admin.getUserById(user.userId)
+        const existingMetadata = currentUser?.user?.user_metadata || {}
+        
+        // Update user metadata with name
+        await supabaseAdmin.auth.admin.updateUserById(user.userId, {
+          user_metadata: {
+            ...existingMetadata,
+            name: name || null,
+            full_name: name || null, // Also set full_name for compatibility
+          },
+        })
+      } catch (error) {
+        console.error('Error updating user name in Supabase Auth:', error)
+        // Don't fail the entire request if name update fails
+      }
+    }
+
     // Clear permission cache for the updated user
     if (user.userId) {
       clearPermissionCache(user.userId)
@@ -175,20 +196,25 @@ export async function PUT(
       )
     }
 
-    // Fetch email from Supabase Auth
-    const supabaseAdmin = createAdminSupabaseClient()
+    // Fetch email and name from Supabase Auth
     let email: string | null = null
+    let userName: string | null = null
     try {
       const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(fullUser.userId)
       email = authUser?.user?.email || null
+      userName = authUser?.user?.user_metadata?.name || 
+                  authUser?.user?.user_metadata?.full_name || 
+                  null
     } catch {
       email = null
+      userName = null
     }
 
     return NextResponse.json({ 
       user: {
         ...fullUser,
         email,
+        name: userName,
       }
     })
   } catch (error: unknown) {

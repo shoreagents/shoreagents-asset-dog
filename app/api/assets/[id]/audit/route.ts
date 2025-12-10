@@ -11,7 +11,9 @@ export async function GET(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  const permissionCheck = await requirePermission('canAudit')
+  // Allow viewing audit history with canViewAssets permission
+  // Only require canAudit for creating/editing audits (POST)
+  const permissionCheck = await requirePermission('canViewAssets')
   if (!permissionCheck.allowed && permissionCheck.error) {
     return permissionCheck.error
   }

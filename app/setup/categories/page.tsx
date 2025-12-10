@@ -430,7 +430,7 @@ export default function CategoriesPage() {
                       {canManageSetup && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0 shrink-0 hover:bg-background/80 data-[state=open]:bg-background/80">
+                            <Button variant="ghost" className="h-8 w-8 p-0 shrink-0 hover:bg-background/80 data-[state=open]:bg-background/80 rounded-full">
                               <span className="sr-only">Open menu</span>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
@@ -497,7 +497,7 @@ export default function CategoriesPage() {
                                   <DropdownMenuTrigger asChild>
                                     <Button 
                                       variant="ghost" 
-                                      className="h-6 w-6 p-0 shrink-0 hover:bg-muted"
+                                      className="h-6 w-6 p-0 shrink-0 hover:bg-muted rounded-full"
                                     >
                                       <span className="sr-only">Open menu</span>
                                       <MoreHorizontal className="h-3.5 w-3.5" />

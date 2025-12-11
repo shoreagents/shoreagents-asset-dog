@@ -99,8 +99,14 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
 
   if (isChartLoading) {
     return (
-      <Card className="flex flex-col h-full min-h-[500px] animate-pulse">
-        <CardHeader className="items-center pb-4">
+      <Card className="flex flex-col h-full min-h-[500px] animate-pulse relative overflow-hidden !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+        {/* 3D Bubble Highlight - Top */}
+        <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
+        
+        {/* Inner Shadow for Depth */}
+        <div className="absolute inset-0 pointer-events-none z-0 rounded-[24px] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.06)]" />
+        
+        <CardHeader className="items-center pb-4 relative z-10">
           <div className="flex items-center justify-between w-full">
             <div className="flex-1">
               <div className="h-6 w-48 bg-muted rounded mb-2" />
@@ -109,7 +115,7 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
             <div className="h-10 w-[140px] bg-muted rounded" />
           </div>
         </CardHeader>
-        <CardContent className="pb-0 flex-1 flex flex-col">
+        <CardContent className="pb-0 flex-1 flex flex-col relative z-10">
           <div className="flex-1 flex items-center justify-center min-h-[250px]">
             <div className="w-[250px] h-[250px] bg-muted rounded-full" />
           </div>
@@ -123,7 +129,7 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
             ))}
           </div>
         </CardContent>
-        <CardFooter className="flex-col gap-2 text-sm">
+        <CardFooter className="flex-col gap-2 text-sm relative z-10">
           <div className="h-4 w-32 bg-muted rounded" />
           <div className="h-4 w-40 bg-muted rounded" />
         </CardFooter>
@@ -137,8 +143,14 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
     >
-      <Card className="flex flex-col h-full min-h-[500px]">
-        <CardHeader className="items-center pb-4">
+      <Card className="flex flex-col h-full min-h-[500px] relative overflow-hidden transition-all duration-300 group !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+        {/* 3D Bubble Highlight - Top */}
+        <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
+        
+        {/* Inner Shadow for Depth */}
+        <div className="absolute inset-0 pointer-events-none z-0 rounded-[24px] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.06)]" />
+        
+        <CardHeader className="items-center pb-4 relative z-10">
           <div className="flex items-center justify-between w-full">
             <div>
               <CardTitle>Asset Value by {groupByLabel}</CardTitle>
@@ -160,7 +172,7 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
             </Select>
           </div>
         </CardHeader>
-        <CardContent className="pb-0 flex-1 flex flex-col">
+        <CardContent className="pb-0 flex-1 flex flex-col relative z-10">
           {chartData.length > 0 ? (
             <>
               <div className="flex-1 flex items-center justify-center min-h-[250px]">
@@ -214,7 +226,7 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
           )}
         </CardContent>
         {chartData.length > 0 && (
-          <CardFooter className="flex-col gap-2 text-sm">
+          <CardFooter className="flex-col gap-2 text-sm relative z-10">
             <div className="flex items-center gap-2 leading-none font-medium">
               {chartData.length} {getPluralLabel(groupByLabel)} by value <TrendingUp className="h-4 w-4" />
             </div>

@@ -565,6 +565,63 @@ model AssetsDepartment {
   @@index([name])
 }
 
+model InventoryItem {
+  id                String   @id @default(uuid())
+  itemCode          String   @unique @map("item_code") @db.VarChar(100)
+  name              String   @map("name") @db.VarChar(255)
+  description       String?  @map("description") @db.Text
+  category          String?  @map("category") @db.VarChar(100) // Consumables, Spare Parts, etc.
+  unit              String?  @map("unit") @db.VarChar(50) // pcs, boxes, liters, etc.
+  currentStock      Decimal  @default(0) @map("current_stock") @db.Decimal(12, 2)
+  minStockLevel     Decimal? @map("min_stock_level") @db.Decimal(12, 2)
+  maxStockLevel     Decimal? @map("max_stock_level") @db.Decimal(12, 2)
+  unitCost          Decimal? @map("unit_cost") @db.Decimal(12, 2)
+  location          String?  @map("location") @db.VarChar(255)
+  supplier          String?  @map("supplier") @db.VarChar(255)
+  brand             String?  @map("brand") @db.VarChar(100)
+  model             String?  @map("model") @db.VarChar(100)
+  sku               String?  @map("sku") @db.VarChar(100)
+  barcode           String?  @map("barcode") @db.VarChar(255)
+  remarks           String?  @map("remarks") @db.Text
+  
+  // Soft delete fields
+  deletedAt         DateTime? @map("deleted_at")
+  isDeleted         Boolean  @default(false) @map("is_deleted")
+  
+  // Relations
+  transactions      InventoryTransaction[]
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([isDeleted])
+  @@index([category])
+  @@index([itemCode])
+  @@index([isDeleted, category])
+  @@map("inventory_items")
+}
+
+model InventoryTransaction {
+  id                String   @id @default(uuid())
+  inventoryItemId   String   @map("inventory_item_id")
+  inventoryItem     InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  transactionType   String   @map("transaction_type") @db.VarChar(50) // IN, OUT, ADJUSTMENT, TRANSFER
+  quantity          Decimal  @map("quantity") @db.Decimal(12, 2)
+  unitCost          Decimal? @map("unit_cost") @db.Decimal(12, 2)
+  reference         String?  @map("reference") @db.VarChar(255) // PO Number, Work Order, etc.
+  notes             String?  @map("notes") @db.Text
+  actionBy          String   @map("action_by") @db.VarChar(255)
+  transactionDate   DateTime @default(now()) @map("transaction_date")
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([inventoryItemId])
+  @@index([transactionType])
+  @@index([transactionDate])
+  @@map("inventory_transactions")
+}
+
 model CompanyInfo {
   id                String   @id @default(uuid())
   companyName       String   @map("company_name") @db.VarChar(255)

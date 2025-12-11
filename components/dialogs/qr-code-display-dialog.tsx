@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import Image from 'next/image'
 import QRCode from 'react-qr-code'
 import { Download, Printer } from 'lucide-react'
 import { toast } from 'sonner'
@@ -38,8 +37,8 @@ export function QRCodeDisplayDialog({
 }: QRCodeDisplayDialogProps) {
   const qrCodeRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
-  const [titleTooltipOpen, setTitleTooltipOpen] = useState<boolean | undefined>(undefined)
-  const [textTooltipOpen, setTextTooltipOpen] = useState<boolean | undefined>(undefined)
+  const [titleTooltipOpen, setTitleTooltipOpen] = useState<boolean>(false)
+  const [textTooltipOpen, setTextTooltipOpen] = useState<boolean>(false)
 
   // Automatically fetch purchase date if not provided
   const { data: assetData, isLoading: isLoadingPurchaseDate } = useQuery({
@@ -312,9 +311,9 @@ export function QRCodeDisplayDialog({
       setTimeout(() => {
         setCopied(false)
         if (source === 'title') {
-          setTitleTooltipOpen(undefined)
+          setTitleTooltipOpen(false)
         } else {
-          setTextTooltipOpen(undefined)
+          setTextTooltipOpen(false)
         }
       }, 2000)
     } catch {
@@ -336,9 +335,9 @@ export function QRCodeDisplayDialog({
         setTimeout(() => {
           setCopied(false)
           if (source === 'title') {
-            setTitleTooltipOpen(undefined)
+            setTitleTooltipOpen(false)
           } else {
-            setTextTooltipOpen(undefined)
+            setTextTooltipOpen(false)
           }
         }, 2000)
       } catch {
@@ -547,7 +546,7 @@ export function QRCodeDisplayDialog({
             />
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10">
               <div className="bg-white p-1 shadow-lg">
-                <Image
+                <img
                   src="/shoreagents.ico"
                   alt="Shore Agents Logo"
                   width={40}

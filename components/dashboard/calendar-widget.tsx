@@ -164,12 +164,18 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
 
   if (isLoading) {
     return (
-      <Card className="flex flex-col h-[500px]">
-        <CardHeader>
+      <Card className="flex flex-col h-[500px] relative overflow-hidden !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+        {/* 3D Bubble Highlight - Top */}
+        <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
+        
+        {/* Inner Shadow for Depth */}
+        <div className="absolute inset-0 pointer-events-none z-0 rounded-[24px] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.06)]" />
+        
+        <CardHeader className="relative z-10">
           <div className="h-6 w-1/2 bg-muted rounded mb-2" />
           <div className="h-4 w-1/3 bg-muted rounded" />
         </CardHeader>
-        <CardContent className="flex-1 flex items-center justify-center">
+        <CardContent className="flex-1 flex items-center justify-center relative z-10">
           <Spinner className="h-8 w-8" />
         </CardContent>
       </Card>
@@ -249,8 +255,14 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
         exit={{ opacity: 0, x: -20 }}
         className="h-full"
       >
-        <Card className="flex flex-col h-full min-h-[500px]">
-          <CardHeader className="pb-4 border-b bg-muted/20">
+        <Card className="flex flex-col h-full min-h-[500px] relative overflow-hidden transition-all duration-300 group !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+          {/* 3D Bubble Highlight - Top */}
+          <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
+          
+          {/* Inner Shadow for Depth */}
+          <div className="absolute inset-0 pointer-events-none z-0 rounded-[24px] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.06)]" />
+          
+          <CardHeader className="pb-4 border-b  relative z-10">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Button
@@ -318,7 +330,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-1 overflow-auto p-4">
+          <CardContent className="flex-1 overflow-auto p-4 relative z-10">
             {dayEvents.length > 0 ? (
               <div className="space-y-3">
                 {dayEvents.map((event, idx) => (
@@ -372,7 +384,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                               className={cn(
                                 "text-[10px] px-2 py-0.5 h-5 shrink-0",
                                 event.type === 'schedule' && event.status === 'completed'
-                                  ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
+                                  ? "bg-green-100 text-green-900 border-green-400 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
                                   : event.type === 'schedule' && event.status === 'cancelled'
                                   ? "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-900/30 dark:text-gray-500 dark:border-gray-800"
                                   : event.type === 'schedule'
@@ -584,8 +596,14 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
       transition={{ duration: 0.5, delay: 0.2 }}
       className="h-full"
     >
-      <Card className="flex flex-col h-full min-h-[500px]">
-        <CardHeader className="pb-4">
+      <Card className="flex flex-col h-full min-h-[500px] relative overflow-hidden transition-all duration-300 group !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+        {/* 3D Bubble Highlight - Top */}
+        <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
+        
+        {/* Inner Shadow for Depth */}
+        <div className="absolute inset-0 pointer-events-none z-0 rounded-[24px] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.06)]" />
+        
+        <CardHeader className="pb-4 relative z-10">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
@@ -626,9 +644,9 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                     className="h-10 sm:h-8 gap-2 flex-1 sm:flex-initial bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-10 border shadow-sm"
                   >
                     <List className="h-4 w-4" />
-                    <span className="hidden sm:inline">Events</span>
+                    <span>Events</span>
                     {currentMonthEventCount > 0 && (
-                      <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5 text-[10px]">
+                      <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5 text-[10px] !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0.1)_100%)] backdrop-blur-md backdrop-saturate-150 border-[1px_solid_rgba(255,255,255,0.3)] shadow-[0_2px_8px_0_rgba(0,0,0,0.1),inset_0_1px_0_0_rgba(255,255,255,0.3)]">
                         {currentMonthEventCount}
                       </Badge>
                     )}
@@ -698,11 +716,11 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                                             className={cn(
                                               "text-[9px] h-4",
                                               event.type === 'schedule' && event.status === 'completed'
-                                                ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
+                                                ? "bg-green-100 text-green-900 border-green-400 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
                                                 : event.type === 'schedule' && event.status === 'cancelled'
-                                                ? "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-900/30 dark:text-gray-500 dark:border-gray-800"
+                                                ? "bg-slate-100 text-slate-700 border-slate-300 dark:bg-gray-900/30 dark:text-gray-500 dark:border-gray-800"
                                                 : event.type === 'schedule'
-                                                ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800'
+                                                ? 'bg-purple-100 text-purple-900 border-purple-400 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800'
                                                 : ""
                                             )}
                                           >
@@ -738,7 +756,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col min-h-0">
+        <CardContent className="flex-1 flex flex-col min-h-0 relative z-10">
           <div className="grid grid-cols-7 gap-1 mb-2">
             {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
               <div key={day} className="text-xs font-medium text-muted-foreground text-center py-2">
@@ -763,8 +781,8 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                   whileHover={{ scale: 0.98, backgroundColor: "var(--accent)" }}
                     onClick={() => handleDateClick(date)}
                     className={cn(
-                      "relative border rounded-md p-1 flex flex-col cursor-pointer transition-colors min-h-[80px]",
-                      isCurrentMonth ? 'bg-card hover:bg-accent/50' : 'bg-muted/20 opacity-50',
+                      "group/day-cell relative border rounded-md p-1 flex flex-col cursor-pointer transition-colors min-h-[80px]",
+                      isCurrentMonth ? 'bg-accent hover:bg-accent/50' : 'bg-muted/20 opacity-50',
                       isToday && 'ring-2 ring-primary ring-inset'
                     )}
                 >
@@ -780,7 +798,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                           e.stopPropagation()
                           handleAddSchedule(date)
                         }}
-                        className="opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity p-0.5 hover:bg-primary/10 rounded"
+                        className="opacity-0 group-hover/day-cell:opacity-100 hover:opacity-100 transition-opacity p-0.5 hover:bg-primary/10 rounded"
                         title="Add schedule"
                       >
                         <Plus className="h-3 w-3 text-muted-foreground" />
@@ -802,7 +820,7 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                               ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/80 dark:text-orange-100'
                                 : event.type === 'schedule'
                                 ? event.status === 'completed'
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 opacity-70 line-through'
+                                  ? 'bg-green-100 text-green-900 dark:bg-green-900/50 dark:text-green-300 opacity-70 line-through'
                                   : event.status === 'cancelled'
                                   ? 'bg-gray-100 text-gray-500 dark:bg-gray-900/50 dark:text-gray-500 opacity-60 line-through'
                                   : getScheduleTypeColor()

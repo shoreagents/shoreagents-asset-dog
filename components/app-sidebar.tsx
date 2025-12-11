@@ -38,6 +38,7 @@ import {
   Move,
   Bookmark,
   Undo,
+  Package,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import Image from "next/image"
@@ -126,6 +127,12 @@ const data = {
           icon: Wrench,
         },
       ],
+    },
+    {
+      title: "Inventory",
+      url: "/inventory",
+      icon: Package,
+      isActive: true,
     },
     {
       title: "Employee's",

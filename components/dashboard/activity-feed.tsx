@@ -123,10 +123,16 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.3 }}
     >
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-muted/10 pb-0">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <div>
+      <Card className="gap-0 overflow-hidden relative !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+        {/* 3D Bubble Highlight - Top */}
+        <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
+        
+        {/* Inner Shadow for Depth */}
+        <div className="absolute inset-0 pointer-events-none z-0 rounded-[24px] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.06)]" />
+        
+        <CardHeader className="border-b relative z-10 pb-0">
+          <div className="flex flex-row items-start sm:items-center justify-between gap-4 mb-4">
+            <div className="flex-1 min-w-0">
               <CardTitle>Activity Feed</CardTitle>
               <CardDescription>
                 Recent asset movements and status updates
@@ -137,7 +143,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="h-8 gap-2 bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-10 border shadow-sm"
+                  className="h-8 gap-2 bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-10 border shadow-sm flex-shrink-0"
                 >
                   <Settings2 className="h-4 w-4" />
                   <span className="hidden sm:inline">Customize</span>
@@ -187,7 +193,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
               >
                 <tab.icon className="h-4 w-4" />
                 {tab.label}
-                <Badge variant={activeTab === tab.id ? 'default' : 'secondary'} className="ml-1 h-5 px-1.5 min-w-[20px]">
+                <Badge variant={activeTab === tab.id ? 'default' : 'secondary'} className="ml-1 h-5 px-1.5 min-w-[20px] !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0.1)_100%)] backdrop-blur-md backdrop-saturate-150 border-[1px_solid_rgba(255,255,255,0.3)] shadow-[0_2px_8px_0_rgba(0,0,0,0.1),inset_0_1px_0_0_rgba(255,255,255,0.3)]">
                   {tab.count}
                 </Badge>
                 {activeTab === tab.id && (
@@ -200,7 +206,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
             ))}
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 relative z-10">
           <div className="min-h-[400px]">
             <AnimatePresence mode="wait">
               {activeTab === 'checked-out' && (
@@ -215,7 +221,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                   <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>
@@ -295,7 +301,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                    <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>
@@ -365,7 +371,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                   <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>
@@ -436,7 +442,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                   <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>
@@ -512,7 +518,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                   <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>
@@ -590,7 +596,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                   <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>
@@ -661,7 +667,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                   <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>
@@ -722,7 +728,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                   <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>
@@ -783,7 +789,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                   <div className="rounded-md border-0">
                     <ScrollArea className="h-[500px]">
                       <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader>
                           <TableRow>
                             <TableHead className="w-[150px]">Asset Tag</TableHead>
                             <TableHead>Description</TableHead>

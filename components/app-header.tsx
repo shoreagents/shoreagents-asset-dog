@@ -648,7 +648,7 @@ export function AppHeader() {
 
   return (
     <>
-    <header className="sticky top-0 z-50 flex h-16 shrink-0 items-center justify-between gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 border-b bg-background">
+    <header className="sticky top-0 z-50 flex h-16 shrink-0 items-center justify-between gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 border-b border-white/20 bg-white/10 dark:bg-white/5 bg-clip-padding backdrop-filter backdrop-blur-md shadow-sm">
       <div className="flex items-center gap-2 px-4">
         <SidebarTrigger className="-ml-1 rounded-full p-4" />
         <Separator

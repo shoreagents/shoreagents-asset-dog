@@ -33,6 +33,7 @@ interface UserPermissions {
   canManageAccountabilityForms: boolean
   canViewAccountabilityForms: boolean
   canManageReports: boolean
+  canManageInventory: boolean
 }
 
 async function fetchPermissions(): Promise<UserPermissions> {
@@ -69,6 +70,7 @@ const permissionLabels: Record<keyof Omit<UserPermissions, 'role'>, string> = {
   canManageAccountabilityForms: 'Manage Accountability Forms',
   canViewAccountabilityForms: 'View Accountability Forms',
   canManageReports: 'Manage Reports',
+  canManageInventory: 'Manage Inventory',
 }
 
 export default function Permissions() {

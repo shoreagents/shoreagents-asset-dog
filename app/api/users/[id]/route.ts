@@ -148,6 +148,7 @@ export async function PUT(
       updateData.canManageAccountabilityForms = permissions.canManageAccountabilityForms !== undefined ? permissions.canManageAccountabilityForms : false
       updateData.canViewAccountabilityForms = permissions.canViewAccountabilityForms !== undefined ? permissions.canViewAccountabilityForms : true
       updateData.canManageReports = permissions.canManageReports !== undefined ? permissions.canManageReports : false
+      updateData.canManageInventory = permissions.canManageInventory !== undefined ? permissions.canManageInventory : false
     }
 
     const user = await retryDbOperation(() => prisma.assetUser.update({

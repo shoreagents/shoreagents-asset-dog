@@ -85,6 +85,15 @@ export async function POST(request: Request) {
         canDispose: false,
         canManageMaintenance: false,
         canAudit: false,
+        canManageMedia: false,
+        canManageTrash: false,
+        canManageUsers: false,
+        canManageReturnForms: false,
+        canViewReturnForms: false,
+        canManageAccountabilityForms: false,
+        canViewAccountabilityForms: false,
+        canManageReports: false,
+        canManageInventory: false,
       },
     })
 

@@ -53,7 +53,7 @@ export async function PUT(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  const permissionCheck = await requirePermission('canEditAssets')
+  const permissionCheck = await requirePermission('canManageInventory')
   if (!permissionCheck.allowed && permissionCheck.error) {
     return permissionCheck.error
   }
@@ -128,7 +128,7 @@ export async function DELETE(
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  const permissionCheck = await requirePermission('canDeleteAssets')
+  const permissionCheck = await requirePermission('canManageInventory')
   if (!permissionCheck.allowed && permissionCheck.error) {
     return permissionCheck.error
   }

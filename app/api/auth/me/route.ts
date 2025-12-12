@@ -58,6 +58,7 @@ export async function GET() {
           canManageAccountabilityForms: true,
           canViewAccountabilityForms: true,
           canManageReports: true,
+          canManageInventory: true,
         },
       }))
 

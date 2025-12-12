@@ -291,6 +291,7 @@ export async function POST(request: NextRequest) {
       canManageAccountabilityForms: permissions?.canManageAccountabilityForms ?? false,
       canViewAccountabilityForms: permissions?.canViewAccountabilityForms ?? true,
       canManageReports: permissions?.canManageReports ?? false,
+      canManageInventory: permissions?.canManageInventory ?? false,
     } : {}
 
     // Create asset_users record

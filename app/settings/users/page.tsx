@@ -92,6 +92,7 @@ interface AssetUser {
   canManageAccountabilityForms: boolean
   canViewAccountabilityForms: boolean
   canManageReports: boolean
+  canManageInventory: boolean
   isActive: boolean
   isApproved: boolean
   createdAt: string
@@ -132,6 +133,7 @@ interface UserPermissions {
   canManageAccountabilityForms: boolean
   canViewAccountabilityForms: boolean
   canManageReports: boolean
+  canManageInventory: boolean
 }
 
 async function fetchUsers(search?: string, searchType: string = 'unified', page: number = 1, pageSize: number = 50): Promise<{ users: AssetUser[], pagination: PaginationInfo }> {
@@ -473,6 +475,7 @@ function UsersPageContent() {
         canManageAccountabilityForms: false,
         canViewAccountabilityForms: true,
         canManageReports: false,
+        canManageInventory: false,
       },
     },
   })
@@ -518,6 +521,7 @@ function UsersPageContent() {
       canManageAccountabilityForms: false,
       canViewAccountabilityForms: true,
       canManageReports: false,
+      canManageInventory: false,
     },
   })
   const queryClient = useQueryClient()
@@ -718,6 +722,7 @@ function UsersPageContent() {
         canManageAccountabilityForms: false,
         canViewAccountabilityForms: true,
         canManageReports: false,
+        canManageInventory: false,
         },
       })
       if (wasApproving) {
@@ -815,6 +820,7 @@ function UsersPageContent() {
         canManageAccountabilityForms: user.canManageAccountabilityForms ?? false,
         canViewAccountabilityForms: user.canViewAccountabilityForms ?? true,
         canManageReports: user.canManageReports ?? false,
+        canManageInventory: user.canManageInventory ?? false,
       },
     })
     setIsEditDialogOpen(true)
@@ -896,6 +902,7 @@ function UsersPageContent() {
       canManageAccountabilityForms: false,
       canViewAccountabilityForms: true,
       canManageReports: false,
+      canManageInventory: false,
     }
     setFormData({
       email: '', // Email is not editable, only shown in display
@@ -945,7 +952,9 @@ function UsersPageContent() {
       formData.permissions.canManageReturnForms &&
       formData.permissions.canViewReturnForms &&
       formData.permissions.canManageAccountabilityForms &&
-      formData.permissions.canViewAccountabilityForms
+      formData.permissions.canViewAccountabilityForms &&
+      formData.permissions.canManageReports &&
+      formData.permissions.canManageInventory
 
     setFormData({
       ...formData,
@@ -974,6 +983,7 @@ function UsersPageContent() {
         canManageAccountabilityForms: !allSelected,
         canViewAccountabilityForms: !allSelected,
         canManageReports: !allSelected,
+        canManageInventory: !allSelected,
       },
     })
   }, [formData])
@@ -1513,8 +1523,9 @@ function UsersPageContent() {
                           { key: 'canManageUsers', label: 'Manage Users' },
                           { key: 'canManageReturnForms', label: 'Manage Return Forms' },
                           { key: 'canViewReturnForms', label: 'View Return Forms' },
-                          { key: 'canManageAccountabilityForms', label: 'Manage Accountability Forms' },
-                          { key: 'canViewAccountabilityForms', label: 'View Accountability Forms' },
+                    { key: 'canManageAccountabilityForms', label: 'Manage Accountability Forms' },
+                    { key: 'canViewAccountabilityForms', label: 'View Accountability Forms' },
+                    { key: 'canManageInventory', label: 'Manage Inventory' },
                         ].map(({ key, label }) => (
                           <div key={key} className="flex items-center space-x-2">
                             <Checkbox
@@ -1742,7 +1753,13 @@ function UsersPageContent() {
                     formData.permissions.canAudit &&
                     formData.permissions.canManageMedia &&
                     formData.permissions.canManageTrash &&
-                    formData.permissions.canManageUsers
+                    formData.permissions.canManageUsers &&
+                    formData.permissions.canManageReturnForms &&
+                    formData.permissions.canViewReturnForms &&
+                    formData.permissions.canManageAccountabilityForms &&
+                    formData.permissions.canViewAccountabilityForms &&
+                    formData.permissions.canManageReports &&
+                    formData.permissions.canManageInventory
                       ? 'Deselect All'
                       : 'Select All'}
                   </Button>
@@ -2059,6 +2076,19 @@ function UsersPageContent() {
                       }
                     />
                     <Label htmlFor="edit-canManageReports" className="cursor-pointer">Manage Reports</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="edit-canManageInventory"
+                      checked={formData.permissions.canManageInventory}
+                      onCheckedChange={(checked) =>
+                        setFormData({
+                          ...formData,
+                          permissions: { ...formData.permissions, canManageInventory: checked as boolean },
+                        })
+                      }
+                    />
+                    <Label htmlFor="edit-canManageInventory" className="cursor-pointer">Manage Inventory</Label>
                   </div>
                 </div>
               </div>

@@ -33,6 +33,7 @@ interface UserPermissions {
   canManageAccountabilityForms: boolean
   canViewAccountabilityForms: boolean
   canManageReports: boolean
+  canManageInventory: boolean
 }
 
 interface AssetUser {
@@ -63,6 +64,7 @@ interface AssetUser {
   canManageAccountabilityForms: boolean
   canViewAccountabilityForms: boolean
   canManageReports: boolean
+  canManageInventory: boolean
 }
 
 /**
@@ -113,6 +115,7 @@ export async function getUserPermissions(): Promise<{ user: AssetUser | null; er
         canManageAccountabilityForms: true,
         canViewAccountabilityForms: true,
         canManageReports: true,
+        canManageInventory: true,
       },
     }))
 

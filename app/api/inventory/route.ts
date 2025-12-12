@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
   const auth = await verifyAuth()
   if (auth.error) return auth.error
 
-  const permissionCheck = await requirePermission('canEditAssets') // Reuse asset permission for now
+  const permissionCheck = await requirePermission('canManageInventory')
   if (!permissionCheck.allowed && permissionCheck.error) {
     return permissionCheck.error
   }

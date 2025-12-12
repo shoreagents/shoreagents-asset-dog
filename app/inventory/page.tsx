@@ -12,6 +12,7 @@ import {
   flexRender,
   ColumnDef,
   SortingState,
+  VisibilityState,
 } from '@tanstack/react-table'
 import {
   Table,
@@ -31,6 +32,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu'
 import {
   Select,
@@ -40,18 +44,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import {
   Search,
   Plus,
   MoreHorizontal,
+  MoreVertical,
   Trash2,
   Edit,
   Package,
@@ -61,11 +57,25 @@ import {
   ArrowRight,
   X,
   RefreshCw,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  History,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import * as XLSX from 'xlsx'
 import { DeleteConfirmationDialog } from '@/components/dialogs/delete-confirmation-dialog'
+import { InventoryItemDialog, type InventoryItem as InventoryItemType } from '@/components/dialogs/inventory-item-dialog'
+import { InventoryTransactionDialog } from '@/components/dialogs/inventory-transaction-dialog'
+import { InventoryTransactionHistoryDialog } from '@/components/dialogs/inventory-transaction-history-dialog'
+import { ExportFieldsDialog } from '@/components/dialogs/export-fields-dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { HeaderGroup, Header } from '@tanstack/react-table'
 
@@ -101,6 +111,20 @@ interface PaginationInfo {
   totalPages: number
   hasNextPage: boolean
   hasPreviousPage: boolean
+}
+
+interface InventoryTransaction {
+  id: string
+  inventoryItemId: string
+  transactionType: 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER'
+  quantity: number
+  unitCost: number | null
+  totalCost: number | null
+  transactionDate: string
+  reference: string | null
+  notes: string | null
+  actionBy: string | null
+  createdAt: string
 }
 
 async function fetchInventoryItems(params: {
@@ -162,17 +186,68 @@ async function deleteInventoryItem(id: string) {
   return response.json()
 }
 
+async function fetchTransactions(itemId: string, page: number = 1, pageSize: number = 50) {
+  const response = await fetch(`/api/inventory/${itemId}/transactions?page=${page}&pageSize=${pageSize}`)
+  if (!response.ok) {
+    throw new Error('Failed to fetch transactions')
+  }
+  return response.json()
+}
+
+async function createTransaction(itemId: string, data: {
+  transactionType: 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER'
+  quantity: number
+  unitCost?: number | null
+  reference?: string | null
+  notes?: string | null
+  destinationItemId?: string | null
+}) {
+  const response = await fetch(`/api/inventory/${itemId}/transactions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Failed to create transaction')
+  }
+  return response.json()
+}
+
+// Column definitions for visibility control
+const ALL_COLUMNS = [
+  { key: 'itemCode', label: 'Item Code' },
+  { key: 'name', label: 'Name' },
+  { key: 'category', label: 'Category' },
+  { key: 'currentStock', label: 'Stock' },
+  { key: 'status', label: 'Status' },
+  { key: 'unitCost', label: 'Unit Cost' },
+  { key: 'location', label: 'Location' },
+  { key: 'supplier', label: 'Supplier' },
+  { key: 'brand', label: 'Brand' },
+  { key: 'model', label: 'Model' },
+  { key: 'sku', label: 'SKU' },
+  { key: 'barcode', label: 'Barcode' },
+  { key: 'unit', label: 'Unit' },
+  { key: 'description', label: 'Description' },
+  { key: 'remarks', label: 'Remarks' },
+  { key: 'actions', label: 'Actions' },
+]
+
 const createColumns = (
   onEdit: (item: InventoryItem) => void,
-  onDelete: (item: InventoryItem) => void
+  onDelete: (item: InventoryItem) => void,
+  onAddTransaction: (item: InventoryItem) => void,
+  onViewTransactions: (item: InventoryItem) => void
 ): ColumnDef<InventoryItem>[] => [
   {
+    id: 'itemCode',
     accessorKey: 'itemCode',
     header: ({ column }) => (
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-        className="h-8 px-2"
+        className="h-8 px-0 hover:bg-transparent! has-[>svg]:px-0"
       >
         Item Code
         <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -183,12 +258,13 @@ const createColumns = (
     ),
   },
   {
+    id: 'name',
     accessorKey: 'name',
     header: ({ column }) => (
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-        className="h-8 px-2"
+        className="h-8 px-0 hover:bg-transparent! has-[>svg]:px-0"
       >
         Name
         <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -196,17 +272,19 @@ const createColumns = (
     ),
   },
   {
+    id: 'category',
     accessorKey: 'category',
     header: 'Category',
     cell: ({ row }) => row.original.category || 'N/A',
   },
   {
+    id: 'currentStock',
     accessorKey: 'currentStock',
     header: ({ column }) => (
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-        className="h-8 px-2"
+        className="h-8 px-0 hover:bg-transparent! has-[>svg]:px-0"
       >
         Stock
         <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -214,29 +292,67 @@ const createColumns = (
     ),
     cell: ({ row }) => {
       const item = row.original
-      const stock = parseFloat(item.currentStock.toString())
-      const minStock = item.minStockLevel
-        ? parseFloat(item.minStockLevel.toString())
-        : null
-      const isLowStock = minStock !== null && stock <= minStock
+      const stock = Math.floor(parseFloat(item.currentStock.toString()))
       const unit = item.unit || 'pcs'
 
       return (
-        <div className="flex items-center gap-2">
-          <span className={cn(isLowStock && 'text-red-600 font-medium')}>
-            {stock.toLocaleString()} {unit}
-          </span>
-          {isLowStock && (
-            <Badge variant="destructive" className="text-xs">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              Low
-            </Badge>
-          )}
-        </div>
+        <span className="font-medium">
+          {stock.toLocaleString()} {unit}
+        </span>
       )
     },
   },
   {
+    id: 'status',
+    header: 'Status',
+    cell: ({ row }) => {
+      const item = row.original
+      const stock = Math.floor(parseFloat(item.currentStock.toString()))
+      const minStock = item.minStockLevel
+        ? Math.floor(parseFloat(item.minStockLevel.toString()))
+        : null
+      const maxStock = item.maxStockLevel
+        ? Math.floor(parseFloat(item.maxStockLevel.toString()))
+        : null
+      
+      let status: 'out' | 'low' | 'ok' | 'over' = 'ok'
+      let statusLabel = 'In Stock'
+      let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'default'
+      let statusIcon = CheckCircle2
+      
+      if (stock === 0) {
+        status = 'out'
+        statusLabel = 'Out of Stock'
+        statusVariant = 'destructive'
+        statusIcon = XCircle
+      } else if (minStock !== null && stock <= minStock) {
+        status = 'low'
+        statusLabel = 'Low Stock'
+        statusVariant = 'destructive'
+        statusIcon = AlertTriangle
+      } else if (maxStock !== null && stock > maxStock) {
+        status = 'over'
+        statusLabel = 'Overstock'
+        statusVariant = 'secondary'
+        statusIcon = TrendingUp
+      } else {
+        status = 'ok'
+        statusLabel = 'In Stock'
+        statusVariant = 'default'
+        statusIcon = CheckCircle2
+      }
+
+      const Icon = statusIcon
+      return (
+        <Badge variant={statusVariant} className="text-xs">
+          <Icon className="h-3 w-3 mr-1" />
+          {statusLabel}
+        </Badge>
+      )
+    },
+  },
+  {
+    id: 'unitCost',
     accessorKey: 'unitCost',
     header: 'Unit Cost',
     cell: ({ row }) => {
@@ -250,9 +366,58 @@ const createColumns = (
     },
   },
   {
+    id: 'location',
     accessorKey: 'location',
     header: 'Location',
     cell: ({ row }) => row.original.location || 'N/A',
+  },
+  {
+    id: 'supplier',
+    accessorKey: 'supplier',
+    header: 'Supplier',
+    cell: ({ row }) => row.original.supplier || 'N/A',
+  },
+  {
+    id: 'brand',
+    accessorKey: 'brand',
+    header: 'Brand',
+    cell: ({ row }) => row.original.brand || 'N/A',
+  },
+  {
+    id: 'model',
+    accessorKey: 'model',
+    header: 'Model',
+    cell: ({ row }) => row.original.model || 'N/A',
+  },
+  {
+    id: 'sku',
+    accessorKey: 'sku',
+    header: 'SKU',
+    cell: ({ row }) => row.original.sku || 'N/A',
+  },
+  {
+    id: 'barcode',
+    accessorKey: 'barcode',
+    header: 'Barcode',
+    cell: ({ row }) => row.original.barcode || 'N/A',
+  },
+  {
+    id: 'unit',
+    accessorKey: 'unit',
+    header: 'Unit',
+    cell: ({ row }) => row.original.unit || 'N/A',
+  },
+  {
+    id: 'description',
+    accessorKey: 'description',
+    header: 'Description',
+    cell: ({ row }) => row.original.description || 'N/A',
+  },
+  {
+    id: 'remarks',
+    accessorKey: 'remarks',
+    header: 'Remarks',
+    cell: ({ row }) => row.original.remarks || 'N/A',
   },
   {
     id: 'actions',
@@ -272,6 +437,15 @@ const createColumns = (
               <DropdownMenuItem onClick={() => onEdit(item)}>
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onAddTransaction(item)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Transaction
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onViewTransactions(item)}>
+                <History className="mr-2 h-4 w-4" />
+                View Transactions
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -307,13 +481,134 @@ function InventoryPageContent() {
   
   const [searchInput, setSearchInput] = useState(searchQuery)
   const [sorting, setSorting] = useState<SortingState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    itemCode: true,
+    name: true,
+    category: true,
+    currentStock: true,
+    status: true,
+    unitCost: true,
+    location: true,
+    supplier: false,
+    brand: false,
+    model: false,
+    sku: false,
+    barcode: false,
+    unit: false,
+    description: false,
+    remarks: false,
+    actions: true,
+  })
+  const [isSelectOpen, setIsSelectOpen] = useState(false)
+  const [shouldCloseSelect, setShouldCloseSelect] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false)
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
-  const [formData, setFormData] = useState<Partial<InventoryItem>>({})
+  const [transactionHistoryPage, setTransactionHistoryPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [selectedExportFields, setSelectedExportFields] = useState<Set<string>>(new Set())
+  const [selectedSummaryFields, setSelectedSummaryFields] = useState<Set<string>>(new Set())
+  const [exportFormat, setExportFormat] = useState<'excel' | 'pdf'>('excel')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const canEdit = hasPermission('canEditAssets')
+  const canManageInventory = hasPermission('canManageInventory')
+  const canManageImport = hasPermission('canManageImport')
+
+  // Available export fields
+  const exportFields = [
+    { key: 'itemCode', label: 'Item Code' },
+    { key: 'name', label: 'Name' },
+    { key: 'description', label: 'Description' },
+    { key: 'category', label: 'Category' },
+    { key: 'unit', label: 'Unit' },
+    { key: 'currentStock', label: 'Current Stock' },
+    { key: 'minStockLevel', label: 'Min Stock Level' },
+    { key: 'maxStockLevel', label: 'Max Stock Level' },
+    { key: 'unitCost', label: 'Unit Cost' },
+    { key: 'location', label: 'Location' },
+    { key: 'supplier', label: 'Supplier' },
+    { key: 'brand', label: 'Brand' },
+    { key: 'model', label: 'Model' },
+    { key: 'sku', label: 'SKU' },
+    { key: 'barcode', label: 'Barcode' },
+    { key: 'remarks', label: 'Remarks' },
+  ]
+
+  // Summary fields for export
+  const summaryFields = [
+    { key: 'summary', label: 'Summary' },
+    { key: 'byCategory', label: 'By Category' },
+    { key: 'byStatus', label: 'By Status' },
+    { key: 'totalCost', label: 'Total Cost' },
+    { key: 'lowStock', label: 'Low Stock Items' },
+  ]
+
+  // Initialize export fields - select all by default when dialog opens
+  useEffect(() => {
+    if (isExportDialogOpen && selectedExportFields.size === 0) {
+      setSelectedExportFields(new Set(exportFields.map(f => f.key)))
+    }
+    if (isExportDialogOpen && selectedSummaryFields.size === 0) {
+      setSelectedSummaryFields(new Set(summaryFields.map(f => f.key)))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExportDialogOpen])
+
+  // Convert column visibility to visible columns array
+  const visibleColumns = useMemo(() => {
+    return Object.entries(columnVisibility)
+      .filter(([, visible]) => visible)
+      .map(([key]) => key)
+      .filter(key => key !== 'actions') // Exclude Actions from count
+  }, [columnVisibility])
+
+  // Exclude Actions from the "all selected" check since it's always visible
+  const allSelected = Object.keys(columnVisibility)
+    .filter(key => key !== 'actions')
+    .filter(key => columnVisibility[key as keyof VisibilityState])
+    .length === ALL_COLUMNS.filter(col => col.key !== 'actions').length
+
+
+  const handleSelectOpenChange = (open: boolean) => {
+    if (open) {
+      // Opening the select
+      setIsSelectOpen(true)
+    } else {
+      // Trying to close - only allow if shouldCloseSelect is true
+      if (shouldCloseSelect) {
+        setIsSelectOpen(false)
+        setShouldCloseSelect(false)
+      } else {
+        // Don't close for individual selections - keep it open
+        setIsSelectOpen(true)
+      }
+    }
+  }
+
+  // Handle clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // If select is open and we're not clicking a select item, close it
+      if (isSelectOpen && !shouldCloseSelect) {
+        const target = event.target as HTMLElement
+        const isSelectItem = target.closest('[role="option"]')
+        const isSelectContent = target.closest('[role="listbox"]')
+        
+        // If clicked outside select content, close it
+        if (!isSelectContent && !isSelectItem) {
+          setIsSelectOpen(false)
+        }
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isSelectOpen, shouldCloseSelect])
 
   // Update URL parameters
   const updateURL = useCallback((updates: { 
@@ -432,7 +727,7 @@ function InventoryPageContent() {
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
       toast.success('Inventory item created successfully')
       setIsAddDialogOpen(false)
-      setFormData({})
+      setSelectedItem(null)
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to create inventory item')
@@ -447,7 +742,6 @@ function InventoryPageContent() {
       toast.success('Inventory item updated successfully')
       setIsEditDialogOpen(false)
       setSelectedItem(null)
-      setFormData({})
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to update inventory item')
@@ -467,50 +761,716 @@ function InventoryPageContent() {
     },
   })
 
+  // Transaction history query
+  const { data: transactionHistory, isLoading: isLoadingHistory } = useQuery({
+    queryKey: ['inventory-transactions', selectedItem?.id, transactionHistoryPage],
+    queryFn: () => selectedItem ? fetchTransactions(selectedItem.id, transactionHistoryPage, 20) : null,
+    enabled: isHistoryDialogOpen && !!selectedItem,
+  })
+
+  // Create transaction mutation
+  const createTransactionMutation = useMutation({
+    mutationFn: ({ itemId, data }: { itemId: string; data: any }) => createTransaction(itemId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] })
+      toast.success('Transaction created successfully')
+      setIsTransactionDialogOpen(false)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to create transaction')
+    },
+  })
+
   const handleAdd = () => {
-    setFormData({})
+    if (!canManageInventory) {
+      toast.error('You do not have permission to add inventory')
+      return
+    }
+    setSelectedItem(null)
     setIsAddDialogOpen(true)
   }
 
   const handleEdit = useCallback((item: InventoryItem) => {
+    if (!canManageInventory) {
+      toast.error('You do not have permission to edit inventory')
+      return
+    }
     setSelectedItem(item)
-    setFormData({
-      itemCode: item.itemCode,
-      name: item.name,
-      description: item.description || '',
-      category: item.category || '',
-      unit: item.unit || '',
-      currentStock: item.currentStock,
-      minStockLevel: item.minStockLevel,
-      maxStockLevel: item.maxStockLevel,
-      unitCost: item.unitCost,
-      location: item.location || '',
-      supplier: item.supplier || '',
-      brand: item.brand || '',
-      model: item.model || '',
-      sku: item.sku || '',
-      barcode: item.barcode || '',
-      remarks: item.remarks || '',
-    })
     setIsEditDialogOpen(true)
-  }, [])
+  }, [canManageInventory])
 
   const handleDelete = useCallback((item: InventoryItem) => {
+    if (!canManageInventory) {
+      toast.error('You do not have permission to delete inventory')
+      return
+    }
     setSelectedItem(item)
     setIsDeleteDialogOpen(true)
+  }, [canManageInventory])
+
+  const handleAddTransaction = useCallback((item: InventoryItem) => {
+    if (!canManageInventory) {
+      toast.error('You do not have permission to add inventory transaction')
+      return
+    }
+    setSelectedItem(item)
+    setIsTransactionDialogOpen(true)
+  }, [canManageInventory])
+
+  const handleViewTransactions = useCallback((item: InventoryItem) => {
+    setSelectedItem(item)
+    setTransactionHistoryPage(1)
+    setIsHistoryDialogOpen(true)
   }, [])
 
-  const handleSubmit = () => {
-    if (isEditDialogOpen && selectedItem) {
-      updateMutation.mutate({ id: selectedItem.id, data: formData })
-    } else {
-      createMutation.mutate(formData)
+  // Format number with commas and 2 decimal places
+  const formatNumber = (value: number | null | undefined): string => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return ''
+    }
+    return Number(value).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  }
+
+  // Calculate summary data
+  const calculateSummaryData = useCallback((): any => {
+    if (!data?.items) return null
+
+    const items = data.items
+    const totalItems = items.length
+    const totalStock = items.reduce((sum, item) => sum + parseFloat(item.currentStock.toString()), 0)
+    const totalCost = items.reduce((sum, item) => {
+      const stock = parseFloat(item.currentStock.toString())
+      const cost = item.unitCost ? parseFloat(item.unitCost.toString()) : 0
+      return sum + (stock * cost)
+    }, 0)
+
+    // Group by category
+    const byCategory = new Map<string, { count: number; totalStock: number; totalCost: number }>()
+    items.forEach(item => {
+      const category = item.category || 'Uncategorized'
+      if (!byCategory.has(category)) {
+        byCategory.set(category, { count: 0, totalStock: 0, totalCost: 0 })
+      }
+      const group = byCategory.get(category)!
+      group.count++
+      group.totalStock += parseFloat(item.currentStock.toString())
+      const cost = item.unitCost ? parseFloat(item.unitCost.toString()) : 0
+      group.totalCost += parseFloat(item.currentStock.toString()) * cost
+    })
+
+    // Group by status (for inventory, we'll use stock status: In Stock, Low Stock, Out of Stock)
+    const byStatus = new Map<string, { count: number; totalStock: number; totalCost: number }>()
+    items.forEach(item => {
+      const stock = parseFloat(item.currentStock.toString())
+      const minLevel = item.minStockLevel ? parseFloat(item.minStockLevel.toString()) : null
+      let status = 'In Stock'
+      if (stock === 0) {
+        status = 'Out of Stock'
+      } else if (minLevel !== null && stock <= minLevel) {
+        status = 'Low Stock'
+      }
+      
+      if (!byStatus.has(status)) {
+        byStatus.set(status, { count: 0, totalStock: 0, totalCost: 0 })
+      }
+      const group = byStatus.get(status)!
+      group.count++
+      group.totalStock += stock
+      const cost = item.unitCost ? parseFloat(item.unitCost.toString()) : 0
+      group.totalCost += stock * cost
+    })
+
+    // Low stock items
+    const lowStockItems = items.filter(item => {
+      const stock = parseFloat(item.currentStock.toString())
+      const minLevel = item.minStockLevel ? parseFloat(item.minStockLevel.toString()) : null
+      return minLevel !== null && stock <= minLevel
+    })
+
+    return {
+      totalItems,
+      totalStock,
+      totalCost,
+      byCategory: Array.from(byCategory.entries()).map(([category, data]) => ({
+        category,
+        count: data.count,
+        totalStock: data.totalStock,
+        totalCost: data.totalCost,
+      })),
+      byStatus: Array.from(byStatus.entries()).map(([status, data]) => ({
+        status,
+        count: data.count,
+        totalStock: data.totalStock,
+        totalCost: data.totalCost,
+      })),
+      lowStockItems,
+    }
+  }, [data?.items])
+
+  // Export inventory items to Excel or PDF
+  const handleExport = useCallback(async () => {
+    if (selectedExportFields.size === 0 && selectedSummaryFields.size === 0) {
+      toast.error('Please select at least one field to export')
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      if (exportFormat === 'pdf') {
+        // Handle PDF export - still needs summary data for HTML generation
+        const summaryData = calculateSummaryData() || {}
+        await handlePDFExport([], summaryData)
+      } else {
+        // Handle Excel export via API
+        const params = new URLSearchParams()
+        params.set('format', 'excel')
+        if (searchQuery) params.set('search', searchQuery)
+        if (categoryFilter && categoryFilter !== 'all') params.set('category', categoryFilter)
+        if (lowStockFilter) params.set('lowStock', 'true')
+        
+        // Summary fields
+        params.set('includeSummary', selectedSummaryFields.has('summary').toString())
+        params.set('includeByCategory', selectedSummaryFields.has('byCategory').toString())
+        params.set('includeByStatus', selectedSummaryFields.has('byStatus').toString())
+        params.set('includeTotalCost', selectedSummaryFields.has('totalCost').toString())
+        params.set('includeLowStock', selectedSummaryFields.has('lowStock').toString())
+        params.set('includeItemList', (selectedExportFields.size > 0).toString())
+        
+        // Item fields
+        if (selectedExportFields.size > 0) {
+          params.set('itemFields', Array.from(selectedExportFields).join(','))
+        }
+
+        const response = await fetch(`/api/inventory/export?${params.toString()}`)
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Export failed' }))
+          throw new Error(errorData.error || 'Export failed')
+        }
+
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `inventory-export-${new Date().toISOString().split('T')[0]}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+
+        toast.success('Inventory exported successfully')
+      }
+      
+      setIsExportDialogOpen(false)
+    } catch (error) {
+      console.error('Export error:', error)
+      toast.error(`Failed to export inventory items as ${exportFormat.toUpperCase()}`)
+    } finally {
+      setIsExporting(false)
+    }
+  }, [selectedExportFields, selectedSummaryFields, exportFormat, searchQuery, categoryFilter, lowStockFilter, calculateSummaryData])
+
+  // PDF Export handler
+  const handlePDFExport = useCallback(async (allData: any[], summaryData: any) => {
+    // Generate HTML for PDF
+    const html = generateInventoryReportHTML(allData, summaryData, selectedSummaryFields, selectedExportFields, data?.items || [])
+    
+    const response = await fetch('/api/inventory/pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ html }),
+    })
+
+    if (!response.ok) {
+      throw new Error('PDF generation failed')
+    }
+
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `inventory-report-${new Date().toISOString().split('T')[0]}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+
+    toast.success('PDF exported successfully')
+  }, [selectedSummaryFields, selectedExportFields, data?.items])
+
+  // Generate HTML for PDF report
+  const generateInventoryReportHTML = useCallback((allData: any[], summaryData: any, summaryFields: Set<string>, itemFields: Set<string>, items: InventoryItem[]) => {
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Inventory Report</title>
+        <style>
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          h1 { color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }
+          h2 { color: #666; margin-top: 20px; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 10px; }
+          th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+          th { background-color: #f2f2f2; font-weight: bold; }
+          .summary { background-color: #f9f9f9; padding: 15px; margin: 20px 0; border-radius: 5px; }
+          .metric { margin: 10px 0; }
+        </style>
+      </head>
+      <body>
+        <h1>Inventory Report</h1>
+        <p>Generated: ${new Date().toLocaleString()}</p>
+    `
+
+    if (summaryFields.size > 0 && summaryData) {
+      if (summaryFields.has('summary')) {
+        html += `
+          <div class="summary">
+            <h2>Summary</h2>
+            <div class="metric"><strong>Total Items:</strong> ${summaryData.totalItems}</div>
+            <div class="metric"><strong>Total Stock:</strong> ${Math.floor(summaryData.totalStock)}</div>
+            <div class="metric"><strong>Total Cost:</strong> ₱${formatNumber(summaryData.totalCost)}</div>
+          </div>
+        `
+      }
+
+      if (summaryFields.has('byCategory') && summaryData.byCategory && summaryData.byCategory.length > 0) {
+        html += `
+          <h2>By Category</h2>
+          <table>
+            <tr><th>Category</th><th>Count</th><th>Total Stock</th><th>Total Cost</th></tr>
+        `
+        summaryData.byCategory.forEach((cat: any) => {
+          html += `<tr><td>${cat.category}</td><td>${cat.count}</td><td>${Math.floor(cat.totalStock)}</td><td>₱${formatNumber(cat.totalCost)}</td></tr>`
+        })
+        html += `</table>`
+      }
+
+      if (summaryFields.has('byStatus') && summaryData.byStatus && summaryData.byStatus.length > 0) {
+        html += `
+          <h2>By Status</h2>
+          <table>
+            <tr><th>Status</th><th>Count</th><th>Total Stock</th><th>Total Cost</th></tr>
+        `
+        summaryData.byStatus.forEach((statusItem: any) => {
+          html += `<tr><td>${statusItem.status}</td><td>${statusItem.count}</td><td>${Math.floor(statusItem.totalStock)}</td><td>₱${formatNumber(statusItem.totalCost)}</td></tr>`
+        })
+        html += `</table>`
+      }
+
+      if (summaryFields.has('totalCost') && summaryData) {
+        html += `
+          <div class="summary">
+            <h2>Total Cost</h2>
+            <div class="metric"><strong>Total Inventory Value:</strong> ₱${formatNumber(summaryData.totalCost)}</div>
+          </div>
+        `
+      }
+
+      if (summaryFields.has('lowStock') && summaryData.lowStockItems && summaryData.lowStockItems.length > 0) {
+        html += `
+          <h2>Low Stock Items</h2>
+          <table>
+            <tr><th>Item Code</th><th>Name</th><th>Current Stock</th><th>Min Level</th></tr>
+        `
+        summaryData.lowStockItems.forEach((item: any) => {
+          html += `<tr><td>${item.itemCode}</td><td>${item.name}</td><td>${Math.floor(parseFloat(item.currentStock.toString()))}</td><td>${item.minStockLevel ? Math.floor(parseFloat(item.minStockLevel.toString())) : ''}</td></tr>`
+        })
+        html += `</table>`
+      }
+    }
+
+    if (itemFields.size > 0 && items.length > 0) {
+      html += `<h2>Inventory Items</h2><table><tr>`
+      
+      // Build header row based on selected fields
+      const fieldLabels: Record<string, string> = {
+        itemCode: 'Item Code',
+        name: 'Name',
+        description: 'Description',
+        category: 'Category',
+        unit: 'Unit',
+        currentStock: 'Current Stock',
+        minStockLevel: 'Min Stock Level',
+        maxStockLevel: 'Max Stock Level',
+        unitCost: 'Unit Cost',
+        location: 'Location',
+        supplier: 'Supplier',
+        brand: 'Brand',
+        model: 'Model',
+        sku: 'SKU',
+        barcode: 'Barcode',
+        remarks: 'Remarks',
+      }
+      
+      // Add headers for all selected fields
+      itemFields.forEach(fieldKey => {
+        if (fieldLabels[fieldKey]) {
+          html += `<th>${fieldLabels[fieldKey]}</th>`
+        }
+      })
+      html += `</tr>`
+      
+      // Add data rows
+      items.forEach(item => {
+        html += `<tr>`
+        itemFields.forEach(fieldKey => {
+          let cellValue = ''
+          switch (fieldKey) {
+            case 'itemCode':
+              cellValue = item.itemCode
+              break
+            case 'name':
+              cellValue = item.name
+              break
+            case 'description':
+              cellValue = item.description || ''
+              break
+            case 'category':
+              cellValue = item.category || ''
+              break
+            case 'unit':
+              cellValue = item.unit || ''
+              break
+            case 'currentStock':
+              cellValue = Math.floor(parseFloat(item.currentStock.toString())).toString()
+              break
+            case 'minStockLevel':
+              cellValue = item.minStockLevel ? Math.floor(parseFloat(item.minStockLevel.toString())).toString() : ''
+              break
+            case 'maxStockLevel':
+              cellValue = item.maxStockLevel ? Math.floor(parseFloat(item.maxStockLevel.toString())).toString() : ''
+              break
+            case 'unitCost':
+              cellValue = item.unitCost ? `₱${formatNumber(parseFloat(item.unitCost.toString()))}` : ''
+              break
+            case 'location':
+              cellValue = item.location || ''
+              break
+            case 'supplier':
+              cellValue = item.supplier || ''
+              break
+            case 'brand':
+              cellValue = item.brand || ''
+              break
+            case 'model':
+              cellValue = item.model || ''
+              break
+            case 'sku':
+              cellValue = item.sku || ''
+              break
+            case 'barcode':
+              cellValue = item.barcode || ''
+              break
+            case 'remarks':
+              cellValue = item.remarks || ''
+              break
+            default:
+              cellValue = ''
+          }
+          html += `<td>${cellValue}</td>`
+        })
+        html += `</tr>`
+      })
+      html += `</table>`
+    }
+
+    html += `</body></html>`
+    return html
+  }, [])
+
+  const handleExportClick = useCallback((format: 'excel' | 'pdf' = 'excel') => {
+    if (!data?.items || data.items.length === 0) {
+      toast.error('No items to export')
+      return
+    }
+    setExportFormat(format)
+    setIsExportDialogOpen(true)
+  }, [data?.items])
+
+  const handleExportFieldToggle = useCallback((fieldKey: string) => {
+    setSelectedExportFields(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(fieldKey)) {
+        newSet.delete(fieldKey)
+      } else {
+        newSet.add(fieldKey)
+      }
+      return newSet
+    })
+  }, [])
+
+  const handleSelectAllExportFields = useCallback(() => {
+    setSelectedExportFields(new Set(exportFields.map(f => f.key)))
+  }, [])
+
+  const handleDeselectAllExportFields = useCallback(() => {
+    setSelectedExportFields(new Set())
+  }, [])
+
+  const handleSummaryFieldToggle = useCallback((fieldKey: string) => {
+    setSelectedSummaryFields(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(fieldKey)) {
+        newSet.delete(fieldKey)
+      } else {
+        newSet.add(fieldKey)
+      }
+      return newSet
+    })
+  }, [])
+
+  const handleSelectAllSummaryFields = useCallback(() => {
+    setSelectedSummaryFields(new Set(summaryFields.map(f => f.key)))
+  }, [])
+
+  const handleDeselectAllSummaryFields = useCallback(() => {
+    setSelectedSummaryFields(new Set())
+  }, [])
+
+  // Download template with sample data
+  const handleDownloadTemplate = useCallback(() => {
+    const templateData = [
+      {
+        'Item Code': 'INV-001-SA',
+        'Name': 'Sample Item 1',
+        'Description': 'Sample description',
+        'Category': 'Consumables',
+        'Unit': 'pcs',
+        'Current Stock': 100,
+        'Min Stock Level': 10,
+        'Max Stock Level': 500,
+        'Unit Cost': 50.00,
+        'Location': 'Warehouse A',
+        'Supplier': 'Supplier Name',
+        'Brand': 'Brand Name',
+        'Model': 'Model XYZ',
+        'SKU': 'SKU-001',
+        'Barcode': '1234567890123',
+        'Remarks': 'Sample remarks',
+      },
+      {
+        'Item Code': 'INV-002-SA',
+        'Name': 'Sample Item 2',
+        'Description': '',
+        'Category': 'Spare Parts',
+        'Unit': 'boxes',
+        'Current Stock': 50,
+        'Min Stock Level': 5,
+        'Max Stock Level': 200,
+        'Unit Cost': 125.00,
+        'Location': '',
+        'Supplier': '',
+        'Brand': '',
+        'Model': '',
+        'SKU': '',
+        'Barcode': '',
+        'Remarks': '',
+      },
+    ]
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory Items')
+    
+    XLSX.writeFile(workbook, 'inventory-import-template.xlsx')
+    toast.success('Template downloaded successfully')
+  }, [])
+
+  // Check if item code exists (including soft-deleted items)
+  const checkItemCodeExists = async (itemCode: string): Promise<boolean> => {
+    try {
+      // Check both active and soft-deleted items
+      const [activeResponse, deletedResponse] = await Promise.all([
+        fetch(`/api/inventory?search=${encodeURIComponent(itemCode)}&pageSize=1000`),
+        fetch(`/api/inventory?search=${encodeURIComponent(itemCode)}&includeDeleted=true&pageSize=1000`),
+      ])
+      
+      if (activeResponse.ok) {
+        const activeData = await activeResponse.json()
+        if (activeData.items?.some((item: InventoryItem) => item.itemCode === itemCode)) {
+          return true
+        }
+      }
+      
+      if (deletedResponse.ok) {
+        const deletedData = await deletedResponse.json()
+        if (deletedData.items?.some((item: InventoryItem) => item.itemCode === itemCode)) {
+          return true
+        }
+      }
+      
+      return false
+    } catch {
+      return false
     }
   }
 
+  // Generate new item code
+  const generateNewItemCode = async (): Promise<string> => {
+    try {
+      const response = await fetch('/api/inventory/generate-code')
+      if (!response.ok) throw new Error('Failed to generate item code')
+      const data = await response.json()
+      return data.itemCode
+    } catch (error) {
+      console.error('Error generating item code:', error)
+      throw error
+    }
+  }
+
+  // Import inventory items from Excel
+  const handleImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!canManageImport) {
+      toast.error('You do not have permission to import inventory items')
+      event.target.value = ''
+      return
+    }
+
+    setIsImporting(true)
+    try {
+      const fileData = await file.arrayBuffer()
+      const workbook = XLSX.read(fileData)
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const jsonData = XLSX.utils.sheet_to_json(sheet) as Record<string, any>[]
+
+      if (jsonData.length === 0) {
+        toast.error('No data found in the file')
+        return
+      }
+
+      // Helper function to safely parse numbers
+      const parseNumber = (value: any): number | null => {
+        if (value === null || value === undefined || value === '') return null
+        if (typeof value === 'string') {
+          const cleaned = value.replace(/,/g, '').trim()
+          if (cleaned === '') return null
+          const num = parseFloat(cleaned)
+          return isNaN(num) ? null : num
+        }
+        const num = Number(value)
+        return isNaN(num) ? null : num
+      }
+
+      // Process imported data and collect validation errors
+      const validationErrors: string[] = []
+      const itemsToImport = jsonData.map((row, index) => {
+        const itemCode = row['Item Code']?.toString().trim() || ''
+        const name = row['Name']?.toString().trim() || ''
+
+        if (!name) {
+          validationErrors.push(`Row ${index + 2}: Name is required`)
+          return null // Return null for invalid rows
+        }
+
+        return {
+          itemCode, // Will be checked and regenerated if needed
+          name,
+          description: row['Description']?.toString().trim() || null,
+          category: row['Category']?.toString().trim() || null,
+          unit: row['Unit']?.toString().trim() || null,
+          currentStock: parseNumber(row['Current Stock']) || 0,
+          minStockLevel: parseNumber(row['Min Stock Level']),
+          maxStockLevel: parseNumber(row['Max Stock Level']),
+          unitCost: parseNumber(row['Unit Cost']),
+          location: row['Location']?.toString().trim() || null,
+          supplier: row['Supplier']?.toString().trim() || null,
+          brand: row['Brand']?.toString().trim() || null,
+          model: row['Model']?.toString().trim() || null,
+          sku: row['SKU']?.toString().trim() || null,
+          barcode: row['Barcode']?.toString().trim() || null,
+          remarks: row['Remarks']?.toString().trim() || null,
+        }
+      }).filter((item): item is NonNullable<typeof item> => item !== null) // Filter out null values
+
+      // If there are validation errors, show them and stop import
+      if (validationErrors.length > 0) {
+        const errorMessage = validationErrors.length === 1 
+          ? `${validationErrors[0]}. Please check the sample template for the correct format.`
+          : `${validationErrors.length} validation errors found:\n${validationErrors.slice(0, 5).join('\n')}${validationErrors.length > 5 ? `\n... and ${validationErrors.length - 5} more` : ''}\n\nPlease check the sample template for the correct format.`
+        toast.error(errorMessage)
+        return
+      }
+
+      // Import items via API
+      let successCount = 0
+      let skippedCount = 0
+      let errorCount = 0
+
+      for (const item of itemsToImport) {
+        try {
+          let finalItemCode = item.itemCode
+
+          // If item code is provided, check if it exists (including soft-deleted)
+          if (finalItemCode) {
+            const exists = await checkItemCodeExists(finalItemCode)
+            if (exists) {
+              // Skip this item if code already exists (even if soft-deleted)
+              skippedCount++
+              continue
+            }
+          } else {
+            // If no item code provided, generate one
+            finalItemCode = await generateNewItemCode()
+          }
+
+          // Create item with final item code
+          await createInventoryItem({
+            ...item,
+            itemCode: finalItemCode,
+          })
+          successCount++
+        } catch (error) {
+          // Don't log validation or format errors to console
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          // Only count as error if it's not an "already exists" error (which is handled as skipped)
+          if (!errorMessage.includes('already exists')) {
+            errorCount++
+          }
+        }
+      }
+
+      // Refresh the inventory list
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
+
+      let message = `Successfully imported ${successCount} items`
+      if (skippedCount > 0) {
+        message += `. ${skippedCount} item(s) skipped (item code already exists).`
+      }
+      
+      if (errorCount === 0) {
+        toast.success(message)
+      } else {
+        toast.warning(`${message} ${errorCount} item(s) failed to import.`)
+      }
+    } catch (error) {
+      // Don't log to console, just show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to import inventory items'
+      toast.error(errorMessage)
+    } finally {
+      setIsImporting(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }, [canManageImport, queryClient])
+
   const columns = useMemo(
-    () => createColumns(handleEdit, handleDelete),
-    [handleEdit, handleDelete]
+    () => createColumns(handleEdit, handleDelete, handleAddTransaction, handleViewTransactions),
+    [handleEdit, handleDelete, handleAddTransaction, handleViewTransactions]
   )
 
   const items = useMemo(() => data?.items || [], [data?.items])
@@ -522,10 +1482,47 @@ function InventoryPageContent() {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     onSortingChange: setSorting,
+    onColumnVisibilityChange: setColumnVisibility,
     state: {
       sorting,
+      columnVisibility,
     },
   })
+
+  // Update toggleColumn to use table columns
+  const toggleColumn = useCallback((columnKey: string) => {
+    // Don't allow toggling Actions column (always visible)
+    if (columnKey === 'actions') {
+      return
+    }
+    
+    if (columnKey === 'select-all') {
+      const newVisibility: VisibilityState = {}
+      ALL_COLUMNS.forEach(col => {
+        // Skip Actions as it's always visible
+        if (col.key && col.key !== 'actions') {
+          newVisibility[col.key] = true
+        }
+      })
+      setColumnVisibility(prev => ({ ...prev, ...newVisibility }))
+      setShouldCloseSelect(true)
+      return
+    }
+    if (columnKey === 'deselect-all') {
+      const newVisibility: VisibilityState = {}
+      ALL_COLUMNS.forEach(col => {
+        // Skip Actions as it's always visible
+        if (col.key && col.key !== 'actions') {
+          newVisibility[col.key] = false
+        }
+      })
+      setColumnVisibility(prev => ({ ...prev, ...newVisibility }))
+      setShouldCloseSelect(true)
+      return
+    }
+    table.getColumn(columnKey)?.toggleVisibility()
+    setShouldCloseSelect(false)
+  }, [table])
 
   if (error) {
     return (
@@ -548,17 +1545,94 @@ function InventoryPageContent() {
       transition={{ duration: 0.5 }}
       className="space-y-6 max-h-screen"
     >
-      <div>
-        <h1 className="text-3xl font-bold">Inventory</h1>
-        <p className="text-muted-foreground">
-          Manage stock-type items (consumables, spare parts)
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Inventory</h1>
+          <p className="text-muted-foreground">
+            Manage stock-type items (consumables, spare parts)
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button 
+            onClick={handleAdd}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Item
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={!data?.items || data.items.length === 0}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => handleExportClick('excel')} disabled={!data?.items || data.items.length === 0}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportClick('pdf')} disabled={!data?.items || data.items.length === 0}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    PDF
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem onClick={handleDownloadTemplate}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Download Template
+              </DropdownMenuItem>
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => {
+                    if (!canManageImport) {
+                      toast.error('You do not have permission to import inventory items')
+                      return
+                    }
+                    fileInputRef.current?.click()
+                  }}
+                  disabled={isImporting}
+                >
+                  {isImporting ? (
+                    <>
+                      <Spinner className="mr-2 h-4 w-4" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Import from Excel
+                    </>
+                  )}
+                </DropdownMenuItem>
+              </>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push('/inventory/trash')}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Recently Deleted
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={handleImport}
+            className="hidden"
+          />
+        </div>
       </div>
 
       <Card className="relative flex flex-col flex-1 min-h-0 pb-0 gap-0">
         <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-center w-full md:flex-1 md:max-w-md border rounded-md overflow-hidden">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            {/* Search - always on top, full width on mobile/tablet, constrained on lg */}
+            <div className="flex items-center w-full lg:flex-1 lg:max-w-md border rounded-md overflow-hidden">
               <div className="relative flex-1">
                 {searchInput ? (
                   <button
@@ -582,53 +1656,95 @@ function InventoryPageContent() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Select 
-                value={categoryFilter} 
-                onValueChange={(value) => updateURL({ category: value, page: 1 })}
-              >
-                <SelectTrigger className="w-full sm:w-[180px] h-8">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Consumables">Consumables</SelectItem>
-                  <SelectItem value="Spare Parts">Spare Parts</SelectItem>
-                  <SelectItem value="Supplies">Supplies</SelectItem>
-                  <SelectItem value="Tools">Tools</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant={lowStockFilter ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => updateURL({ lowStock: !lowStockFilter, page: 1 })}
-                className="h-8"
-              >
-                <AlertTriangle className="mr-2 h-4 w-4" />
-                Low Stock
-              </Button>
-              {canEdit && (
-                <Button 
-                  onClick={handleAdd}
-                  size='sm'
-                  className="flex-1 md:flex-initial h-8"
+            {/* Filters and buttons - wrap on md, single line on lg */}
+            <div className="flex flex-col sm:flex-row sm:flex-wrap md:justify-between lg:flex-nowrap items-stretch sm:items-center gap-2">
+              {/* First row on sm: Category + Low Stock */}
+              <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                <Select 
+                  value={categoryFilter} 
+                  onValueChange={(value) => updateURL({ category: value, page: 1 })}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Item
+                  <SelectTrigger className="w-full sm:w-[180px] h-8" size='sm'>
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="Consumables">Consumables</SelectItem>
+                    <SelectItem value="Spare Parts">Spare Parts</SelectItem>
+                    <SelectItem value="Supplies">Supplies</SelectItem>
+                    <SelectItem value="Tools">Tools</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant={lowStockFilter ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => updateURL({ lowStock: !lowStockFilter, page: 1 })}
+                  className="h-8 flex-1 sm:flex-initial"
+                >
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                  Low Stock
                 </Button>
-              )}
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  setIsManualRefresh(true)
-                  queryClient.invalidateQueries({ queryKey: ['inventory'] })
-                }}
-                className="h-8 w-8"
-                title="Refresh table"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
+              </div>
+              {/* Second row on sm: Column selection + Refresh */}
+              <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                <Select 
+                  open={isSelectOpen} 
+                  onOpenChange={handleSelectOpenChange}
+                  value=""
+                  onValueChange={(value) => {
+                    toggleColumn(value)
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-[200px] h-8" size='sm'>
+                    <span className="flex-1 text-left truncate">
+                      {visibleColumns.length > 0 
+                        ? `${visibleColumns.length} column${visibleColumns.length !== 1 ? 's' : ''} selected`
+                        : 'Select columns'
+                      }
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      value={allSelected ? 'deselect-all' : 'select-all'}
+                      className="font-semibold border-b"
+                    >
+                      {allSelected ? 'Deselect All' : 'Select All'}
+                    </SelectItem>
+                    {ALL_COLUMNS.map((column) => {
+                      const isAlwaysVisible = column.key === 'actions'
+                      const isVisible = visibleColumns.includes(column.key)
+                      
+                      return (
+                        <SelectItem
+                          key={column.key}
+                          value={column.key}
+                          disabled={isAlwaysVisible}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Checkbox checked={isVisible} disabled={isAlwaysVisible} className={isAlwaysVisible ? 'opacity-50' : ''} />
+                            <span>
+                              {column.label}
+                              {isAlwaysVisible && ' (Always visible)'}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    setIsManualRefresh(true)
+                    queryClient.invalidateQueries({ queryKey: ['inventory'] })
+                  }}
+                  className="h-8 w-8 shrink-0"
+                  title="Refresh table"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -814,260 +1930,26 @@ function InventoryPageContent() {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog
+      <InventoryItemDialog
         open={isAddDialogOpen || isEditDialogOpen}
         onOpenChange={(open) => {
           if (!open) {
             setIsAddDialogOpen(false)
             setIsEditDialogOpen(false)
-            setFormData({})
             setSelectedItem(null)
           }
         }}
-      >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {isEditDialogOpen ? 'Edit Inventory Item' : 'Add Inventory Item'}
-            </DialogTitle>
-            <DialogDescription>
-              {isEditDialogOpen
-                ? 'Update inventory item details'
-                : 'Create a new inventory item'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="itemCode">Item Code *</Label>
-                <Input
-                  id="itemCode"
-                  value={formData.itemCode || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, itemCode: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Input
-                id="description"
-                value={formData.description || ''}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="category">Category</Label>
-                <Select
-                  value={formData.category || undefined}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, category: value || null })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Consumables">Consumables</SelectItem>
-                    <SelectItem value="Spare Parts">Spare Parts</SelectItem>
-                    <SelectItem value="Supplies">Supplies</SelectItem>
-                    <SelectItem value="Tools">Tools</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="unit">Unit</Label>
-                <Input
-                  id="unit"
-                  value={formData.unit || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, unit: e.target.value })
-                  }
-                  placeholder="pcs, boxes, liters, etc."
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="currentStock">Current Stock</Label>
-                <Input
-                  id="currentStock"
-                  type="number"
-                  value={formData.currentStock || ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      currentStock: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="minStockLevel">Min Stock Level</Label>
-                <Input
-                  id="minStockLevel"
-                  type="number"
-                  value={formData.minStockLevel || ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      minStockLevel: parseFloat(e.target.value) || null,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="maxStockLevel">Max Stock Level</Label>
-                <Input
-                  id="maxStockLevel"
-                  type="number"
-                  value={formData.maxStockLevel || ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      maxStockLevel: parseFloat(e.target.value) || null,
-                    })
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="unitCost">Unit Cost</Label>
-                <Input
-                  id="unitCost"
-                  type="number"
-                  step="0.01"
-                  value={formData.unitCost || ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      unitCost: parseFloat(e.target.value) || null,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={formData.location || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, location: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="supplier">Supplier</Label>
-                <Input
-                  id="supplier"
-                  value={formData.supplier || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, supplier: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="brand">Brand</Label>
-                <Input
-                  id="brand"
-                  value={formData.brand || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, brand: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="model">Model</Label>
-                <Input
-                  id="model"
-                  value={formData.model || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, model: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="sku">SKU</Label>
-                <Input
-                  id="sku"
-                  value={formData.sku || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, sku: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="barcode">Barcode</Label>
-              <Input
-                id="barcode"
-                value={formData.barcode || ''}
-                onChange={(e) =>
-                  setFormData({ ...formData, barcode: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <Label htmlFor="remarks">Remarks</Label>
-              <Input
-                id="remarks"
-                value={formData.remarks || ''}
-                onChange={(e) =>
-                  setFormData({ ...formData, remarks: e.target.value })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAddDialogOpen(false)
-                setIsEditDialogOpen(false)
-                setFormData({})
-                setSelectedItem(null)
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={
-                createMutation.isPending ||
-                updateMutation.isPending ||
-                !formData.itemCode ||
-                !formData.name
-              }
-            >
-              {createMutation.isPending || updateMutation.isPending ? (
-                <Spinner className="mr-2 h-4 w-4" />
-              ) : null}
-              {isEditDialogOpen ? 'Update' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onSave={(data) => {
+          if (isEditDialogOpen && selectedItem) {
+            updateMutation.mutate({ id: selectedItem.id, data })
+          } else {
+            createMutation.mutate(data)
+          }
+        }}
+        item={selectedItem as InventoryItemType | null}
+        isEdit={isEditDialogOpen}
+        isLoading={createMutation.isPending || updateMutation.isPending}
+      />
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
@@ -1080,6 +1962,62 @@ function InventoryPageContent() {
         }}
         itemName={selectedItem?.name || ''}
         isLoading={deleteMutation.isPending}
+      />
+
+      {/* Add Transaction Dialog */}
+      <InventoryTransactionDialog
+        open={isTransactionDialogOpen}
+        onOpenChange={setIsTransactionDialogOpen}
+        onSubmit={(data) => {
+          if (selectedItem) {
+            createTransactionMutation.mutate({ itemId: selectedItem.id, data })
+          }
+        }}
+        item={selectedItem ? {
+          id: selectedItem.id,
+          name: selectedItem.name,
+          currentStock: selectedItem.currentStock,
+          unit: selectedItem.unit,
+          unitCost: selectedItem.unitCost,
+        } : null}
+        isLoading={createTransactionMutation.isPending}
+      />
+
+      {/* Transaction History Dialog */}
+      <InventoryTransactionHistoryDialog
+        open={isHistoryDialogOpen}
+        onOpenChange={setIsHistoryDialogOpen}
+        item={selectedItem ? {
+          id: selectedItem.id,
+          name: selectedItem.name,
+          currentStock: selectedItem.currentStock,
+          unit: selectedItem.unit,
+        } : null}
+        transactions={transactionHistory?.transactions}
+        pagination={transactionHistory?.pagination}
+        isLoading={isLoadingHistory}
+        onPageChange={(page) => setTransactionHistoryPage(page)}
+      />
+
+      {/* Export Fields Dialog */}
+      <ExportFieldsDialog
+        open={isExportDialogOpen}
+        onOpenChange={setIsExportDialogOpen}
+        fields={exportFields}
+        selectedFields={selectedExportFields}
+        onFieldToggle={handleExportFieldToggle}
+        onSelectAll={handleSelectAllExportFields}
+        onDeselectAll={handleDeselectAllExportFields}
+        onExport={handleExport}
+        title={`Select Fields to Export (${exportFormat.toUpperCase()})`}
+        description="Choose which fields to include in your export file"
+        exportButtonLabel={`Export to ${exportFormat.toUpperCase()}`}
+        isExporting={isExporting}
+        summaryFields={summaryFields}
+        selectedSummaryFields={selectedSummaryFields}
+        onSummaryFieldToggle={handleSummaryFieldToggle}
+        onSelectAllSummary={handleSelectAllSummaryFields}
+        onDeselectAllSummary={handleDeselectAllSummaryFields}
       />
     </motion.div>
   )

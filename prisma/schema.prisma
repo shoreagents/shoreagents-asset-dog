@@ -435,6 +435,7 @@ model AssetUser {
   canManageAccountabilityForms Boolean @map("can_manage_accountability_forms") @default(false)
   canViewAccountabilityForms Boolean   @map("can_view_accountability_forms") @default(true)
   canManageReports           Boolean   @map("can_manage_reports") @default(false)
+  canManageInventory         Boolean   @map("can_manage_inventory") @default(false)
   
   isActive          Boolean   @map("is_active") @default(true)
   isApproved        Boolean   @map("is_approved") @default(false)
@@ -612,6 +613,9 @@ model InventoryTransaction {
   notes             String?  @map("notes") @db.Text
   actionBy          String   @map("action_by") @db.VarChar(255)
   transactionDate   DateTime @default(now()) @map("transaction_date")
+  relatedTransactionId String? @map("related_transaction_id") // Links TRANSFER transactions (OUT -> IN)
+  relatedTransaction InventoryTransaction? @relation("TransferTransactions", fields: [relatedTransactionId], references: [id], onDelete: SetNull)
+  transferTransactions InventoryTransaction[] @relation("TransferTransactions")
   
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -619,6 +623,7 @@ model InventoryTransaction {
   @@index([inventoryItemId])
   @@index([transactionType])
   @@index([transactionDate])
+  @@index([relatedTransactionId])
   @@map("inventory_transactions")
 }
 

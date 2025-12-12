@@ -30,6 +30,10 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/cron/cleanup-deleted-inventory",
+      "schedule": "0 2 * * *"
+    },
+    {
       "path": "/api/cron/send-scheduled-reports",
       "schedule": "0 2 * * *"
     }

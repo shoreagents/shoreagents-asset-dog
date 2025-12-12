@@ -42,6 +42,7 @@ export interface UserPermissions {
   canManageAccountabilityForms: boolean
   canViewAccountabilityForms: boolean
   canManageReports: boolean
+  canManageInventory: boolean
 }
 
 export interface UserData {

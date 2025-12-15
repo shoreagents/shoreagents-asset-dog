@@ -80,6 +80,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { HeaderGroup, Header } from '@tanstack/react-table'
 import { useMobileDock } from '@/components/mobile-dock-provider'
+import { useMobilePagination } from '@/components/mobile-pagination-provider'
 import { useIsMobile } from '@/hooks/use-mobile'
 
 interface InventoryItem {
@@ -259,7 +260,7 @@ const createColumns = (
         ) : column.getIsSorted() === 'desc' ? (
           <ArrowDown className="ml-2 h-4 w-4" />
         ) : (
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+        <ArrowUpDown className="ml-2 h-4 w-4" />
         )}
       </Button>
     ),
@@ -282,7 +283,7 @@ const createColumns = (
         ) : column.getIsSorted() === 'desc' ? (
           <ArrowDown className="ml-2 h-4 w-4" />
         ) : (
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+        <ArrowUpDown className="ml-2 h-4 w-4" />
         )}
       </Button>
     ),
@@ -323,7 +324,7 @@ const createColumns = (
         ) : column.getIsSorted() === 'desc' ? (
           <ArrowDown className="ml-2 h-4 w-4" />
         ) : (
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+        <ArrowUpDown className="ml-2 h-4 w-4" />
         )}
       </Button>
     ),
@@ -685,6 +686,7 @@ function InventoryPageContent() {
   const { hasPermission } = usePermissions()
   const isMobile = useIsMobile()
   const { setDockContent } = useMobileDock()
+  const { setPaginationContent } = useMobilePagination()
   
   // Get page, pageSize, and filters from URL
   const page = parseInt(searchParams.get('page') || '1', 10)
@@ -908,13 +910,13 @@ function InventoryPageContent() {
     setSearchInput(searchQuery)
   }, [searchQuery])
 
-  const handlePageSizeChange = (newPageSize: string) => {
+  const handlePageSizeChange = useCallback((newPageSize: string) => {
     updateURL({ pageSize: parseInt(newPageSize), page: 1 })
-  }
+  }, [updateURL])
 
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = useCallback((newPage: number) => {
     updateURL({ page: newPage })
-  }
+  }, [updateURL])
 
   // Debounce search input
   useEffect(() => {
@@ -1821,6 +1823,79 @@ function InventoryPageContent() {
     }
   }, [isMobile, setDockContent, handleAdd, handleExportClick, handleDownloadTemplate, canManageImport, isImporting, data?.items, router, fileInputRef])
 
+  // Set mobile pagination content
+  useEffect(() => {
+    if (isMobile) {
+      setPaginationContent(
+        <>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (pagination?.hasPreviousPage) {
+                  handlePageChange(page - 1)
+                }
+              }}
+              disabled={!pagination?.hasPreviousPage || isLoading}
+              className="h-8 px-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">Page</span>
+              <div className="px-1.5 py-1 rounded-md bg-primary/10 text-primary font-medium text-xs">
+                {isLoading ? '...' : (pagination?.page || page)}
+              </div>
+              <span className="text-muted-foreground">of</span>
+              <span className="text-muted-foreground">{isLoading ? '...' : (pagination?.totalPages || 1)}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (pagination?.hasNextPage) {
+                  handlePageChange(page + 1)
+                }
+              }}
+              disabled={!pagination?.hasNextPage || isLoading}
+              className="h-8 px-2"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading}>
+              <SelectTrigger className="h-8 w-auto min-w-[90px] text-xs border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="25">25 rows</SelectItem>
+                <SelectItem value="50">50 rows</SelectItem>
+                <SelectItem value="100">100 rows</SelectItem>
+                <SelectItem value="200">200 rows</SelectItem>
+                <SelectItem value="500">500 rows</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
+              {isLoading ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <span>{pagination?.total || 0}</span>
+              )}
+            </div>
+          </div>
+        </>
+      )
+    } else {
+      setPaginationContent(null)
+    }
+    
+    return () => {
+      setPaginationContent(null)
+    }
+  }, [isMobile, setPaginationContent, pagination, page, pageSize, isLoading, handlePageChange, handlePageSizeChange])
+
   if (error) {
     return (
       <div className="space-y-6 p-6">
@@ -2047,11 +2122,11 @@ function InventoryPageContent() {
         </CardHeader>
         <CardContent className="flex-1 px-0 relative">
           {isFetching && data && (
-            <div className="absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+            <div className={cn("absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center", isMobile && "right-0 rounded-b-2xl")}>
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
-          <div className="h-140 pt-8">
+          <div className={cn("h-140 pt-8", isMobile && "h-128")}>
             {isLoading && !data ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
@@ -2067,10 +2142,10 @@ function InventoryPageContent() {
               </div>
             ) : (
               <div className="min-w-full">
-                <ScrollArea className='h-132 relative'>
+                <ScrollArea className={cn('h-132 relative', isMobile && "h-120")}>
                 <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
                 <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
-                <Table className='border-b'>
+                <Table>
                   <TableHeader className="sticky -top-1 z-20 bg-card [&_tr]:border-b-0 -mr-1.5">
                     {table.getHeaderGroups().map((headerGroup: HeaderGroup<InventoryItem>) => (
                       <TableRow key={headerGroup.id} className="group hover:bg-muted/50 relative border-b-0 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-[1.5px] after:h-px after:bg-border after:z-30">
@@ -2122,7 +2197,7 @@ function InventoryPageContent() {
                                 <TableCell 
                                   key={cell.id}
                                   className={cn(
-                                    isActionsColumn && "sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 "
+                                    isActionsColumn && "sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 rounded-br-2xl",
                                   )}
                                 >
                                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -2151,7 +2226,7 @@ function InventoryPageContent() {
         </CardContent>
         
         {/* Pagination Bar - Fixed at Bottom */}
-        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-lg">
+        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl hidden md:block">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
             {/* Left Side - Navigation */}
             <div className="flex items-center justify-center sm:justify-start gap-2">

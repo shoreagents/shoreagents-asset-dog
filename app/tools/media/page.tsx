@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef, useTransition, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, useTransition, Suspense, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useMobileDock } from '@/components/mobile-dock-provider'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
@@ -49,6 +50,7 @@ import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import { ImagePreviewDialog } from '@/components/dialogs/image-preview-dialog'
+import { cn } from '@/lib/utils'
 
 interface MediaImage {
   id: string
@@ -88,6 +90,7 @@ function MediaPageContent() {
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const canManageMedia = hasPermission('canManageMedia')
   const isMobile = useIsMobile()
+  const { setDockContent } = useMobileDock()
 
   // Initialize activeTab from URL params, default to 'media'
   const tabFromUrl = searchParams.get('tab') as 'media' | 'documents' | null
@@ -717,24 +720,18 @@ function MediaPageContent() {
     }
   }
 
-  // Handle select/deselect all
-  const handleToggleSelectAll = () => {
-    if (selectedImages.size === images.length) {
-      setSelectedImages(new Set())
-    } else {
-      setSelectedImages(new Set(images.map(img => img.id)))
-    }
-  }
 
   // Toggle selection mode
-  const handleToggleSelectionMode = () => {
-    setIsSelectionMode(prev => !prev)
-    if (isSelectionMode) {
-      // Clear selections when exiting selection mode
-      setSelectedImages(new Set())
-      setSelectedDocuments(new Set())
-    }
-  }
+  const handleToggleSelectionMode = useCallback(() => {
+    setIsSelectionMode(prev => {
+      if (prev) {
+        // Clear selections when exiting selection mode
+        setSelectedImages(new Set())
+        setSelectedDocuments(new Set())
+      }
+      return !prev
+    })
+  }, [])
 
   // Bulk delete mutation
   const bulkDeleteMutation = useMutation({
@@ -942,14 +939,6 @@ function MediaPageContent() {
     }
   }
 
-  const handleToggleSelectAllDocuments = () => {
-    if (selectedDocuments.size === documents.length) {
-      setSelectedDocuments(new Set())
-    } else {
-      setSelectedDocuments(new Set(documents.map(doc => doc.id)))
-    }
-  }
-
   const handleConfirmDelete = () => {
     if (activeTab === 'media' && imageToDelete) {
       deleteImageMutation.mutate(imageToDelete)
@@ -965,6 +954,162 @@ function MediaPageContent() {
   const documents = useMemo(() => documentsData?.documents || [], [documentsData?.documents])
   const pagination = activeTab === 'media' ? data?.pagination : documentsData?.pagination
   const storage = activeTab === 'media' ? data?.storage : documentsData?.storage
+
+  // Handle select/deselect all - defined after images/documents are available
+  const handleToggleSelectAll = useCallback(() => {
+    if (selectedImages.size === images.length) {
+      // If all are selected, deselect all and exit selection mode (cancel)
+      setSelectedImages(new Set())
+      setIsSelectionMode(false)
+    } else {
+      setSelectedImages(new Set(images.map(img => img.id)))
+    }
+  }, [selectedImages.size, images])
+
+  const handleToggleSelectAllDocuments = useCallback(() => {
+    if (selectedDocuments.size === documents.length) {
+      // If all are selected, deselect all and exit selection mode (cancel)
+      setSelectedDocuments(new Set())
+      setIsSelectionMode(false)
+    } else {
+      setSelectedDocuments(new Set(documents.map(doc => doc.id)))
+    }
+  }, [selectedDocuments.size, documents])
+
+  // Set mobile dock content - defined after images/documents and handlers are available
+  useEffect(() => {
+    if (isMobile) {
+      if (isSelectionMode) {
+        // Selection mode: Select All (left) + Delete icon (right, only when items selected)
+        const hasSelectedItems = activeTab === 'media' 
+          ? selectedImages.size > 0 
+          : selectedDocuments.size > 0
+        
+        setDockContent(
+          <>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={activeTab === 'media' ? handleToggleSelectAll : handleToggleSelectAllDocuments}
+              className="rounded-full"
+            >
+              {activeTab === 'media' 
+                ? (selectedImages.size === images.length && images.length > 0 ? 'Deselect All' : 'Select All')
+                : (selectedDocuments.size === documents.length && documents.length > 0 ? 'Deselect All' : 'Select All')
+              }
+            </Button>
+            {hasSelectedItems && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  if (!canManageMedia) {
+                    toast.error(`You do not have permission to delete ${activeTab === 'media' ? 'images' : 'documents'}`)
+                    return
+                  }
+                  setIsBulkDeleteDialogOpen(true)
+                }}
+                className="h-10 w-10 rounded-full"
+                title="Delete Selected"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </>
+        )
+      } else {
+        // Normal mode: Select (left) + 3 dots (right)
+        setDockContent(
+          <>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleToggleSelectionMode}
+              className="rounded-full"
+            >
+              Select
+            </Button>
+            {isMounted && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-10 w-10 rounded-full">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {/* Column selection for mobile */}
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Grid</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      <AnimatePresence>
+                        {[4, 5, 6, 7, 8, 9, 10].map((cols, index) => (
+                          <motion.div
+                            key={cols}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -10 }}
+                            transition={{ duration: 0.15, delay: index * 0.02 }}
+                          >
+                            <DropdownMenuItem
+                              onClick={() => setGridColumns(cols)}
+                              className={gridColumns === cols ? 'bg-accent' : ''}
+                            >
+                              {cols} Columns
+                            </DropdownMenuItem>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuSeparator />
+                  {activeTab === 'media' && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (!canManageMedia) {
+                          toast.error('You do not have permission to upload images')
+                          return
+                        }
+                        if (isUploading) {
+                          return
+                        }
+                        fileInputRef.current?.click()
+                      }}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? `Uploading... ${Math.round(uploadProgress)}%` : 'Upload Images'}
+                    </DropdownMenuItem>
+                  )}
+                  {activeTab === 'documents' && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (!canManageMedia) {
+                          toast.error('You do not have permission to upload documents')
+                          return
+                        }
+                        if (isUploading) {
+                          return
+                        }
+                        documentInputRef.current?.click()
+                      }}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? `Uploading... ${Math.round(uploadProgress)}%` : 'Upload Documents'}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </>
+        )
+      }
+    } else {
+      setDockContent(null)
+    }
+    
+    return () => {
+      setDockContent(null)
+    }
+  }, [isMobile, setDockContent, isSelectionMode, isMounted, activeTab, canManageMedia, isUploading, uploadProgress, gridColumns, handleToggleSelectionMode, handleToggleSelectAll, handleToggleSelectAllDocuments, selectedImages.size, selectedDocuments.size, images.length, documents.length, setIsBulkDeleteDialogOpen])
 
   // Calculate storage usage percentage
   const storageUsed = storage?.used || 0
@@ -1279,169 +1424,9 @@ function MediaPageContent() {
                   <RotateCw className={`h-4 w-4 mr-2 ${isLoadingData ? 'animate-spin' : ''}`} />
                   Reload
                 </Button>
-                {isMounted && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {/* Column selection for mobile */}
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger>Grid</DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent>
-                        <AnimatePresence>
-                          {[4, 5, 6, 7, 8, 9, 10].map((cols, index) => (
-                            <motion.div
-                              key={cols}
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: -10 }}
-                              transition={{ duration: 0.15, delay: index * 0.02 }}
-                            >
-                        <DropdownMenuItem
-                                onClick={() => setGridColumns(cols)}
-                                className={gridColumns === cols ? 'bg-accent' : ''}
-                        >
-                                {cols} Columns
-                        </DropdownMenuItem>
-                            </motion.div>
-                          ))}
-                        </AnimatePresence>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuSeparator />
-                    {activeTab === 'media' && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        if (!canManageMedia) {
-                          toast.error('You do not have permission to upload images')
-                          return
-                        }
-                        if (isUploading) {
-                          return
-                        }
-                        fileInputRef.current?.click()
-                      }}
-                      disabled={isUploading}
-                    >
-                      {isUploading ? `Uploading... ${Math.round(uploadProgress)}%` : 'Upload Images'}
-                    </DropdownMenuItem>
-                    )}
-                    {activeTab === 'documents' && (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          if (!canManageMedia) {
-                            toast.error('You do not have permission to upload documents')
-                            return
-                          }
-                          if (isUploading) {
-                            return
-                          }
-                          documentInputRef.current?.click()
-                        }}
-                        disabled={isUploading}
-                      >
-                        {isUploading ? `Uploading... ${Math.round(uploadProgress)}%` : 'Upload Documents'}
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                )}
               </div>
             )}
           </div>
-          {/* Mobile: Selection controls when selection mode is active */}
-          {isMobile && isSelectionMode && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {activeTab === 'media' && (
-                <div className="flex items-center gap-2 px-2">
-                  <Checkbox
-                    id="select-all-media-mobile"
-                    checked={selectedImages.size === images.length && images.length > 0}
-                    onCheckedChange={handleToggleSelectAll}
-                    disabled={images.length === 0}
-                    title={selectedImages.size === images.length && images.length > 0
-                      ? 'Deselect All'
-                      : 'Select All'}
-                    className='cursor-pointer'
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    {selectedImages.size} selected
-                  </span>
-                </div>
-              )}
-              {activeTab === 'documents' && (
-                <div className="flex items-center gap-2 px-2">
-                  <Checkbox
-                    id="select-all-documents-mobile"
-                    checked={selectedDocuments.size === documents.length && documents.length > 0}
-                    onCheckedChange={handleToggleSelectAllDocuments}
-                    disabled={documents.length === 0}
-                    title={selectedDocuments.size === documents.length && documents.length > 0
-                      ? 'Deselect All'
-                      : 'Select All'}
-                    className='cursor-pointer'
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    {selectedDocuments.size} selected
-                  </span>
-                </div>
-              )}
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleToggleSelectionMode}
-              >
-                Cancel
-              </Button>
-              {activeTab === 'media' && selectedImages.size > 0 && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    if (!canManageMedia) {
-                      toast.error('You do not have permission to delete images')
-                      return
-                    }
-                    setIsBulkDeleteDialogOpen(true)
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete ({selectedImages.size})
-                </Button>
-              )}
-              {activeTab === 'documents' && selectedDocuments.size > 0 && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    if (!canManageMedia) {
-                      toast.error('You do not have permission to delete documents')
-                      return
-                    }
-                    setIsBulkDeleteDialogOpen(true)
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete ({selectedDocuments.size})
-                </Button>
-              )}
-            </div>
-          )}
-          {/* Mobile: Select button when selection mode is NOT active */}
-          {isMobile && !isSelectionMode && (
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleToggleSelectionMode}
-              >
-                Select
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Upload Progress */}
@@ -1796,7 +1781,7 @@ function MediaPageContent() {
                 </div>
                 {/* 3-dot menu - show Details for all users, Delete for all but with permission check */}
                 {!isSelectionMode && (
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <div className={cn("absolute top-2 right-2 transition-opacity z-10", isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                     {isMounted && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -2133,7 +2118,7 @@ function MediaPageContent() {
                 })()}
                 {/* 3-dot menu - show Details for all users, Delete for all but with permission check */}
                 {!isSelectionMode && (
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <div className={cn("absolute top-2 right-2 transition-opacity z-10", isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                     {isMounted && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -2327,25 +2312,25 @@ function MediaPageContent() {
       }}>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
-            <DialogTitle>{imageDetails ? 'Image Details' : 'Document Details'}</DialogTitle>
+            <DialogTitle className="text-white">{imageDetails ? 'Image Details' : 'Document Details'}</DialogTitle>
               </DialogHeader>
               {imageDetails && (
                 <div className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <div className="text-sm font-medium">File Name</div>
-                    <div className="text-sm text-muted-foreground break-all">
+                    <div className="text-sm font-medium text-white">File Name</div>
+                    <div className="text-sm text-white/90 break-all">
                       {imageDetails.fileName || 'N/A'}
                     </div>
                   </div>
                   
                   <div className="space-y-2">
-                    <div className="text-sm font-medium">URL</div>
-                    <div className="text-sm text-muted-foreground break-all">
+                    <div className="text-sm font-medium text-white">URL</div>
+                    <div className="text-sm text-blue-300 break-all">
                       <a
                         href={imageDetails.imageUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-primary hover:underline"
+                        className="text-blue-300 hover:text-blue-200 hover:underline"
                       >
                         {imageDetails.imageUrl}
                       </a>
@@ -2354,23 +2339,23 @@ function MediaPageContent() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <div className="text-sm font-medium">Type</div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm font-medium text-white">Type</div>
+                      <div className="text-sm text-white/90">
                         {imageDetails.imageType || 'Unknown'}
                       </div>
                     </div>
                     
                     <div className="space-y-2">
-                      <div className="text-sm font-medium">Size</div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm font-medium text-white">Size</div>
+                      <div className="text-sm text-white/90">
                         {formatFileSize(imageDetails.imageSize)}
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-sm font-medium">Created At</div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-sm font-medium text-white">Created At</div>
+                    <div className="text-sm text-white/90">
                       {imageDetails.createdAt
                         ? format(new Date(imageDetails.createdAt), 'PPp')
                         : 'Unknown'}
@@ -2378,7 +2363,7 @@ function MediaPageContent() {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-sm font-medium">
+                    <div className="text-sm font-medium text-white">
                       Linked Asset{imageDetails.linkedAssetTagIds && imageDetails.linkedAssetTagIds.length > 1 ? 's' : ''}
                     </div>
                     {imageDetails.linkedAssetTagIds && imageDetails.linkedAssetTagIds.length > 0 ? (
@@ -2388,7 +2373,7 @@ function MediaPageContent() {
                             key={assetInfo.assetTagId}
                             className="flex items-center gap-2 text-sm"
                           >
-                            <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Link2 className="h-3.5 w-3.5 text-blue-300" />
                             <button
                               onClick={() => {
                                 if (assetInfo.isDeleted) {
@@ -2398,18 +2383,18 @@ function MediaPageContent() {
                                 }
                                 setIsDetailsDialogOpen(false)
                               }}
-                              className="text-primary hover:underline cursor-pointer"
+                              className="text-blue-300 hover:text-blue-200 hover:underline cursor-pointer"
                             >
                               {assetInfo.assetTagId}
                             </button>
                             {assetInfo.isDeleted && (
-                              <span className="text-xs text-muted-foreground">(Archived)</span>
+                              <span className="text-xs text-white/70">(Archived)</span>
                             )}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-sm text-muted-foreground">Not linked to any asset</div>
+                      <div className="text-sm text-white/90">Not linked to any asset</div>
                     )}
                   </div>
                 </div>
@@ -2417,20 +2402,20 @@ function MediaPageContent() {
           {documentDetails && (
             <div className="space-y-4 mt-4">
               <div className="space-y-2">
-                <div className="text-sm font-medium">File Name</div>
-                <div className="text-sm text-muted-foreground break-all">
+                <div className="text-sm font-medium text-white">File Name</div>
+                <div className="text-sm text-white/90 break-all">
                   {documentDetails.fileName || 'N/A'}
                 </div>
               </div>
               
               <div className="space-y-2">
-                <div className="text-sm font-medium">URL</div>
-                <div className="text-sm text-muted-foreground break-all">
+                <div className="text-sm font-medium text-white">URL</div>
+                <div className="text-sm text-blue-300 break-all">
                   <a
                     href={documentDetails.documentUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline"
+                    className="text-blue-300 hover:text-blue-200 hover:underline"
                   >
                     {documentDetails.documentUrl}
                   </a>
@@ -2439,23 +2424,23 @@ function MediaPageContent() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <div className="text-sm font-medium">Type</div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm font-medium text-white">Type</div>
+                  <div className="text-sm text-white/90 truncate" title={documentDetails.mimeType || documentDetails.documentType || 'Unknown'}>
                     {documentDetails.mimeType || documentDetails.documentType || 'Unknown'}
                   </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <div className="text-sm font-medium">Size</div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm font-medium text-white">Size</div>
+                  <div className="text-sm text-white/90">
                     {formatFileSize(documentDetails.documentSize)}
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <div className="text-sm font-medium">Created At</div>
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm font-medium text-white">Created At</div>
+                <div className="text-sm text-white/90">
                   {documentDetails.createdAt
                     ? format(new Date(documentDetails.createdAt), 'PPp')
                     : 'Unknown'}
@@ -2463,7 +2448,7 @@ function MediaPageContent() {
               </div>
 
               <div className="space-y-2">
-                <div className="text-sm font-medium">
+                <div className="text-sm font-medium text-white">
                   Linked Asset{(() => {
                     // Filter out STANDALONE from linked assets
                     const realLinkedAssets = documentDetails.linkedAssetTagIds?.filter(id => id !== 'STANDALONE') || []
@@ -2483,7 +2468,7 @@ function MediaPageContent() {
                             key={assetInfo.assetTagId}
                             className="flex items-center gap-2 text-sm"
                           >
-                            <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Link2 className="h-3.5 w-3.5 text-blue-300" />
                             <button
                               onClick={() => {
                                 if (assetInfo.isDeleted) {
@@ -2493,12 +2478,12 @@ function MediaPageContent() {
                                 }
                                 setIsDetailsDialogOpen(false)
                               }}
-                              className="text-primary hover:underline cursor-pointer"
+                              className="text-blue-300 hover:text-blue-200 hover:underline cursor-pointer"
                             >
                               {assetInfo.assetTagId}
                             </button>
                             {assetInfo.isDeleted && (
-                              <span className="text-xs text-muted-foreground">(Archived)</span>
+                              <span className="text-xs text-white/70">(Archived)</span>
                             )}
                           </div>
                         ))}
@@ -2506,7 +2491,7 @@ function MediaPageContent() {
                     )
                   } else {
                     return (
-                      <div className="text-sm text-muted-foreground">Not linked to any asset</div>
+                      <div className="text-sm text-white/90">Not linked to any asset</div>
                     )
                   }
                 })()}

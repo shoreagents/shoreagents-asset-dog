@@ -48,6 +48,9 @@ import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { useMobileDock } from '@/components/mobile-dock-provider'
+import { useMobilePagination } from '@/components/mobile-pagination-provider'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface AssetEvent {
   id: string
@@ -398,6 +401,9 @@ function AssetEventsPageContent() {
   const searchParams = useSearchParams()
   const { isAdmin } = useUserProfile()
   const queryClient = useQueryClient()
+  const isMobile = useIsMobile()
+  const { setDockContent } = useMobileDock()
+  const { setPaginationContent } = useMobilePagination()
   
   const [sorting, setSorting] = useState<SortingState>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
@@ -501,13 +507,13 @@ function AssetEventsPageContent() {
     }
   }, [isFetching, isManualRefresh])
 
-  const handlePageSizeChange = (newPageSize: string) => {
+  const handlePageSizeChange = useCallback((newPageSize: string) => {
     updateURL({ pageSize: parseInt(newPageSize), page: 1 })
-  }
+  }, [updateURL])
 
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = useCallback((newPage: number) => {
     updateURL({ page: newPage })
-  }
+  }, [updateURL])
 
   // Debounce search input
   useEffect(() => {
@@ -629,6 +635,7 @@ function AssetEventsPageContent() {
       sorting,
       rowSelection,
     },
+    getRowId: (row) => row.id,
   })
 
   const selectedRows = table.getFilteredSelectedRowModel().rows
@@ -639,14 +646,127 @@ function AssetEventsPageContent() {
       toast.error('You do not have permission to delete events')
       return
     }
-    const selectedRows = table.getFilteredSelectedRowModel().rows
-    const selectedIds = selectedRows.map(row => row.original.id)
-    if (selectedIds.length === 0) {
-      toast.error('Please select at least one event to delete')
-      return
+    // If no items are selected, select all items first
+    if (selectedCount === 0) {
+      const allEventIds = logs.map((event: AssetEvent) => event.id)
+      setRowSelection(
+        allEventIds.reduce((acc: Record<string, boolean>, id: string) => ({ ...acc, [id]: true }), {})
+      )
     }
     setIsBulkDeleteDialogOpen(true)
-  }, [isAdmin, table])
+  }, [isAdmin, selectedCount, logs, setRowSelection])
+
+  const handleRefresh = useCallback(() => {
+    setIsManualRefresh(true)
+    queryClient.invalidateQueries({ queryKey: ['asset-events'] })
+  }, [queryClient])
+
+  // Set mobile dock content
+  useEffect(() => {
+    if (isMobile) {
+      setDockContent(
+        <>
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-full h-10 w-10"
+            onClick={handleRefresh}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <div className="flex-1" /> {/* Spacer to push delete button to the right */}
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-full h-10 w-10"
+            disabled={logs.length === 0}
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </>
+      )
+    } else {
+      setDockContent(null)
+    }
+    
+    return () => {
+      setDockContent(null)
+    }
+  }, [isMobile, setDockContent, handleRefresh, handleBulkDelete, logs.length])
+
+  // Set mobile pagination content
+  useEffect(() => {
+    if (isMobile && pagination && pagination.totalPages > 0) {
+      setPaginationContent(
+        <>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (pagination?.hasPreviousPage) {
+                  handlePageChange(page - 1)
+                }
+              }}
+              disabled={!pagination?.hasPreviousPage || isLoading}
+              className="h-8 px-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">Page</span>
+              <div className="px-1.5 py-1 rounded-md bg-primary/10 text-primary font-medium text-xs">
+                {isLoading ? '...' : (pagination?.page || page)}
+              </div>
+              <span className="text-muted-foreground">of</span>
+              <span className="text-muted-foreground">{isLoading ? '...' : (pagination?.totalPages || 1)}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (pagination?.hasNextPage) {
+                  handlePageChange(page + 1)
+                }
+              }}
+              disabled={!pagination?.hasNextPage || isLoading}
+              className="h-8 px-2"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading}>
+              <SelectTrigger className="h-8 w-auto min-w-[90px] text-xs border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="25">25 rows</SelectItem>
+                <SelectItem value="50">50 rows</SelectItem>
+                <SelectItem value="100">100 rows</SelectItem>
+                <SelectItem value="200">200 rows</SelectItem>
+                <SelectItem value="500">500 rows</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
+              {isLoading ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <span>{pagination?.total || 0}</span>
+              )}
+            </div>
+          </div>
+        </>
+      )
+    } else {
+      setPaginationContent(null)
+    }
+    
+    return () => {
+      setPaginationContent(null)
+    }
+  }, [isMobile, setPaginationContent, pagination, page, pageSize, isLoading, handlePageChange, handlePageSizeChange])
 
   return (
     <motion.div 
@@ -729,7 +849,7 @@ function AssetEventsPageContent() {
                   updateURL({ eventType: value, page: 1 })
                 }}
               >
-                <SelectTrigger className="flex-1 lg:w-[140px] h-8 min-w-0">
+                <SelectTrigger className="flex-1 lg:w-[140px] h-8 min-w-0" size='sm'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -748,7 +868,7 @@ function AssetEventsPageContent() {
                   updateURL({ field: value, page: 1 })
                 }}
               >
-                <SelectTrigger className="flex-1 lg:w-[140px] h-8 min-w-0">
+                <SelectTrigger className="flex-1 lg:w-[140px] h-8 min-w-0" size='sm'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -765,20 +885,17 @@ function AssetEventsPageContent() {
                   size="sm"
                   onClick={handleBulkDelete}
                   disabled={bulkDeleteMutation.isPending}
-                  className="flex-1 lg:flex-initial shrink-0"
+                  className="flex-1 lg:flex-initial shrink-0 hidden md:flex"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Selected ({selectedCount})
+                  Delete ({selectedCount})
                 </Button>
               )}
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => {
-                  setIsManualRefresh(true)
-                  queryClient.invalidateQueries({ queryKey: ['asset-events'] })
-                }}
-                className="h-8 w-8 shrink-0"
+                onClick={handleRefresh}
+                className="h-8 w-8 shrink-0 hidden lg:flex"
                 title="Refresh table"
               >
                 <RefreshCw className="h-4 w-4" />
@@ -789,29 +906,29 @@ function AssetEventsPageContent() {
 
         <CardContent className="flex-1 px-0 relative">
           {isFetching && data && logs.length > 0 && (
-            <div className="absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+            <div className={cn("absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center", isMobile && "right-0 rounded-b-2xl")}>
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
           {isLoading && !data ? (
-            <div className="h-140 pt-12 flex items-center justify-center">
+            <div className={cn("h-140 pt-12 flex items-center justify-center", isMobile && "h-136")}>
               <div className="flex flex-col items-center gap-3">
                 <Spinner className="h-8 w-8" />
                 <p className="text-sm text-muted-foreground">Loading...</p>
               </div>
             </div>
           ) : logs.length === 0 ? (
-            <div className="h-140 pt-12 text-center py-8 text-muted-foreground">
+            <div className={cn("h-140 pt-12 text-center py-8 text-muted-foreground", isMobile && "h-136")}>
               <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="font-medium">No events found</p>
               <p className="text-sm">Asset events will appear here</p>
             </div>
           ) : (
             <div className="min-w-full">
-              <ScrollArea className='h-140 relative'>
+              <ScrollArea className={cn('h-140 relative', isMobile && "h-136")}>
                 <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
                 <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
-                  <Table className='border-b'>
+                  <Table >
                     <TableHeader className="sticky -top-1 z-20 bg-card [&_tr]:border-b-0 -mr-2.5">
                       {table.getHeaderGroups().map((headerGroup: HeaderGroup<AssetEvent>) => (
                         <TableRow key={headerGroup.id} className="group hover:bg-muted/50 relative border-b-0 after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-[1.5px] after:h-px after:bg-border after:z-30">
@@ -862,7 +979,7 @@ function AssetEventsPageContent() {
                                   <TableCell 
                                     key={cell.id}
                                     className={cn(
-                                      isActionsColumn && "sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50",
+                                      isActionsColumn && "sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 rounded-br-2xl",
                                       isSelectColumn && "w-[50px]"
                                     )}
                                   >
@@ -891,7 +1008,7 @@ function AssetEventsPageContent() {
         </CardContent>
         
         {/* Pagination Bar - Fixed at Bottom */}
-        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl">
+        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl hidden md:block">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
             <div className="flex items-center justify-center sm:justify-start gap-2">
               <Button
@@ -978,7 +1095,13 @@ function AssetEventsPageContent() {
       {/* Bulk Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
         open={isBulkDeleteDialogOpen}
-        onOpenChange={setIsBulkDeleteDialogOpen}
+        onOpenChange={(newOpen) => {
+          setIsBulkDeleteDialogOpen(newOpen)
+          // Clear selection when dialog is closed (cancelled) and not currently deleting
+          if (!newOpen && !bulkDeleteMutation.isPending) {
+            setRowSelection({})
+          }
+        }}
         onConfirm={() => {
           const selectedRows = table.getFilteredSelectedRowModel().rows
           const selectedIds = selectedRows.map(row => row.original.id)

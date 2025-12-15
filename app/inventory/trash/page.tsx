@@ -811,59 +811,59 @@ function InventoryTrashPageContent() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-center w-full md:flex-1 md:max-w-md gap-2">
               <div className="flex items-center flex-1 border rounded-md overflow-hidden">
-                <Select
-                  value={searchType}
-                  onValueChange={(value: 'unified' | 'itemCode' | 'name' | 'category' | 'location' | 'supplier') => {
-                    setSearchType(value)
-                    updateURL({ searchType: value })
-                  }}
-                >
-                  <SelectTrigger className="w-[140px] h-8 rounded-none border-0 border-r focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none" size='sm'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unified">Unified Search</SelectItem>
-                    <SelectItem value="itemCode">Item Code</SelectItem>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="category">Category</SelectItem>
-                    <SelectItem value="location">Location</SelectItem>
-                    <SelectItem value="supplier">Supplier</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="relative flex-1">
-                  {searchInput ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchInput('')
-                         updateURL({ search: '' })
-                      }}
-                      className="absolute left-2 top-2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer z-10"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  ) : (
-                    <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
-                  )}
-                  <Input
-                    placeholder={
-                      searchType === 'unified'
-                        ? 'Search by item code, name, category, location...'
-                        : searchType === 'itemCode'
-                        ? 'Search by Item Code'
-                        : searchType === 'name'
-                        ? 'Search by Name'
-                        : searchType === 'category'
-                        ? 'Search by Category'
-                        : searchType === 'location'
-                        ? 'Search by Location'
-                        : 'Search by Supplier'
-                    }
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    className="pl-8 h-8 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
-                  />
-                </div>
+              <Select
+                value={searchType}
+                onValueChange={(value: 'unified' | 'itemCode' | 'name' | 'category' | 'location' | 'supplier') => {
+                  setSearchType(value)
+                  updateURL({ searchType: value })
+                }}
+              >
+                <SelectTrigger className={cn("w-[140px] h-8 rounded-none border-0 border-r focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none", isMobile && "w-[100px]")} size='sm'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unified">Unified Search</SelectItem>
+                  <SelectItem value="itemCode">Item Code</SelectItem>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="category">Category</SelectItem>
+                  <SelectItem value="location">Location</SelectItem>
+                  <SelectItem value="supplier">Supplier</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="relative flex-1">
+                {searchInput ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchInput('')
+                       updateURL({ search: '' })
+                    }}
+                    className="absolute left-2 top-2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer z-10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+                )}
+                <Input
+                  placeholder={
+                    searchType === 'unified'
+                      ? 'Search by item code, name, category, location...'
+                      : searchType === 'itemCode'
+                      ? 'Search by Item Code'
+                      : searchType === 'name'
+                      ? 'Search by Name'
+                      : searchType === 'category'
+                      ? 'Search by Category'
+                      : searchType === 'location'
+                      ? 'Search by Location'
+                      : 'Search by Supplier'
+                  }
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="pl-8 h-8 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                />
+              </div>
               </div>
               <Button
                 variant="outline"
@@ -950,7 +950,7 @@ function InventoryTrashPageContent() {
 
         <CardContent className="flex-1 px-0 relative">
           {isFetching && data && deletedItems.length > 0 && (
-            <div className="absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+            <div className={cn("absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center", isMobile && "right-0 rounded-b-2xl")}>
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
@@ -1028,7 +1028,7 @@ function InventoryTrashPageContent() {
                                 <TableCell 
                                   key={cell.id}
                                   className={cn(
-                                    isActionsColumn && "sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 "
+                                    isActionsColumn && "sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 rounded-br-2xl"
                                   )}
                                 >
                                   {flexRender(

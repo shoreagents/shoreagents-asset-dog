@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -40,10 +41,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { BulkDeleteDialog } from '@/components/dialogs/bulk-delete-dialog'
-import { History, ArrowLeft, ArrowRight, ArrowUpFromLine, ArrowDownToLine, Settings, Package, Trash2, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { History, ArrowLeft, ArrowRight, ArrowUpFromLine, ArrowDownToLine, Settings, Package, Trash2, MoreHorizontal, RefreshCw, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useMobileDock } from '@/components/mobile-dock-provider'
+import { useMobilePagination } from '@/components/mobile-pagination-provider'
 import { useIsMobile } from '@/hooks/use-mobile'
 
 export interface InventoryItem {
@@ -127,10 +129,13 @@ export default function InventoryTransactionHistoryPage() {
   const queryClient = useQueryClient()
   const isMobile = useIsMobile()
   const { setDockContent } = useMobileDock()
+  const { setPaginationContent } = useMobilePagination()
   const itemCode = params.itemCode as string
   const page = parseInt(searchParams.get('page') || '1', 10)
   const pageSize = parseInt(searchParams.get('pageSize') || '20', 10)
+  const transactionTypeFilter = searchParams.get('type') || 'all'
 
+  const [searchInput, setSearchInput] = useState('')
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -152,18 +157,18 @@ export default function InventoryTransactionHistoryPage() {
   })
 
 
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = useCallback((newPage: number) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', newPage.toString())
     router.push(`/inventory/${itemCode}/transaction-history?${params.toString()}`)
-  }
+  }, [searchParams, router, itemCode])
 
-  const handlePageSizeChange = (newPageSize: string) => {
+  const handlePageSizeChange = useCallback((newPageSize: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('pageSize', newPageSize)
     params.set('page', '1') // Reset to first page when changing page size
     router.push(`/inventory/${itemCode}/transaction-history?${params.toString()}`)
-  }
+  }, [searchParams, router, itemCode])
 
   const getTypeBadge = (type: string) => {
     switch (type) {
@@ -418,6 +423,78 @@ export default function InventoryTransactionHistoryPage() {
     }
   }, [isMobile, setDockContent, handleRefresh, handleBulkDeleteClick, transactions.length])
 
+  // Set mobile pagination content
+  useEffect(() => {
+    if (isMobile && pagination && pagination.totalPages > 0) {
+      setPaginationContent(
+        <>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (pagination?.hasPreviousPage) {
+                  handlePageChange(page - 1)
+                }
+              }}
+              disabled={!pagination?.hasPreviousPage || isLoading}
+              className="h-8 px-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">Page</span>
+              <div className="px-1.5 py-1 rounded-md bg-primary/10 text-primary font-medium text-xs">
+                {isLoading ? '...' : (pagination?.page || page)}
+              </div>
+              <span className="text-muted-foreground">of</span>
+              <span className="text-muted-foreground">{isLoading ? '...' : (pagination?.totalPages || 1)}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (pagination?.hasNextPage) {
+                  handlePageChange(page + 1)
+                }
+              }}
+              disabled={!pagination?.hasNextPage || isLoading}
+              className="h-8 px-2"
+            >
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading}>
+              <SelectTrigger className="h-8 w-auto min-w-[90px] text-xs border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="20">20 rows</SelectItem>
+                <SelectItem value="50">50 rows</SelectItem>
+                <SelectItem value="100">100 rows</SelectItem>
+                <SelectItem value="200">200 rows</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
+              {isLoading ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <span>{pagination?.total || 0}</span>
+              )}
+            </div>
+          </div>
+        </>
+      )
+    } else {
+      setPaginationContent(null)
+    }
+    
+    return () => {
+      setPaginationContent(null)
+    }
+  }, [isMobile, setPaginationContent, pagination, page, pageSize, isLoading, handlePageChange, handlePageSizeChange])
+
   // Show loading state while item is being fetched
   if (isLoadingItem) {
     return (
@@ -479,30 +556,72 @@ export default function InventoryTransactionHistoryPage() {
 
       <Card className="relative flex flex-col flex-1 min-h-0 pb-0 gap-0">
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-2 flex-1">
-              <History className="h-5 w-5 text-muted-foreground" />
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold">Transactions</h2>
-                <p className="text-sm text-muted-foreground">
-                  View all transaction history for this inventory item
-                </p>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            {/* Search and Filter - combined */}
+            <div className="flex items-center w-full lg:flex-1 lg:max-w-md">
+              <div className="flex items-center flex-1 border rounded-md overflow-hidden">
+                <Select
+                  value={transactionTypeFilter}
+                  onValueChange={(value) => {
+                    const params = new URLSearchParams(searchParams.toString())
+                    if (value === 'all') {
+                      params.delete('type')
+                    } else {
+                      params.set('type', value)
+                    }
+                    params.set('page', '1')
+                    router.push(`/inventory/${itemCode}/transaction-history?${params.toString()}`)
+                  }}
+                >
+                  <SelectTrigger className="w-[140px] h-8 rounded-none border-0 border-r focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none" size='sm'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="IN">IN</SelectItem>
+                    <SelectItem value="OUT">OUT</SelectItem>
+                    <SelectItem value="ADJUSTMENT">ADJUSTMENT</SelectItem>
+                    <SelectItem value="TRANSFER">TRANSFER</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="relative flex-1">
+                  {searchInput ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearchInput('')}
+                      className="absolute left-2 top-2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer z-10"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+                  )}
+                  <Input
+                    placeholder="Search transactions..."
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    className="pl-8 h-8 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                  />
+                </div>
               </div>
+            </div>
+            {/* Actions */}
+            <div className="flex items-center gap-2 justify-end">
               <Button
                 variant="outline"
                 size="icon"
                 onClick={handleRefresh}
-                className="hidden sm:flex"
+                className="h-8 w-8 shrink-0 hidden lg:flex"
+                title="Refresh"
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
-            </div>
-            <div className="hidden sm:flex flex-wrap items-center gap-2 justify-end">
               {selectedTransactions.size > 0 && (
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={handleBulkDeleteClick}
+                  className="hidden sm:flex"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete ({selectedTransactions.size})
@@ -513,11 +632,11 @@ export default function InventoryTransactionHistoryPage() {
         </CardHeader>
         <CardContent className="flex-1 px-0 relative">
           {isFetching && (transactionHistory || transactions.length > 0) && (
-            <div className="absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+            <div className={cn("absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center", isMobile && "right-0 rounded-b-2xl")}>
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
-          <div className="h-140 pt-8">
+          <div className={cn("h-140 pt-8", isMobile && "h-136")}>
             {isLoading && !transactionHistory ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
@@ -533,7 +652,7 @@ export default function InventoryTransactionHistoryPage() {
               </div>
             ) : (
               <div className="min-w-full">
-                <ScrollArea className='h-132 relative'>
+                <ScrollArea className={cn('h-132 relative', isMobile && "h-120")}>
                   <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
                   <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
                     <Table className='border-b'>
@@ -549,7 +668,7 @@ export default function InventoryTransactionHistoryPage() {
                                   className={cn(
                                     'bg-card transition-colors group-hover:bg-muted/50',
                                     isSelectColumn && 'w-12',
-                                    isActionsColumn && 'sticky right-0 text-center z-10 before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50',
+                                    isActionsColumn && 'sticky right-0 text-center z-10 before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 rounded-br-2xl',
                                     !isSelectColumn && !isActionsColumn && 'text-left'
                                   )}
                                 >
@@ -565,8 +684,7 @@ export default function InventoryTransactionHistoryPage() {
                       <TableBody>
                         <AnimatePresence mode="popLayout">
                           {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row, index) => {
-                              const isLastRow = index === table.getRowModel().rows.length - 1
+                            table.getRowModel().rows.map((row) => {
                               return (
                                 <motion.tr
                                   key={row.id}
@@ -589,8 +707,7 @@ export default function InventoryTransactionHistoryPage() {
                                         key={cell.id}
                                         className={cn(
                                           isSelectColumn && 'w-12',
-                                          isActionsColumn && 'sticky text-center right-0 bg-card z-10 before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50',
-                                          isActionsColumn && isLastRow && 'rounded-br-2xl'
+                                          isActionsColumn && 'sticky text-center right-0 bg-card z-10 before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 rounded-br-2xl'
                                         )}
                                       >
                                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -621,7 +738,7 @@ export default function InventoryTransactionHistoryPage() {
         
         {/* Pagination Bar - Fixed at Bottom */}
         {pagination && pagination.totalPages > 0 && (
-          <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-lg">
+          <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl hidden md:block">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
               {/* Left Side - Navigation */}
               <div className="flex items-center justify-center sm:justify-start gap-2">

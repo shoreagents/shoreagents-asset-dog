@@ -117,6 +117,7 @@ function AccountPageContent() {
           )}>
             <h2 className={cn(
               'text-sm font-semibold transition-opacity',
+              isMobile && 'hidden',
               isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
             )}>
               Navigation
@@ -125,7 +126,7 @@ function AccountPageContent() {
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
-              className="h-7 w-7 rounded-full"
+              className={cn("h-7 w-7 rounded-full", isMobile && "hidden")}
             >
               <PanelLeft className={cn(
                 'h-4 w-4 transition-transform',

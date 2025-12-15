@@ -958,9 +958,8 @@ function MediaPageContent() {
   // Handle select/deselect all - defined after images/documents are available
   const handleToggleSelectAll = useCallback(() => {
     if (selectedImages.size === images.length) {
-      // If all are selected, deselect all and exit selection mode (cancel)
+      // If all are selected, just deselect all (don't exit selection mode)
       setSelectedImages(new Set())
-      setIsSelectionMode(false)
     } else {
       setSelectedImages(new Set(images.map(img => img.id)))
     }
@@ -968,9 +967,8 @@ function MediaPageContent() {
 
   const handleToggleSelectAllDocuments = useCallback(() => {
     if (selectedDocuments.size === documents.length) {
-      // If all are selected, deselect all and exit selection mode (cancel)
+      // If all are selected, just deselect all (don't exit selection mode)
       setSelectedDocuments(new Set())
-      setIsSelectionMode(false)
     } else {
       setSelectedDocuments(new Set(documents.map(doc => doc.id)))
     }
@@ -980,24 +978,37 @@ function MediaPageContent() {
   useEffect(() => {
     if (isMobile) {
       if (isSelectionMode) {
-        // Selection mode: Select All (left) + Delete icon (right, only when items selected)
+        // Selection mode: Select All / Deselect All (left) + Cancel (middle, when items selected) + Delete icon (right, only when items selected)
         const hasSelectedItems = activeTab === 'media' 
           ? selectedImages.size > 0 
           : selectedDocuments.size > 0
+        const allSelected = activeTab === 'media'
+          ? (selectedImages.size === images.length && images.length > 0)
+          : (selectedDocuments.size === documents.length && documents.length > 0)
         
         setDockContent(
           <>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={activeTab === 'media' ? handleToggleSelectAll : handleToggleSelectAllDocuments}
-              className="rounded-full"
-            >
-              {activeTab === 'media' 
-                ? (selectedImages.size === images.length && images.length > 0 ? 'Deselect All' : 'Select All')
-                : (selectedDocuments.size === documents.length && documents.length > 0 ? 'Deselect All' : 'Select All')
-              }
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={activeTab === 'media' ? handleToggleSelectAll : handleToggleSelectAllDocuments}
+                className="rounded-full"
+              >
+                {activeTab === 'media' 
+                  ? (allSelected ? 'Deselect All' : 'Select All')
+                  : (allSelected ? 'Deselect All' : 'Select All')
+                }
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleToggleSelectionMode}
+                className="rounded-full"
+              >
+                Cancel
+              </Button>
+            </div>
             {hasSelectedItems && (
               <Button
                 variant="outline"

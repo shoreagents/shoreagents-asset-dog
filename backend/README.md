@@ -10,6 +10,11 @@ cd backend
 pip install -r requirements.txt
 ```
 
+2. **Download Prisma binaries (required for deployment):**
+```bash
+python -m prisma py fetch
+```
+
 2. **Configure environment variables:**
 ```bash
 cp .env.example .env

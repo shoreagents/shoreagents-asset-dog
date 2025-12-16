@@ -2,8 +2,12 @@
 Database connection and Prisma client setup
 """
 import sys
+import os
 import asyncio
+import subprocess
 from contextlib import asynccontextmanager
+from pathlib import Path
+
 
 # Import Prisma client (generated in prisma_client subdirectory)
 try:

@@ -22,6 +22,37 @@ if missing_vars:
     print(f"❌ ERROR: Missing required environment variables: {', '.join(missing_vars)}")
     sys.exit(1)
 
+# Try to download Prisma binaries if missing (for Railway deployment)
+try:
+    from prisma_client import Prisma
+    # Test if binaries exist by trying to create a client
+    test_client = Prisma()
+    del test_client
+except Exception as e:
+    # Binaries might be missing, try to download them
+    print("⚠️  Prisma binaries not found, attempting to download...")
+    try:
+        import subprocess
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(script_dir)
+        schema_path = os.path.join(parent_dir, "prisma", "schema.prisma")
+        
+        result = subprocess.run(
+            ["python", "-m", "prisma", "py", "fetch", "--schema", schema_path],
+            cwd=parent_dir,
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        if result.returncode == 0:
+            print("✅ Prisma binaries downloaded successfully")
+        else:
+            print(f"⚠️  Failed to download binaries: {result.stderr}")
+            print("💡 Make sure Node.js is available for prisma py fetch")
+    except Exception as download_error:
+        print(f"⚠️  Could not download binaries: {download_error}")
+        print("💡 Binaries should be committed to the repository")
+
 # Now import and run uvicorn
 try:
     import uvicorn

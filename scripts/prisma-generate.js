@@ -14,9 +14,9 @@ try {
   // Read the original schema
   const schemaContent = fs.readFileSync(schemaPath, 'utf8');
   
-  // Remove the Python generator block
+  // Remove the Python generator block (handles multiline with any whitespace)
   const modifiedSchema = schemaContent.replace(
-    /generator python_client\s*\{[^}]*\}/gs,
+    /generator\s+python_client\s*\{[^}]*\}/gs,
     ''
   );
   

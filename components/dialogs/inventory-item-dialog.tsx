@@ -23,6 +23,8 @@ import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { ScrollArea } from '../ui/scroll-area'
 import { Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
+import { LocationSelectField } from '@/components/fields/location-select-field'
+import { usePermissions } from '@/hooks/use-permissions'
 
 export interface InventoryItem {
   id: string
@@ -63,6 +65,8 @@ export function InventoryItemDialog({
 }: InventoryItemDialogProps) {
   const [formData, setFormData] = useState<Partial<InventoryItem>>({})
   const [isGeneratingCode, setIsGeneratingCode] = useState(false)
+  const { hasPermission } = usePermissions()
+  const canManageSetup = hasPermission('canManageSetup')
 
   const generateItemCode = async () => {
     setIsGeneratingCode(true)
@@ -325,14 +329,14 @@ export function InventoryItemDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
-              <Input
-                id="location"
+              <LocationSelectField
                 value={formData.location || ''}
-                onChange={(e) =>
-                  setFormData({ ...formData, location: e.target.value })
+                onValueChange={(value) =>
+                  setFormData({ ...formData, location: value || null })
                 }
-                placeholder="e.g., Warehouse A, Shelf 3"
+                label="Location"
+                placeholder="Select or search location"
+                canCreate={canManageSetup}
               />
             </div>
           </div>

@@ -1026,7 +1026,7 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ id: str
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 border rounded-lg p-4">
         {/* Thumbnail Image */}
         <div className="lg:col-span-1">
-          <div className="relative w-full h-full bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+          <div className="relative w-full aspect-square lg:h-full bg-muted rounded-lg overflow-hidden flex items-center justify-center">
             {thumbnailImage ? (
               <Image
                 src={thumbnailImage.imageUrl}

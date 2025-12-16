@@ -165,7 +165,9 @@ const getEventTypeBadgeVariant = (eventType: string) => {
 
 // Create column definitions for TanStack Table
 const createColumns = (
-  onDelete: (event: AssetEvent) => void
+  onDelete: (event: AssetEvent) => void,
+  isSelectionMode?: boolean,
+  hasSelectedAssets?: boolean
 ): ColumnDef<AssetEvent>[] => [
   {
     id: 'select',
@@ -375,7 +377,11 @@ const createColumns = (
         <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0 rounded-full">
+                <Button 
+                  variant="ghost" 
+                  className="h-8 w-8 p-0 rounded-full"
+                  disabled={isSelectionMode || hasSelectedAssets}
+                >
                   <span className="sr-only">Open menu</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
@@ -407,6 +413,7 @@ function AssetEventsPageContent() {
   
   const [sorting, setSorting] = useState<SortingState>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<AssetEvent | null>(null)
@@ -607,11 +614,49 @@ function AssetEventsPageContent() {
     setIsDeleteDialogOpen(true)
   }, [isAdmin])
 
-  const columns = useMemo(() => createColumns(handleDelete), [handleDelete])
+  // Compute hasSelectedAssets from rowSelection before creating columns
+  const hasSelectedAssetsInitial = Object.keys(rowSelection).length > 0
+  const columns = useMemo(() => createColumns(handleDelete, isSelectionMode, hasSelectedAssetsInitial), [handleDelete, isSelectionMode, hasSelectedAssetsInitial])
 
   const logs = useMemo(() => data?.logs || [], [data?.logs])
   const pagination = data?.pagination
   const uniqueFields = useMemo(() => data?.uniqueFields || [], [data?.uniqueFields])
+  
+  // Use ref to store latest logs to avoid dependency issues
+  const logsRef = useRef(logs)
+  useEffect(() => {
+    logsRef.current = logs
+  }, [logs])
+
+  // Handle toggle selection mode
+  const handleToggleSelectionMode = useCallback(() => {
+    setIsSelectionMode(prev => {
+      if (!prev) {
+        // Entering selection mode - ensure select column is visible
+      } else {
+        // Exiting selection mode - clear selection
+        setRowSelection({})
+      }
+      return !prev
+    })
+  }, [])
+
+  // Handle select/deselect all - uses ref to avoid dependency issues
+  const handleToggleSelectAll = useCallback(() => {
+    const currentLogs = logsRef.current
+    const selectedCount = Object.keys(rowSelection).length
+    const allSelected = selectedCount === currentLogs.length && currentLogs.length > 0
+    
+    if (allSelected) {
+      setRowSelection({})
+    } else {
+      const newSelection: Record<string, boolean> = {}
+      currentLogs.forEach((event: AssetEvent) => {
+        newSelection[event.id] = true
+      })
+      setRowSelection(newSelection)
+    }
+  }, [rowSelection])
   
   // Track initial mount for animations
   useEffect(() => {
@@ -638,8 +683,25 @@ function AssetEventsPageContent() {
     getRowId: (row) => row.id,
   })
 
+  // Update table columns when columns change
+  useEffect(() => {
+    if (table) {
+      table.setOptions(prev => ({ ...prev, columns }))
+    }
+  }, [columns, table])
+
   const selectedRows = table.getFilteredSelectedRowModel().rows
   const selectedCount = selectedRows.length
+  const hasSelectedAssets = selectedCount > 0
+
+  // Automatically enable selection mode when user manually selects an event
+  useEffect(() => {
+    const selectedCount = Object.keys(rowSelection).length
+    if (selectedCount > 0 && !isSelectionMode) {
+      // User manually selected an event - automatically enable selection mode
+      setIsSelectionMode(true)
+    }
+  }, [rowSelection, isSelectionMode])
 
   const handleBulkDelete = useCallback(() => {
     if (!isAdmin) {
@@ -664,28 +726,73 @@ function AssetEventsPageContent() {
   // Set mobile dock content
   useEffect(() => {
     if (isMobile) {
-      setDockContent(
-        <>
-          <Button
-            variant="outline"
-            size="icon"
-            className="rounded-full h-10 w-10 btn-glass-elevated"
-            onClick={handleRefresh}
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <div className="flex-1" /> {/* Spacer to push delete button to the right */}
-          <Button
-            variant="outline"
-            size="icon"
-            className="rounded-full h-10 w-10 btn-glass-elevated"
-            disabled={logs.length === 0}
-            onClick={handleBulkDelete}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </>
-      )
+      if (isSelectionMode) {
+        // Selection mode: Select All / Deselect All (left) + Cancel (middle) + Delete icon (right, only when items selected)
+        const logsCount = logsRef.current.length
+        const allSelected = selectedCount === logsCount && logsCount > 0
+        const hasSelectedItems = selectedCount > 0
+        
+        setDockContent(
+          <>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleToggleSelectAll}
+                className="rounded-full btn-glass-elevated"
+              >
+                {allSelected ? 'Deselect All' : 'Select All'}
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleToggleSelectionMode}
+                className="rounded-full btn-glass-elevated"
+              >
+                Cancel
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                if (!isAdmin) {
+                  toast.error('You do not have permission to delete events')
+                  return
+                }
+                handleBulkDelete()
+              }}
+              disabled={!hasSelectedItems}
+              className="h-10 w-10 rounded-full btn-glass-elevated"
+              title="Delete Selected"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        )
+      } else {
+        // Normal mode: Select (left) + Refresh (right)
+        setDockContent(
+          <>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleToggleSelectionMode}
+              className="rounded-full btn-glass-elevated"
+            >
+              Select
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full h-10 w-10 btn-glass-elevated"
+              onClick={handleRefresh}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </>
+        )
+      }
     } else {
       setDockContent(null)
     }
@@ -693,11 +800,12 @@ function AssetEventsPageContent() {
     return () => {
       setDockContent(null)
     }
-  }, [isMobile, setDockContent, handleRefresh, handleBulkDelete, logs.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, setDockContent, isSelectionMode, selectedCount, handleToggleSelectAll, handleToggleSelectionMode, handleBulkDelete, isAdmin])
 
   // Set mobile pagination content
   useEffect(() => {
-    if (isMobile && pagination && pagination.totalPages > 0) {
+    if (isMobile && pagination && pagination.totalPages > 0 && !hasSelectedAssets) {
       setPaginationContent(
         <>
           <div className="flex items-center gap-2">
@@ -766,7 +874,7 @@ function AssetEventsPageContent() {
     return () => {
       setPaginationContent(null)
     }
-  }, [isMobile, setPaginationContent, pagination, page, pageSize, isLoading, handlePageChange, handlePageSizeChange])
+  }, [isMobile, setPaginationContent, pagination, page, pageSize, isLoading, handlePageChange, handlePageSizeChange, hasSelectedAssets])
 
   return (
     <motion.div 
@@ -1008,18 +1116,19 @@ function AssetEventsPageContent() {
         </CardContent>
         
         {/* Pagination Bar - Fixed at Bottom */}
-        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl hidden md:block">
+        <div className={cn("sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl hidden md:block", hasSelectedAssets && "pointer-events-none opacity-50")}>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
             <div className="flex items-center justify-center sm:justify-start gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
+                  if (hasSelectedAssets) return
                   if (pagination?.hasPreviousPage) {
                     handlePageChange(page - 1)
                   }
                 }}
-                disabled={!pagination?.hasPreviousPage || isLoading}
+                disabled={!pagination?.hasPreviousPage || isLoading || hasSelectedAssets}
                 className="h-8 px-2 sm:px-3"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -1038,11 +1147,12 @@ function AssetEventsPageContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
+                  if (hasSelectedAssets) return
                   if (pagination?.hasNextPage) {
                     handlePageChange(page + 1)
                   }
                 }}
-                disabled={!pagination?.hasNextPage || isLoading}
+                disabled={!pagination?.hasNextPage || isLoading || hasSelectedAssets}
                 className="h-8 px-2 sm:px-3"
               >
                 <ArrowRight className="h-4 w-4" />
@@ -1050,7 +1160,7 @@ function AssetEventsPageContent() {
             </div>
             
             <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-4">
-              <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading}>
+              <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading || hasSelectedAssets}>
                 <SelectTrigger className="h-8 w-auto min-w-[90px] sm:min-w-[100px] text-xs sm:text-sm border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
                   <SelectValue />
                 </SelectTrigger>

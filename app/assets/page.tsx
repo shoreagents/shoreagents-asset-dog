@@ -5,6 +5,8 @@ import { useState, useEffect, useMemo, useRef, useTransition, Suspense, useCallb
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { useMobileDock } from '@/components/mobile-dock-provider'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   useReactTable,
@@ -36,7 +38,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { MoreHorizontal, Trash2, Edit, Download, Upload, Search, Package, CheckCircle2, User, DollarSign, XIcon, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Move, FileText as FileTextIcon, Wrench, Image as ImageIcon, RefreshCw, Eye, ChevronLeft } from 'lucide-react'
+import { MoreHorizontal, Trash2, Edit, Download, Upload, Search, Package, CheckCircle2, User, DollarSign, XIcon, ArrowUpDown, ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Move, FileText as FileTextIcon, Wrench, Image as ImageIcon, RefreshCw, Eye, ChevronLeft, MoreVertical } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AssetMediaDialog } from '@/components/dialogs/asset-media-dialog'
@@ -285,7 +287,12 @@ const getStatusBadge = (status: string | null) => {
 }
 
 // Create column definitions for TanStack Table
-const createColumns = (AssetActionsComponent: React.ComponentType<{ asset: Asset }>): ColumnDef<Asset>[] => [
+const createColumns = (
+  AssetActionsComponent: React.ComponentType<{ asset: Asset; isSelectionMode?: boolean; hasSelectedAssets?: boolean }>,
+  AssetTagCellComponent: React.ComponentType<{ asset: Asset; isSelectionMode?: boolean; hasSelectedAssets?: boolean }>,
+  isSelectionMode?: boolean,
+  hasSelectedAssets?: boolean
+): ColumnDef<Asset>[] => [
   {
     id: 'select',
     enableHiding: false,
@@ -339,7 +346,7 @@ const createColumns = (AssetActionsComponent: React.ComponentType<{ asset: Asset
         </Button>
       )
     },
-    cell: ({ row }) => <AssetTagCell asset={row.original} />,
+    cell: ({ row }) => <AssetTagCellComponent asset={row.original} isSelectionMode={isSelectionMode} hasSelectedAssets={hasSelectedAssets} />,
     enableSorting: true,
   },
   {
@@ -1355,7 +1362,7 @@ const createColumns = (AssetActionsComponent: React.ComponentType<{ asset: Asset
     enableHiding: false,
     enableSorting: false,
     header: 'Actions',
-    cell: ({ row }) => <AssetActionsComponent asset={row.original} />,
+    cell: ({ row }) => <AssetActionsComponent asset={row.original} isSelectionMode={isSelectionMode} hasSelectedAssets={hasSelectedAssets} />,
   },
 ]
 
@@ -1388,14 +1395,23 @@ function AssetImagesCell({ asset }: { asset: Asset }) {
 }
 
 // Component for clickable Asset Tag ID with QR code dialog
-function AssetTagCell({ asset }: { asset: Asset }) {
+function AssetTagCell({ asset, isSelectionMode, hasSelectedAssets }: { asset: Asset; isSelectionMode?: boolean; hasSelectedAssets?: boolean }) {
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
+  const isDisabled = isSelectionMode || hasSelectedAssets
   
   return (
     <>
       <button
-        onClick={() => setQrDialogOpen(true)}
-        className="font-medium text-primary hover:underline cursor-pointer"
+        onClick={() => {
+          if (!isDisabled) {
+            setQrDialogOpen(true)
+          }
+        }}
+        disabled={isDisabled}
+        className={cn(
+          "font-medium text-primary hover:underline",
+          isDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+        )}
       >
         {asset.assetTagId}
       </button>
@@ -1411,7 +1427,7 @@ function AssetTagCell({ asset }: { asset: Asset }) {
   )
 }
 
-const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
+const AssetActions = memo(function AssetActions({ asset, isSelectionMode, hasSelectedAssets }: { asset: Asset; isSelectionMode?: boolean; hasSelectedAssets?: boolean }) {
   const queryClient = useQueryClient()
   const router = useRouter()
   const { hasPermission } = usePermissions()
@@ -1539,6 +1555,8 @@ const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
   }, [hasPermission, router, asset.id])
 
 
+  const isDisabled = isSelectionMode || hasSelectedAssets
+
   return (
     <>
       <DropdownMenu key={`dropdown-${asset.id}`}>
@@ -1547,6 +1565,7 @@ const AssetActions = memo(function AssetActions({ asset }: { asset: Asset }) {
             variant="ghost" 
             size="icon"
             className="h-8 w-8 p-0 rounded-full"
+            disabled={isDisabled}
           >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
@@ -1705,6 +1724,8 @@ function AssetsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
+  const isMobile = useIsMobile()
+  const { setDockContent } = useMobileDock()
   const isInitialMount = useRef(true)
   
   // Initialize state from URL params
@@ -1767,6 +1788,7 @@ function AssetsPageContent() {
     actions: true,
   })
   const [rowSelection, setRowSelection] = useState({})
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
   
   // Convert column visibility to visible columns array for compatibility
   // Exclude Actions from count since it's always visible and not selectable
@@ -1867,8 +1889,11 @@ function AssetsPageContent() {
     staleTime: 10 * 60 * 1000, // Cache for 10 minutes
   })
 
+  // Check if any assets are selected (before table is created, use rowSelection directly)
+  const hasSelectedAssetsInitial = Object.keys(rowSelection).length > 0
+  
   // Create columns
-  const columns = useMemo(() => createColumns(AssetActions), [])
+  const columns = useMemo(() => createColumns(AssetActions, AssetTagCell, isSelectionMode, hasSelectedAssetsInitial), [isSelectionMode, hasSelectedAssetsInitial])
 
   // Server-side pagination: data is already filtered and paginated from API
   const filteredData = assets
@@ -1997,10 +2022,68 @@ function AssetsPageContent() {
     return selected
   })()
 
+  const hasSelectedAssets = selectedAssets.size > 0
+
+  // Use ref to store latest assets to avoid dependency issues
+  const assetsRef = useRef(assets)
+  useEffect(() => {
+    assetsRef.current = assets
+  }, [assets])
+
+  // Handle toggle selection mode
+  const handleToggleSelectionMode = useCallback(() => {
+    setIsSelectionMode(prev => {
+      if (!prev) {
+        // Entering selection mode - show select column
+        setColumnVisibility(prev => ({ ...prev, select: true }))
+      } else {
+        // Exiting selection mode - clear selection
+        setRowSelection({})
+      }
+      return !prev
+    })
+  }, [])
+
+  // Handle select/deselect all - uses ref to avoid dependency issues
+  const handleToggleSelectAll = useCallback(() => {
+    const currentAssets = assetsRef.current
+    const allSelected = selectedAssets.size === currentAssets.length && currentAssets.length > 0
+    
+    if (allSelected) {
+      setRowSelection({})
+    } else {
+      const newSelection: Record<string, boolean> = {}
+      currentAssets.forEach(asset => {
+        newSelection[asset.id] = true
+      })
+      setRowSelection(newSelection)
+    }
+  }, [selectedAssets.size])
+
   // Sync selected export fields with visible columns when they change
   useEffect(() => {
     setSelectedExportFields(new Set(visibleColumns))
   }, [visibleColumns])
+
+  // Automatically enable selection mode when user manually selects an asset
+  useEffect(() => {
+    const selectedCount = Object.keys(rowSelection).length
+    if (selectedCount > 0 && !isSelectionMode) {
+      // User manually selected an asset - automatically enable selection mode
+      setIsSelectionMode(true)
+      // Ensure select column is visible
+      setColumnVisibility(prev => ({ ...prev, select: true }))
+    }
+  }, [rowSelection, isSelectionMode])
+
+  // Update table columns when selection state changes
+  useEffect(() => {
+    if (table) {
+      const hasSelectedAssetsCurrent = Object.keys(rowSelection).length > 0
+      const updatedColumns = createColumns(AssetActions, AssetTagCell, isSelectionMode, hasSelectedAssetsCurrent)
+      table.setOptions(prev => ({ ...prev, columns: updatedColumns }))
+    }
+  }, [table, isSelectionMode, rowSelection])
 
   const handleSelectOpenChange = (open: boolean) => {
     if (open) {
@@ -2411,10 +2494,10 @@ function AssetsPageContent() {
     }
   }
 
-  const handleBulkDeleteClick = () => {
+  const handleBulkDeleteClick = useCallback(() => {
     if (selectedAssets.size === 0) return
     setIsBulkDeleteDialogOpen(true)
-  }
+  }, [selectedAssets.size])
 
   const confirmBulkDelete = async () => {
     setIsDeleting(true)
@@ -2452,6 +2535,129 @@ function AssetsPageContent() {
       setIsDeleting(false)
     }
   }
+
+  // Set mobile dock content
+  useEffect(() => {
+    if (isMobile) {
+      if (isSelectionMode) {
+        // Selection mode: Select All / Deselect All (left) + Cancel (middle) + Delete icon (right, only when items selected)
+        const assetsCount = assetsRef.current.length
+        // Get selected count from rowSelection directly to avoid dependency issues
+        const selectedCount = Object.keys(rowSelection).length
+        const allSelected = selectedCount === assetsCount && assetsCount > 0
+        const hasSelectedItems = selectedCount > 0
+        
+        setDockContent(
+          <>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleToggleSelectAll}
+                className="rounded-full btn-glass-elevated"
+              >
+                {allSelected ? 'Deselect All' : 'Select All'}
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleToggleSelectionMode}
+                className="rounded-full btn-glass-elevated"
+              >
+                Cancel
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleBulkDeleteClick}
+              disabled={!hasSelectedItems}
+              className="h-10 w-10 rounded-full btn-glass-elevated"
+              title="Delete Selected"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        )
+      } else {
+        // Normal mode: Select (left) + Add Asset (small gap) grouped together, 3 dots with Export/Import (right)
+        setDockContent(
+          <>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleToggleSelectionMode}
+                className="rounded-full btn-glass-elevated"
+              >
+                Select
+              </Button>
+              <Link href="/assets/add">
+                <Button
+                  onClick={(e) => {
+                    if (!hasPermission('canCreateAssets')) {
+                      e.preventDefault()
+                      toast.error('You do not have permission to create assets')
+                    }
+                  }}
+                  variant="outline"
+                  size="lg"
+                  className="rounded-full btn-glass-elevated"
+                >
+                  Add Asset
+                </Button>
+              </Link>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="rounded-full btn-glass-elevated h-10 w-10"
+                  disabled={isSelectionMode || Object.keys(rowSelection).length > 0}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (!hasPermission('canManageExport')) {
+                      toast.error('You do not have permission to export assets')
+                      return
+                    }
+                    setIsExportDialogOpen(true)
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (!hasPermission('canManageImport')) {
+                      toast.error('You do not have permission to import assets')
+                      return
+                    }
+                    document.getElementById('import-file')?.click()
+                  }}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )
+      }
+    } else {
+      setDockContent(null)
+    }
+    
+    return () => {
+      setDockContent(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, setDockContent, isSelectionMode, rowSelection, handleToggleSelectAll, handleToggleSelectionMode, handleBulkDeleteClick])
 
   const getCellValue = (asset: Asset, columnKey: string) => {
     switch (columnKey) {
@@ -2625,7 +2831,7 @@ function AssetsPageContent() {
             Manage and track all your assets in one place
           </p>
         </div>
-        <Link href="/assets/add">
+        <Link href="/assets/add" className={cn(isMobile && "hidden")}>
           <Button
             onClick={(e) => {
               if (!hasPermission('canCreateAssets')) {
@@ -2786,7 +2992,7 @@ function AssetsPageContent() {
                 }}
                 variant="outline"
                 size="sm"
-                className="flex-1 sm:flex-initial bg-white/10 dark:bg-white/5 backdrop-blur-2xl border-white/30 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 shadow-sm backdrop-saturate-150"
+                className={cn("flex-1 sm:flex-initial bg-white/10 dark:bg-white/5 backdrop-blur-2xl border-white/30 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 shadow-sm backdrop-saturate-150", isMobile && "hidden")}
               >
                 <Download className="mr-2 h-4 w-4" />
                 Export
@@ -2802,7 +3008,7 @@ function AssetsPageContent() {
                   }}
                 variant="outline"
                 size="sm"
-                className="flex-1 sm:flex-initial bg-white/10 dark:bg-white/5 backdrop-blur-2xl border-white/30 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 shadow-sm backdrop-saturate-150"
+                className={cn("flex-1 sm:flex-initial bg-white/10 dark:bg-white/5 backdrop-blur-2xl border-white/30 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 shadow-sm backdrop-saturate-150", isMobile && "hidden")}
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Import
@@ -2826,7 +3032,7 @@ function AssetsPageContent() {
                   }}
                   variant="destructive"
                   size="sm"
-                  className="flex-1 sm:flex-initial"
+                  className={cn("flex-1 sm:flex-initial", isMobile && "hidden")}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   <span className="sm:hidden">Move to Trash</span>
@@ -2902,7 +3108,7 @@ function AssetsPageContent() {
                       placeholder="Search assets by tag, description, category..."
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
-                      className={cn("pl-10 h-8 bg-white/10 dark:bg-white/5 backdrop-blur-2xl border-white/30 dark:border-white/10 focus-visible:border-white/40 dark:focus-visible:border-white/20 shadow-sm backdrop-saturate-150", searchInput && "pr-10")}
+                      className={cn("pl-10 h-8 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none ", searchInput && "pr-10")}
                     />
                     {searchInput && (
                       <Button
@@ -2934,7 +3140,7 @@ function AssetsPageContent() {
                       open={isCategoryDropdownOpen}
                       onOpenChange={setIsCategoryDropdownOpen}
                     >
-                      <SelectTrigger className="w-full sm:w-[180px] bg-white/10 dark:bg-white/5 backdrop-blur-2xl border-white/30 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 shadow-sm backdrop-saturate-150" size='sm'>
+                      <SelectTrigger className="w-full sm:w-[180px]" size='sm'>
                         <span className="flex-1 text-left truncate">
                           {categoryFilter === 'all' || !categoryFilter ? 'All Categories' : categoryFilter}
                         </span>
@@ -2962,7 +3168,7 @@ function AssetsPageContent() {
                       open={isStatusDropdownOpen}
                       onOpenChange={setIsStatusDropdownOpen}
                     >
-                      <SelectTrigger className="w-full sm:w-[150px] bg-white/10 dark:bg-white/5 backdrop-blur-2xl border-white/30 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 shadow-sm backdrop-saturate-150" size='sm'>
+                      <SelectTrigger className="w-full sm:w-[150px]" size='sm'>
                         <span className="flex-1 text-left truncate">
                           {statusFilter === 'all' || !statusFilter ? 'All Status' : statusFilter}
                         </span>
@@ -3099,7 +3305,7 @@ function AssetsPageContent() {
               </ScrollArea>
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex flex-col gap-2 px-6 py-4 border-t">
+                <div className={cn("flex flex-col gap-2 px-6 py-4 border-t", hasSelectedAssets && "pointer-events-none opacity-50")}>
                   <div className="flex items-center justify-center">
                     <Pagination>
                     <PaginationContent>
@@ -3108,6 +3314,7 @@ function AssetsPageContent() {
                           href="#" 
                           onClick={(e) => {
                             e.preventDefault()
+                            if (hasSelectedAssets) return
                             table.previousPage()
                           }}
                           className={!table.getCanPreviousPage() ? 'pointer-events-none opacity-50' : ''}
@@ -3134,6 +3341,7 @@ function AssetsPageContent() {
                               isActive={currentPage === pageNum}
                               onClick={(e) => {
                                 e.preventDefault()
+                                if (hasSelectedAssets) return
                                 table.setPageIndex(pageNum - 1)
                               }}
                             >
@@ -3154,6 +3362,7 @@ function AssetsPageContent() {
                           href="#" 
                           onClick={(e) => {
                             e.preventDefault()
+                            if (hasSelectedAssets) return
                             table.nextPage()
                           }}
                           className={!table.getCanNextPage() ? 'pointer-events-none opacity-50' : ''}

@@ -1749,13 +1749,13 @@ function InventoryPageContent() {
             onClick={handleAdd}
             variant="outline"
             size="lg"
-            className="rounded-full"
+            className="rounded-full btn-glass-elevated"
           >
             Add Item
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="rounded-full h-10 w-10">
+              <Button variant="outline" size="icon" className="rounded-full btn-glass-elevated h-10 w-10">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -2126,7 +2126,7 @@ function InventoryPageContent() {
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
-          <div className={cn("h-140 pt-8", isMobile && "h-128")}>
+          <div className={cn("h-140 pt-6", isMobile && "max-h-120")}>
             {isLoading && !data ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
@@ -2142,7 +2142,7 @@ function InventoryPageContent() {
               </div>
             ) : (
               <div className="min-w-full">
-                <ScrollArea className={cn('h-132 relative', isMobile && "h-120")}>
+                <ScrollArea className={cn('h-132 relative', isMobile && "max-h-[456px]")}>
                 <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
                 <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
                 <Table>

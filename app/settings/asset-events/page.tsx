@@ -669,7 +669,7 @@ function AssetEventsPageContent() {
           <Button
             variant="outline"
             size="icon"
-            className="rounded-full h-10 w-10"
+            className="rounded-full h-10 w-10 btn-glass-elevated"
             onClick={handleRefresh}
           >
             <RefreshCw className="h-4 w-4" />
@@ -678,7 +678,7 @@ function AssetEventsPageContent() {
           <Button
             variant="outline"
             size="icon"
-            className="rounded-full h-10 w-10"
+            className="rounded-full h-10 w-10 btn-glass-elevated"
             disabled={logs.length === 0}
             onClick={handleBulkDelete}
           >
@@ -895,7 +895,7 @@ function AssetEventsPageContent() {
                 variant="outline"
                 size="icon"
                 onClick={handleRefresh}
-                className="h-8 w-8 shrink-0 hidden lg:flex"
+                className="h-8 w-8 shrink-0 hidden md:flex"
                 title="Refresh table"
               >
                 <RefreshCw className="h-4 w-4" />

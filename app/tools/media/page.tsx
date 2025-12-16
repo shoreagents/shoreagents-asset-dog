@@ -1274,6 +1274,7 @@ function MediaPageContent() {
                   variant={isSelectionMode ? "default" : "outline"}
                   size="sm"
                   onClick={handleToggleSelectionMode}
+                  className="btn-glass"
                 >
                   {isSelectionMode ? "Cancel" : "Select"}
                 </Button>
@@ -1336,7 +1337,7 @@ function MediaPageContent() {
                   size="sm"
                   onClick={handleRefresh}
                   disabled={isLoadingData}
-                  className="btn-glass-elevated"
+                  className="btn-glass"
                 >
                   <RotateCw className={`h-4 w-4 mr-2 ${isLoadingData ? 'animate-spin' : ''}`} />
                   Reload
@@ -1345,7 +1346,7 @@ function MediaPageContent() {
                   value={gridColumns.toString()}
                   onValueChange={(value) => setGridColumns(parseInt(value, 10))}
                 >
-                  <SelectTrigger className="w-[120px]" size="sm">
+                  <SelectTrigger className="w-[120px] btn-glass" size="sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

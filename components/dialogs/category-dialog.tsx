@@ -146,6 +146,7 @@ export function CategoryDialog({
               variant="outline"
               onClick={() => handleOpenChange(false)}
               disabled={isLoading}
+              className='btn-glass'
             >
               Cancel
             </Button>

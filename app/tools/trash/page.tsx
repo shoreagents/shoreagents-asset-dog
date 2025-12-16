@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Trash2, RotateCcw, AlertTriangle, Package, Search, RotateCw, X, MoreHorizontal, ArrowLeft, ArrowRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Trash2, RotateCcw, AlertTriangle, Package, Search, RotateCw, X, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -43,6 +43,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useMobileDock } from '@/components/mobile-dock-provider'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface DeletedAsset {
   id: string
@@ -106,8 +108,8 @@ const getStatusBadge = (status: string | null) => {
   return <Badge variant={statusVariant} className={statusColor}>{status}</Badge>
 }
 
-async function fetchDeletedAssets(page: number = 1, pageSize: number = 50, search?: string, searchType: string = 'unified') {
-  // Fetch all deleted assets with a large page size to get accurate count
+async function fetchDeletedAssets(search?: string, searchType: string = 'unified') {
+  // Fetch all deleted assets without pagination
   const response = await fetch(`/api/assets?includeDeleted=true&page=1&pageSize=10000`)
   if (!response.ok) throw new Error('Failed to fetch deleted assets')
   const data = await response.json()
@@ -145,21 +147,12 @@ async function fetchDeletedAssets(page: number = 1, pageSize: number = 50, searc
     })
   }
   
-  // Calculate pagination based on filtered results
   const total = allDeletedAssets.length
-  const totalPages = Math.ceil(total / pageSize)
-  const skip = (page - 1) * pageSize
-  const paginatedAssets = allDeletedAssets.slice(skip, skip + pageSize)
   
   return {
-    assets: paginatedAssets,
+    assets: allDeletedAssets,
     pagination: {
-      page,
-      pageSize,
       total,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPreviousPage: page > 1,
     },
   }
 }
@@ -167,15 +160,13 @@ async function fetchDeletedAssets(page: number = 1, pageSize: number = 50, searc
 function TrashPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isMobile = useIsMobile()
+  const { setDockContent } = useMobileDock()
   
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const canViewAssets = hasPermission('canViewAssets')
   const canManageTrash = hasPermission('canManageTrash')
   const queryClient = useQueryClient()
-  
-  // Get page, pageSize, and search from URL
-  const page = parseInt(searchParams.get('page') || '1', 10)
-  const pageSize = parseInt(searchParams.get('pageSize') || '50', 10)
   
   // Separate states for search input (immediate UI) and search query (debounced API calls)
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
@@ -201,25 +192,8 @@ function TrashPageContent() {
   const isInitialMount = useRef(true)
 
   // Update URL parameters
-  const updateURL = useCallback((updates: { page?: number; pageSize?: number; search?: string; searchType?: string }) => {
+  const updateURL = useCallback((updates: { search?: string; searchType?: string }) => {
     const params = new URLSearchParams(searchParams.toString())
-    
-    if (updates.page !== undefined) {
-      if (updates.page === 1) {
-        params.delete('page')
-      } else {
-        params.set('page', updates.page.toString())
-      }
-    }
-    
-    if (updates.pageSize !== undefined) {
-      if (updates.pageSize === 50) {
-        params.delete('pageSize')
-      } else {
-        params.set('pageSize', updates.pageSize.toString())
-      }
-      params.delete('page')
-    }
     
     if (updates.search !== undefined) {
       if (updates.search === '') {
@@ -228,7 +202,6 @@ function TrashPageContent() {
       } else {
         params.set('search', updates.search)
       }
-      params.delete('page')
     }
 
     if (updates.searchType !== undefined) {
@@ -237,7 +210,6 @@ function TrashPageContent() {
       } else {
         params.set('searchType', updates.searchType)
       }
-      params.delete('page')
     }
     
     router.push(`?${params.toString()}`, { scroll: false })
@@ -258,7 +230,7 @@ function TrashPageContent() {
       previousSearchInputRef.current = searchInput
       const currentSearch = searchParams.get('search') || ''
       if (searchInput !== currentSearch) {
-        updateURL({ search: searchInput, searchType, page: 1 })
+        updateURL({ search: searchInput, searchType })
       }
     }, 500)
 
@@ -273,8 +245,8 @@ function TrashPageContent() {
 
   // Fetch deleted assets
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['deletedAssets', page, pageSize, searchQuery, searchType],
-    queryFn: () => fetchDeletedAssets(page, pageSize, searchQuery || undefined, searchType),
+    queryKey: ['deletedAssets', searchQuery, searchType],
+    queryFn: () => fetchDeletedAssets(searchQuery || undefined, searchType),
     enabled: (canViewAssets || canManageTrash) && !permissionsLoading,
     placeholderData: (previousData) => previousData,
   })
@@ -285,14 +257,6 @@ function TrashPageContent() {
       setIsManualRefresh(false)
     }
   }, [isFetching, isManualRefresh])
-
-  const handlePageSizeChange = (newPageSize: string) => {
-    updateURL({ pageSize: parseInt(newPageSize), page: 1 })
-  }
-
-  const handlePageChange = (newPage: number) => {
-    updateURL({ page: newPage })
-  }
 
   // Restore mutation
   const restoreMutation = useMutation({
@@ -400,7 +364,7 @@ function TrashPageContent() {
     return Math.max(0, 30 - daysSinceDeleted)
   }
 
-  const deletedAssets = data?.assets || []
+  const deletedAssets = useMemo(() => data?.assets || [], [data?.assets])
   const pagination = data?.pagination
 
   // Create column definitions
@@ -796,6 +760,94 @@ function TrashPageContent() {
     }
   }
 
+  // Set mobile dock content
+  useEffect(() => {
+    if (isMobile) {
+      setDockContent(
+        selectedAssets.size > 0 ? (
+          <>
+            <Button
+              onClick={() => {
+                if (!canManageTrash) {
+                  toast.error('You do not have permission to restore assets')
+                  return
+                }
+                setIsBulkRestoreDialogOpen(true)
+              }}
+              variant="outline"
+              size="lg"
+              className="rounded-full btn-glass-elevated"
+            >
+              Recover
+            </Button>
+            <Button
+              onClick={() => {
+                if (!canManageTrash) {
+                  toast.error('You do not have permission to permanently delete assets')
+                  return
+                }
+                setIsBulkDeleteDialogOpen(true)
+              }}
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 rounded-full btn-glass-elevated"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              onClick={() => {
+                if (!canManageTrash) {
+                  toast.error('You do not have permission to restore assets')
+                  return
+                }
+                // Select all assets and restore them
+                const allAssetIds = deletedAssets.map((asset: DeletedAsset) => asset.id)
+                setRowSelection(
+                  allAssetIds.reduce((acc: Record<string, boolean>, id: string) => ({ ...acc, [id]: true }), {})
+                )
+                setIsBulkRestoreDialogOpen(true)
+              }}
+              disabled={!pagination?.total || pagination.total === 0 || !canManageTrash}
+              variant="outline"
+              size="lg"
+              className="rounded-full btn-glass-elevated"
+            >
+              Recover All
+            </Button>
+            <Button
+              onClick={() => {
+                if (!canManageTrash) {
+                  toast.error('You do not have permission to permanently delete assets')
+                  return
+                }
+                if (selectedAssets.size > 0) {
+                  setIsBulkDeleteDialogOpen(true)
+                } else {
+                  setIsEmptyTrashDialogOpen(true)
+                }
+              }}
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 rounded-full btn-glass-elevated"
+              disabled={!pagination?.total || pagination.total === 0}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        )
+      )
+    } else {
+      setDockContent(null)
+    }
+    
+    return () => {
+      setDockContent(null)
+    }
+  }, [isMobile, setDockContent, selectedAssets.size, canManageTrash, setIsBulkRestoreDialogOpen, setIsBulkDeleteDialogOpen, setIsEmptyTrashDialogOpen, deletedAssets, pagination?.total, setRowSelection])
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: -20 }}
@@ -804,7 +856,7 @@ function TrashPageContent() {
       className="space-y-6"
     >
       <div>
-        <h1 className="text-3xl font-bold">Trash</h1>
+        <h1 className="text-3xl font-bold">Recently Deleted</h1>
         <p className="text-muted-foreground">
           View and manage deleted assets. Assets will be permanently deleted after 30 days.
         </p>
@@ -813,15 +865,16 @@ function TrashPageContent() {
       <Card className="gap-0 pb-0">
         <CardHeader className="shrink-0 pb-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-center w-full md:flex-1 md:max-w-md border rounded-md overflow-hidden">
+            <div className="flex items-center w-full md:flex-1 md:max-w-md gap-2">
+              <div className="flex items-center flex-1 border rounded-md overflow-hidden">
               <Select
                 value={searchType}
                 onValueChange={(value: 'unified' | 'assetTag' | 'description' | 'category' | 'location' | 'status') => {
                   setSearchType(value)
-                  updateURL({ searchType: value, page: 1 })
+                  updateURL({ searchType: value })
                 }}
               >
-                <SelectTrigger className="w-[140px] h-8 rounded-none border-0 border-r focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none" size='sm'>
+                <SelectTrigger className={cn("w-[140px] h-8 rounded-none border-0 border-r focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none", isMobile && "w-[100px]")} size='sm'>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -839,7 +892,7 @@ function TrashPageContent() {
                     type="button"
                     onClick={() => {
                       setSearchInput('')
-                      updateURL({ search: '', page: 1 })
+                       updateURL({ search: '' })
                     }}
                     className="absolute left-2 top-2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer z-10"
                   >
@@ -867,8 +920,21 @@ function TrashPageContent() {
                   className="pl-8 h-8 rounded-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
                 />
               </div>
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  setIsManualRefresh(true)
+                  queryClient.invalidateQueries({ queryKey: ['deletedAssets'] })
+                }}
+                className="h-8 w-8 shrink-0 md:hidden"
+                title="Refresh table"
+              >
+                <RotateCw className="h-4 w-4" />
+              </Button>
             </div>
-            <div className="flex gap-2 sm:gap-3 items-center">
+            <div className={cn("flex gap-2 sm:gap-3 items-center justify-end", isMobile && "hidden")}>
               {selectedAssets.size > 0 && (
                 <>
                   <Button
@@ -940,7 +1006,7 @@ function TrashPageContent() {
 
         <CardContent className="flex-1 px-0 relative">
           {isFetching && data && deletedAssets.length > 0 && (
-            <div className="absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center">
+            <div className={cn("absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center", isMobile && "right-0 rounded-b-2xl")}>
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
@@ -1018,7 +1084,7 @@ function TrashPageContent() {
                                 <TableCell 
                                   key={cell.id}
                                   className={cn(
-                                    isActionsColumn && "sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 "
+                                    isActionsColumn && "sticky text-center right-0 bg-card z-10 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border before:z-50 rounded-br-2xl"
                                   )}
                                 >
                                   {flexRender(
@@ -1050,72 +1116,6 @@ function TrashPageContent() {
             </div>
           )}
         </CardContent>
-
-        {/* Pagination Bar */}
-        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-lg">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
-            <div className="flex items-center justify-center sm:justify-start gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (pagination?.hasPreviousPage) {
-                    handlePageChange(Math.max(1, page - 1))
-                  }
-                }}
-                disabled={!pagination?.hasPreviousPage || isLoading}
-                className="h-8 px-2 sm:px-3"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
-                <span className="text-muted-foreground">Page</span>
-                <div className="px-1.5 sm:px-2 py-1 rounded-md bg-primary/10 text-primary font-medium text-xs sm:text-sm">
-                  {isLoading ? '...' : (pagination?.page || page)}
-                </div>
-                <span className="text-muted-foreground">of</span>
-                <span className="text-muted-foreground">{isLoading ? '...' : (pagination?.totalPages || 1)}</span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (pagination?.hasNextPage) {
-                    handlePageChange(Math.min(pagination.totalPages, page + 1))
-                  }
-                }}
-                disabled={!pagination?.hasNextPage || isLoading}
-                className="h-8 px-2 sm:px-3"
-              >
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-4">
-              <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading}>
-                <SelectTrigger className="h-8 w-auto min-w-[90px] sm:min-w-[100px] text-xs sm:text-sm border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="25">25 rows</SelectItem>
-                  <SelectItem value="50">50 rows</SelectItem>
-                  <SelectItem value="100">100 rows</SelectItem>
-                  <SelectItem value="200">200 rows</SelectItem>
-                  <SelectItem value="500">500 rows</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-                {isLoading ? (
-                  <Spinner className="h-4 w-4" />
-                ) : (
-                  <>
-                    <span className="hidden sm:inline">{pagination?.total || 0} records</span>
-                    <span className="sm:hidden">{pagination?.total || 0}</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
       </Card>
 
       {/* Restore Confirmation Dialog */}
@@ -1146,7 +1146,13 @@ function TrashPageContent() {
       {/* Bulk Restore Confirmation Dialog */}
       <BulkDeleteDialog
         open={isBulkRestoreDialogOpen}
-        onOpenChange={setIsBulkRestoreDialogOpen}
+        onOpenChange={(newOpen) => {
+          setIsBulkRestoreDialogOpen(newOpen)
+          // Clear selection when dialog is closed (cancelled) and not currently restoring
+          if (!newOpen && !isBulkRestoring) {
+            setRowSelection({})
+          }
+        }}
         onConfirm={handleBulkRestore}
         itemCount={selectedAssets.size}
         itemName="Asset"

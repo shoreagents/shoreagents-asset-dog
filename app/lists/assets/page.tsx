@@ -1949,7 +1949,7 @@ function ListOfAssetsPageContent() {
             asChild
             variant="outline"
             size="lg"
-            className="rounded-full"
+            className="rounded-full btn-glass-elevated"
           >
             <Link href="/assets/add">
               Add Asset
@@ -1959,7 +1959,7 @@ function ListOfAssetsPageContent() {
             variant="outline"
             size="icon"
             onClick={handleRefresh}
-            className="h-10 w-10 rounded-full"
+            className="h-10 w-10 rounded-full btn-glass-elevated"
             title="Refresh"
           >
             <RefreshCw className="h-4 w-4" />
@@ -2095,8 +2095,8 @@ function ListOfAssetsPageContent() {
 
       <Card className="relative flex flex-col flex-1 min-h-0 pb-0 gap-0">
         <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-center w-full md:flex-1 md:max-w-md border rounded-md overflow-hidden">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div className="flex items-center w-full lg:flex-1 lg:max-w-md border rounded-md overflow-hidden">
               <Select
                 value={searchType}
                 onValueChange={(value: string) => {
@@ -2165,7 +2165,7 @@ function ListOfAssetsPageContent() {
                   toggleColumn(value)
                 }}
               >
-                <SelectTrigger className="w-full sm:w-[200px] " size='sm'>
+                <SelectTrigger className="w-full " size='sm'>
                   <span className="flex-1 text-left truncate">
                     {visibleColumns.length > 0 
                       ? `${visibleColumns.length} column${visibleColumns.length !== 1 ? 's' : ''} selected`
@@ -2206,7 +2206,7 @@ function ListOfAssetsPageContent() {
                 variant="outline"
                 size="icon"
                 onClick={handleRefresh}
-                className="h-8 w-8 shrink-0 hidden lg:flex"
+                className="h-8 w-8 shrink-0 hidden md:flex"
                 title="Refresh table"
               >
                 <RefreshCw className="h-4 w-4" />
@@ -2327,7 +2327,7 @@ function ListOfAssetsPageContent() {
         </CardContent>
         
         {/* Pagination Bar - Fixed at Bottom */}
-        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-lg hidden md:block">
+        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl hidden md:block">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
             {/* Left Side - Navigation */}
             <div className="flex items-center justify-center sm:justify-start gap-2">

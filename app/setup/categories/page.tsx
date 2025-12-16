@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Card,
@@ -38,10 +38,15 @@ import {
 } from '@/hooks/use-categories'
 import { CategoryDialog } from '@/components/dialogs/category-dialog'
 import { SubCategoryDialog } from '@/components/dialogs/subcategory-dialog'
+import { useMobileDock } from '@/components/mobile-dock-provider'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { cn } from '@/lib/utils'
 
 export default function CategoriesPage() {
   const { hasPermission, isLoading: permissionsLoading } = usePermissions()
   const canManageSetup = hasPermission('canManageSetup')
+  const isMobile = useIsMobile()
+  const { setDockContent } = useMobileDock()
   
   const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useCategories()
   const createCategoryMutation = useCreateCategory()
@@ -77,6 +82,58 @@ export default function CategoriesPage() {
       }
     })
   }, [categories, sortBy, sortOrder])
+
+  // Set mobile dock content
+  useEffect(() => {
+    if (isMobile) {
+      setDockContent(
+        <>
+          <Button 
+            onClick={() => setIsCreateCategoryDialogOpen(true)}
+            variant="outline"
+            size="lg"
+            className="rounded-full btn-glass-elevated"
+          >
+            Add Category
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="rounded-full btn-glass-elevated h-10 w-10">
+                <ArrowUpDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as 'name' | 'date')}>
+                <DropdownMenuRadioItem value="name">
+                  <TextIcon className="mr-2 h-4 w-4" />
+                  Name
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="date">
+                  <Clock className="mr-2 h-4 w-4" />
+                  Date Created
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup value={sortOrder} onValueChange={(v) => setSortOrder(v as 'asc' | 'desc')}>
+                <DropdownMenuRadioItem value="asc">
+                  Ascending
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="desc">
+                  Descending
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )
+    } else {
+      setDockContent(null)
+    }
+    
+    return () => {
+      setDockContent(null)
+    }
+  }, [isMobile, setDockContent, sortBy, sortOrder, setIsCreateCategoryDialogOpen])
 
   // Category handlers
   const handleCreateCategory = async (data: { name: string; description?: string }) => {
@@ -327,7 +384,7 @@ export default function CategoriesPage() {
             Manage asset categories and their subcategories
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className={cn("flex items-center gap-2", isMobile && "hidden")}>
            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-9">

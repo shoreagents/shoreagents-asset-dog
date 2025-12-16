@@ -1042,7 +1042,7 @@ function UsersPageContent() {
             }} 
             variant="outline"
             size="lg"
-            className="rounded-full"
+            className="rounded-full btn-glass-elevated"
           >
             <UserPlus className="mr-2 h-4 w-4" />
             Add User
@@ -1054,7 +1054,7 @@ function UsersPageContent() {
               setIsManualRefresh(true)
               queryClient.invalidateQueries({ queryKey: ['users'] })
             }}
-            className="h-10 w-10 rounded-full"
+            className="h-10 w-10 rounded-full btn-glass-elevated "
             title="Refresh table"
           >
             <RefreshCw className="h-4 w-4" />
@@ -1159,8 +1159,8 @@ function UsersPageContent() {
 
       <Card className="pb-0 gap-0">
         <CardHeader className='shrink-0 pb-3' >
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-center w-full md:flex-1 md:max-w-md gap-2">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div className="flex items-center w-full lg:flex-1 lg:max-w-md gap-2">
               <div className="flex items-center flex-1 border rounded-md overflow-hidden">
                 <Select
                   value={searchType}
@@ -1210,18 +1210,6 @@ function UsersPageContent() {
                   />
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  setIsManualRefresh(true)
-                  queryClient.invalidateQueries({ queryKey: ['users'] })
-                }}
-                className="h-8 w-8 shrink-0 md:hidden"
-                title="Refresh table"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
             </div>
             <div className="flex items-center gap-2">
               <Button 
@@ -1233,7 +1221,7 @@ function UsersPageContent() {
                   setIsCreateDialogOpen(true)
                 }} 
                 size="sm"
-                className="flex-1 md:flex-initial hidden md:flex"
+                className="flex-1 hidden md:flex"
               >
                <UserPlus className="mr-2 h-4 w-4" />
                Add User

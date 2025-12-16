@@ -710,7 +710,7 @@ function InventoryTrashPageContent() {
               }}
               variant="outline"
               size="lg"
-              className="rounded-full"
+              className="rounded-full btn-glass-elevated"
             >
               Recover
             </Button>
@@ -724,7 +724,7 @@ function InventoryTrashPageContent() {
               }}
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-full"
+              className="h-10 w-10 rounded-full btn-glass-elevated"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -747,7 +747,7 @@ function InventoryTrashPageContent() {
               disabled={!pagination?.total || pagination.total === 0 || !canManageTrash}
               variant="outline"
               size="lg"
-              className="rounded-full"
+              className="rounded-full btn-glass-elevated"
             >
               Recover All
             </Button>
@@ -765,7 +765,7 @@ function InventoryTrashPageContent() {
               }}
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-full"
+              className="h-10 w-10 rounded-full btn-glass-elevated"
               disabled={!pagination?.total || pagination.total === 0}
             >
               <Trash2 className="h-4 w-4" />
@@ -789,7 +789,7 @@ function InventoryTrashPageContent() {
       transition={{ duration: 0.5 }}
       className="space-y-6"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Recently Deleted</h1>
           <p className="text-muted-foreground">
@@ -799,7 +799,7 @@ function InventoryTrashPageContent() {
         <Button
           variant="outline"
           onClick={() => router.push('/inventory')}
-          className="shrink-0 hidden sm:flex"
+          className="shrink-0 hidden sm:flex btn-glass"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Inventory

@@ -397,7 +397,7 @@ export default function InventoryTransactionHistoryPage() {
           <Button
             variant="outline"
             size="icon"
-            className="rounded-full h-10 w-10"
+            className="rounded-full h-10 w-10 btn-glass-elevated"
             onClick={handleRefresh}
           >
             <RefreshCw className="h-4 w-4" />
@@ -406,7 +406,7 @@ export default function InventoryTransactionHistoryPage() {
           <Button
             variant="outline"
             size="icon"
-            className="rounded-full h-10 w-10"
+            className="rounded-full h-10 w-10 btn-glass-elevated"
             disabled={transactions.length === 0}
             onClick={handleBulkDeleteClick}
           >
@@ -519,7 +519,7 @@ export default function InventoryTransactionHistoryPage() {
               The inventory item you&apos;re looking for doesn&apos;t exist or has been deleted.
             </p>
           </div>
-          <Button onClick={() => router.push('/inventory')} variant="outline">
+          <Button onClick={() => router.push('/inventory')} variant="outline" className='btn-glass'>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Inventory
           </Button>
@@ -535,7 +535,7 @@ export default function InventoryTransactionHistoryPage() {
       transition={{ duration: 0.5 }}
       className="space-y-6 max-h-screen"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Transaction History</h1>
           <p className="text-muted-foreground">
@@ -547,7 +547,7 @@ export default function InventoryTransactionHistoryPage() {
         <Button
           variant="ghost"
           onClick={() => router.push('/inventory')}
-          className="hidden sm:flex"
+          className="hidden sm:flex btn-glass"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Inventory
@@ -611,7 +611,7 @@ export default function InventoryTransactionHistoryPage() {
                 variant="outline"
                 size="icon"
                 onClick={handleRefresh}
-                className="h-8 w-8 shrink-0 hidden lg:flex"
+                className="h-8 w-8 shrink-0 hidden md:flex"
                 title="Refresh"
               >
                 <RefreshCw className="h-4 w-4" />
@@ -621,7 +621,7 @@ export default function InventoryTransactionHistoryPage() {
                   variant="destructive"
                   size="sm"
                   onClick={handleBulkDeleteClick}
-                  className="hidden sm:flex"
+                  className="hidden md:flex"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete ({selectedTransactions.size})
@@ -636,7 +636,7 @@ export default function InventoryTransactionHistoryPage() {
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
-          <div className={cn("h-140 pt-8", isMobile && "h-136")}>
+          <div className={cn("h-140 pt-6", isMobile && "max-h-136")}>
             {isLoading && !transactionHistory ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
@@ -652,7 +652,7 @@ export default function InventoryTransactionHistoryPage() {
               </div>
             ) : (
               <div className="min-w-full">
-                <ScrollArea className={cn('h-132 relative', isMobile && "h-120")}>
+                <ScrollArea className={cn('h-132 relative', isMobile && "max-h-[520px]")}>
                   <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
                   <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
                     <Table className='border-b'>

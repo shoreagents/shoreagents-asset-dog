@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table"
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useEmployees } from '@/hooks/use-employees'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -65,17 +66,6 @@ interface Asset {
   }
 }
 
-interface EmployeeUser {
-  id: string
-  name: string
-  email: string
-  department: string | null
-  checkouts?: Array<{
-    asset: {
-      assetTagId: string
-    }
-  }>
-}
 
 interface CheckoutAsset extends Asset {
   newDepartment?: string
@@ -596,33 +586,8 @@ function CheckoutPageContent() {
   const selectedAssetsCount = selectedAssets.length
   
   // Fetch employees count for statistics - fetch all pages to get complete list
-  const { data: employees = [] } = useQuery<EmployeeUser[]>({
-    queryKey: ["employees", "checkout-stats"],
-    queryFn: async () => {
-      let allEmployees: EmployeeUser[] = []
-      let page = 1
-      let hasMore = true
-      const pageSize = 1000 // Large page size to minimize requests
-      
-      while (hasMore) {
-        const response = await fetch(`/api/employees?page=${page}&pageSize=${pageSize}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch employees')
-      }
-      const data = await response.json()
-        
-        allEmployees = [...allEmployees, ...(data.employees || [])]
-        
-        hasMore = data.pagination?.hasNextPage || false
-        page++
-      }
-      
-      return allEmployees
-    },
-    enabled: canViewAssets,
-    retry: 2,
-    retryDelay: 1000,
-  })
+  const { data: employeesData } = useEmployees(canViewAssets, undefined, 'unified', 1, 1000)
+  const employees = employeesData?.employees || []
   const availableEmployeesCount = employees.length
 
   // Fetch checkout statistics

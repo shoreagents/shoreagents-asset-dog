@@ -1,6 +1,7 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
+import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee } from '@/hooks/use-employees'
 import { useState, useMemo, useCallback, useEffect, useRef, useTransition, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -105,64 +106,6 @@ interface PaginationInfo {
   hasPreviousPage: boolean
 }
 
-async function fetchEmployees(search?: string, searchType: string = 'unified', page: number = 1, pageSize: number = 50): Promise<{ employees: Employee[], pagination: PaginationInfo }> {
-  const params = new URLSearchParams({
-    page: page.toString(),
-    pageSize: pageSize.toString(),
-  })
-  if (search) {
-    params.append('search', search)
-    params.append('searchType', searchType)
-  }
-  
-  const response = await fetch(`/api/employees?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error('Failed to fetch employees')
-  }
-  const data = await response.json()
-  return { employees: data.employees, pagination: data.pagination }
-}
-
-async function createEmployee(data: { name: string; email: string; department?: string }) {
-  const response = await fetch('/api/employees', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to create employee')
-  }
-  return response.json()
-}
-
-async function updateEmployee(id: string, data: { name: string; email: string; department?: string }) {
-  const response = await fetch(`/api/employees/${id}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to update employee')
-  }
-  return response.json()
-}
-
-async function deleteEmployee(id: string) {
-  const response = await fetch(`/api/employees/${id}`, {
-    method: 'DELETE',
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to delete employee')
-  }
-  return response.json()
-}
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return '-'
@@ -453,13 +396,13 @@ function EmployeesPageContent() {
     })
   }, [searchParams, router, startTransition])
 
-  const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ['employees', searchQuery, searchType, page, pageSize],
-    queryFn: () => fetchEmployees(searchQuery || undefined, searchType, page, pageSize),
-    placeholderData: (previousData) => previousData, // Keep previous data while fetching new data
-    staleTime: 0, // Always consider data stale to ensure fresh data after mutations
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
-  })
+  const { data, isLoading, error, isFetching } = useEmployees(
+    true,
+    searchQuery || undefined,
+    searchType,
+    page,
+    pageSize
+  )
 
   // Reset manual refresh flag after successful fetch
   useEffect(() => {
@@ -533,83 +476,48 @@ function EmployeesPageContent() {
     lastSearchQueryRef.current = searchQuery
   }, [searchQuery])
 
-  const createMutation = useMutation({
-    mutationFn: createEmployee,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
+  const createMutation = useCreateEmployee()
+  
+  // Handle create success/error
+  useEffect(() => {
+    if (createMutation.isSuccess) {
       setIsCreateDialogOpen(false)
       createForm.reset()
       toast.success('Employee created successfully')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to create employee')
-    },
-  })
+    }
+    if (createMutation.isError) {
+      toast.error(createMutation.error?.message || 'Failed to create employee')
+    }
+  }, [createMutation.isSuccess, createMutation.isError, createMutation.error, createForm])
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name: string; email: string; department?: string } }) =>
-      updateEmployee(id, data),
-    onMutate: async ({ id, data }) => {
-      // Cancel any outgoing refetches to avoid overwriting optimistic update
-      await queryClient.cancelQueries({ queryKey: ['employees'] })
-
-      // Snapshot all previous employee queries
-      const queryCache = queryClient.getQueryCache()
-      const previousQueries = new Map()
-      
-      // Get all employee queries and snapshot them
-      queryCache.findAll({ queryKey: ['employees'] }).forEach(query => {
-        const previousData = queryClient.getQueryData<{ employees: Employee[], pagination: PaginationInfo }>(query.queryKey)
-        if (previousData) {
-          previousQueries.set(JSON.stringify(query.queryKey), previousData)
-          
-          // Optimistically update each query that contains this employee
-          const updatedData = {
-            ...previousData,
-            employees: previousData.employees.map(employee =>
-              employee.id === id
-                ? { ...employee, name: data.name, email: data.email, department: data.department || null }
-                : employee
-            ),
-          }
-          queryClient.setQueryData(query.queryKey, updatedData)
-        }
-      })
-
-      return { previousQueries }
-    },
-    onSuccess: () => {
-      // Invalidate queries in background (don't await - let it happen async)
-      queryClient.invalidateQueries({ queryKey: ['employees'], refetchType: 'none' })
+  const updateMutation = useUpdateEmployee()
+  
+  // Handle update success/error
+  useEffect(() => {
+    if (updateMutation.isSuccess) {
       setIsEditDialogOpen(false)
       setSelectedEmployee(null)
       editForm.reset()
       toast.success('Employee updated successfully')
-    },
-    onError: (error: Error, variables, context) => {
-      // Rollback all queries to previous data on error
-      if (context?.previousQueries) {
-        context.previousQueries.forEach((previousData, queryKeyStr) => {
-          const queryKey = JSON.parse(queryKeyStr)
-          queryClient.setQueryData(queryKey, previousData)
-        })
-      }
-      toast.error(error.message || 'Failed to update employee')
-    },
-  })
+    }
+    if (updateMutation.isError) {
+      toast.error(updateMutation.error?.message || 'Failed to update employee')
+    }
+  }, [updateMutation.isSuccess, updateMutation.isError, updateMutation.error, editForm])
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteEmployee,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
+  const deleteMutation = useDeleteEmployee()
+  
+  // Handle delete success/error
+  useEffect(() => {
+    if (deleteMutation.isSuccess) {
       setIsDeleteDialogOpen(false)
       setSelectedEmployee(null)
       toast.success('Employee deleted successfully')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to delete employee')
-    },
-  })
+    }
+    if (deleteMutation.isError) {
+      toast.error(deleteMutation.error?.message || 'Failed to delete employee')
+    }
+  }, [deleteMutation.isSuccess, deleteMutation.isError, deleteMutation.error])
 
   const handleCreate = createForm.handleSubmit(async (data) => {
     if (!canManageEmployees) {

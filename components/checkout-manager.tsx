@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
+import { useEmployees } from '@/hooks/use-employees'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -84,34 +85,8 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
   )
 
   // Fetch employees - fetch all pages to get complete list
-  const { data: employees = [] } = useQuery({
-    queryKey: ['employees', 'checkout-manager', 'all'],
-    queryFn: async () => {
-      interface Employee {
-        id: string
-        name: string
-        email: string
-        department?: string | null
-      }
-      let allEmployees: Employee[] = []
-      let page = 1
-      let hasMore = true
-      const pageSize = 1000 // Large page size to minimize requests
-      
-      while (hasMore) {
-        const response = await fetch(`/api/employees?page=${page}&pageSize=${pageSize}`)
-        if (!response.ok) throw new Error('Failed to fetch employees')
-        const data = await response.json()
-        
-        allEmployees = [...allEmployees, ...(data.employees || [])]
-        
-        hasMore = data.pagination?.hasNextPage || false
-        page++
-      }
-      
-      return allEmployees
-    },
-  })
+  const { data: employeesData } = useEmployees(true, undefined, 'unified', 1, 1000)
+  const employees = employeesData?.employees || []
 
   // Update checkout mutation
   const updateMutation = useMutation({

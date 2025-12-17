@@ -15,7 +15,7 @@ from database import prisma
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/setup/company-info", tags=["company-info"])
+router = APIRouter(prefix="/api/company-info", tags=["company-info"])
 
 @router.get("", response_model=CompanyInfoResponse)
 async def get_company_info(

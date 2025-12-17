@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/dialogs/qr-scanner-dialog'
 import { toast } from 'sonner'
 import { useQuery } from "@tanstack/react-query"
+import { useEmployee } from '@/hooks/use-employees'
 import { motion, AnimatePresence } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -208,19 +209,7 @@ export default function AccountabilityFormPage() {
   const [isFormOpen, setIsFormOpen] = useState(false)
 
   // Fetch selected employee details
-  const { data: selectedEmployee, isLoading: isLoadingEmployee } = useQuery<EmployeeUser | null>({
-    queryKey: ["employee", selectedEmployeeId],
-    queryFn: async () => {
-      if (!selectedEmployeeId) return null
-      const response = await fetch(`/api/employees/${selectedEmployeeId}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch employee')
-      }
-      const data = await response.json()
-      return data.employee as EmployeeUser
-    },
-    enabled: !!selectedEmployeeId,
-  })
+  const { data: selectedEmployee, isLoading: isLoadingEmployee } = useEmployee(selectedEmployeeId || null, !!selectedEmployeeId)
 
   // Auto-fill employee department when employee is selected
   useEffect(() => {

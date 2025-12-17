@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useLocations } from '@/hooks/use-locations'
+import { useSites } from '@/hooks/use-sites'
+import { useCategories } from '@/hooks/use-categories'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -43,35 +45,10 @@ export function AuditReportFilters({ filters, onFiltersChange, disabled = false 
   }, [filters])
 
   // Fetch options for dropdowns
-  const { data: categories } = useQuery({
-    queryKey: ['categories'],
-    queryFn: async () => {
-      const response = await fetch('/api/categories')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.categories || []
-    },
-  })
+  const { data: categories = [] } = useCategories(true)
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: async () => {
-      const response = await fetch('/api/locations')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.locations || []
-    },
-  })
-
-  const { data: sites } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => {
-      const response = await fetch('/api/sites')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.sites || []
-    },
-  })
+  const { data: locations = [] } = useLocations(true)
+  const { data: sites = [] } = useSites(true)
 
   const handleFilterChange = (key: string, value: string | undefined) => {
     const newFilters = { ...localFilters, [key]: value || undefined }

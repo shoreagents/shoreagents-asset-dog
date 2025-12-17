@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useLocations } from '@/hooks/use-locations'
+import { useSites } from '@/hooks/use-sites'
+import { useDepartments } from '@/hooks/use-departments'
+import { useCategories } from '@/hooks/use-categories'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -43,48 +46,16 @@ export function TransactionReportFilters({ filters, onFiltersChange, disabled = 
   }, [filters])
 
   // Fetch categories
-  const { data: categoriesData } = useQuery({
-    queryKey: ['categories'],
-    queryFn: async () => {
-      const response = await fetch('/api/categories')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.categories || []
-    },
-  })
+  const { data: categories = [] } = useCategories(true)
 
   // Fetch locations
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: async () => {
-      const response = await fetch('/api/locations')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.locations || []
-    },
-  })
+  const { data: locations = [] } = useLocations(true)
 
   // Fetch sites
-  const { data: sites } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => {
-      const response = await fetch('/api/sites')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.sites || []
-    },
-  })
+  const { data: sites = [] } = useSites(true)
 
   // Fetch departments
-  const { data: departments } = useQuery({
-    queryKey: ['departments'],
-    queryFn: async () => {
-      const response = await fetch('/api/departments')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.departments || []
-    },
-  })
+  const { data: departments = [] } = useDepartments(true)
 
   const handleFilterChange = (key: string, value: string | undefined) => {
     const newFilters = { ...localFilters, [key]: value || undefined }
@@ -136,7 +107,7 @@ export function TransactionReportFilters({ filters, onFiltersChange, disabled = 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All categories</SelectItem>
-                  {categoriesData?.map((cat: { id: string; name: string }) => (
+                  {categories?.map((cat: { id: string; name: string }) => (
                     <SelectItem key={cat.id} value={cat.name} className="truncate">
                       {cat.name}
                     </SelectItem>

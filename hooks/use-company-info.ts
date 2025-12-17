@@ -61,7 +61,7 @@ export const useCompanyInfo = (enabled: boolean = true) => {
     queryKey: ["companyInfo"],
     queryFn: async () => {
       const baseUrl = getApiBaseUrl()
-      const url = `${baseUrl}/api/setup/company-info`
+      const url = `${baseUrl}/api/company-info`
       
       // Get auth token and add to headers
       const token = await getAuthToken()
@@ -115,7 +115,7 @@ export const useSaveCompanyInfo = () => {
         headers['Authorization'] = `Bearer ${token}`
       }
       
-      const response = await fetch(`${baseUrl}/api/setup/company-info`, {
+      const response = await fetch(`${baseUrl}/api/company-info`, {
         method: "POST",
         credentials: 'include',
         headers,

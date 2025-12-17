@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCategories } from '@/hooks/use-categories'
 import { usePermissions } from '@/hooks/use-permissions'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -100,15 +100,7 @@ export default function AssetReportsPage() {
   const [includeAssetList, setIncludeAssetList] = useState(false)
 
   // Fetch categories for name lookup
-  const { data: categoriesData } = useQuery({
-    queryKey: ['categories'],
-    queryFn: async () => {
-      const response = await fetch('/api/categories')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.categories || []
-    },
-  })
+  const { data: categoriesData = [] } = useCategories(true)
 
   // Create category lookup map
   const categoryMap = useMemo(() => {

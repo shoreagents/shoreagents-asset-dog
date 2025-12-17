@@ -36,6 +36,14 @@ from .categories import (
     CategoriesResponse,
     CategoryResponse
 )
+from .employees import (
+    Employee,
+    EmployeeCreate,
+    EmployeeUpdate,
+    EmployeesResponse,
+    EmployeeResponse,
+    PaginationInfo
+)
 
 __all__ = [
     "Location",
@@ -63,5 +71,11 @@ __all__ = [
     "CategoryUpdate",
     "CategoriesResponse",
     "CategoryResponse",
+    "Employee",
+    "EmployeeCreate",
+    "EmployeeUpdate",
+    "EmployeesResponse",
+    "EmployeeResponse",
+    "PaginationInfo",
 ]
 

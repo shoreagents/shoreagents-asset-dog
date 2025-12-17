@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
+import { useEmployees } from '@/hooks/use-employees'
 import { usePermissions } from '@/hooks/use-permissions'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -176,15 +177,8 @@ function ReservationReportsPageContent() {
   const pagination = data?.pagination
 
   // Fetch employees for filter badge display
-  const { data: employeesData } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async () => {
-      const response = await fetch('/api/employees')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.employees || []
-    },
-  })
+  const { data: employeesData } = useEmployees(true, undefined, 'unified', 1, 50)
+  const employees = employeesData?.employees || []
 
   // Format currency
   const formatCurrency = (value: number | null | undefined): string => {

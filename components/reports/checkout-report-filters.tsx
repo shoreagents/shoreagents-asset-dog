@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEmployees } from '@/hooks/use-employees'
+import { useLocations } from '@/hooks/use-locations'
+import { useSites } from '@/hooks/use-sites'
+import { useDepartments } from '@/hooks/use-departments'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -45,48 +48,17 @@ export function CheckoutReportFilters({ filters, onFiltersChange, disabled = fal
   }, [filters])
 
   // Fetch employees
-  const { data: employeesData } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async () => {
-      const response = await fetch('/api/employees?pageSize=1000')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.employees || []
-    },
-  })
+  const { data: employeesData } = useEmployees(true, undefined, 'unified', 1, 1000)
+  const employees = employeesData?.employees || []
 
   // Fetch locations
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: async () => {
-      const response = await fetch('/api/locations')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.locations || []
-    },
-  })
+  const { data: locations = [] } = useLocations(true)
 
   // Fetch sites
-  const { data: sites } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => {
-      const response = await fetch('/api/sites')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.sites || []
-    },
-  })
+  const { data: sites = [] } = useSites(true)
 
   // Fetch departments
-  const { data: departments } = useQuery({
-    queryKey: ['departments'],
-    queryFn: async () => {
-      const response = await fetch('/api/departments')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.departments || []
-    },
-  })
+  const { data: departments = [] } = useDepartments(true)
 
   const handleFilterChange = (key: string, value: string | boolean | undefined) => {
     const newFilters = { ...localFilters, [key]: value || undefined }
@@ -141,7 +113,7 @@ export function CheckoutReportFilters({ filters, onFiltersChange, disabled = fal
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All employees</SelectItem>
-                  {employeesData?.map((employee: { id: string; name: string; email: string }) => (
+                  {employees?.map((employee: { id: string; name: string; email: string }) => (
                     <SelectItem key={employee.id} value={employee.id}>
                       {employee.name} ({employee.email})
                     </SelectItem>

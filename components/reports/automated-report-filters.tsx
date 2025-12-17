@@ -1,7 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEmployees } from '@/hooks/use-employees'
+import { useLocations } from '@/hooks/use-locations'
+import { useSites } from '@/hooks/use-sites'
+import { useDepartments } from '@/hooks/use-departments'
+import { useCategories } from '@/hooks/use-categories'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -47,60 +51,26 @@ export function AutomatedReportFilters({
   }
 
   // Fetch common data
-  const { data: categories } = useQuery({
-    queryKey: ['categories'],
-    queryFn: async () => {
-      const response = await fetch('/api/categories')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.categories || []
-    },
-    enabled: ['assets', 'transaction', 'maintenance', 'audit', 'depreciation', 'lease', 'reservation'].includes(reportType),
-  })
+  const shouldFetchCategories = ['assets', 'transaction', 'maintenance', 'audit', 'depreciation', 'lease', 'reservation'].includes(reportType)
+  const { data: categories = [] } = useCategories(shouldFetchCategories)
 
-  const { data: locations } = useQuery({
-    queryKey: ['locations'],
-    queryFn: async () => {
-      const response = await fetch('/api/locations')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.locations || []
-    },
-    enabled: ['assets', 'checkout', 'transaction', 'location', 'audit', 'depreciation', 'lease', 'reservation'].includes(reportType),
-  })
+  const shouldFetchLocations = ['assets', 'checkout', 'transaction', 'location', 'audit', 'depreciation', 'lease', 'reservation'].includes(reportType)
+  const { data: locations = [] } = useLocations(shouldFetchLocations)
 
-  const { data: sites } = useQuery({
-    queryKey: ['sites'],
-    queryFn: async () => {
-      const response = await fetch('/api/sites')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.sites || []
-    },
-    enabled: ['assets', 'checkout', 'transaction', 'location', 'audit', 'depreciation', 'lease', 'reservation'].includes(reportType),
-  })
+  const shouldFetchSites = ['assets', 'checkout', 'transaction', 'location', 'audit', 'depreciation', 'lease', 'reservation'].includes(reportType)
+  const { data: sites = [] } = useSites(shouldFetchSites)
 
-  const { data: departments } = useQuery({
-    queryKey: ['departments'],
-    queryFn: async () => {
-      const response = await fetch('/api/departments')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.departments || []
-    },
-    enabled: ['assets', 'checkout', 'transaction', 'reservation'].includes(reportType),
-  })
+  const shouldFetchDepartments = ['assets', 'checkout', 'transaction', 'reservation'].includes(reportType)
+  const { data: departments = [] } = useDepartments(shouldFetchDepartments)
 
-  const { data: employeesData } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async () => {
-      const response = await fetch('/api/employees?pageSize=1000')
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.employees || []
-    },
-    enabled: ['checkout', 'reservation'].includes(reportType),
-  })
+  const { data: employeesData } = useEmployees(
+    ['checkout', 'reservation'].includes(reportType),
+    undefined,
+    'unified',
+    1,
+    1000
+  )
+  const employees = employeesData?.employees || []
 
   const handleFilterChange = (key: string, value: string | boolean | undefined) => {
     const newFilters = { ...localFilters, [key]: value || undefined }
@@ -292,7 +262,7 @@ export function AutomatedReportFilters({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All employees</SelectItem>
-                  {employeesData?.map((employee: { id: string; name: string; email: string }) => (
+                  {employees?.map((employee: { id: string; name: string; email: string }) => (
                     <SelectItem key={employee.id} value={employee.id}>
                       {employee.name} ({employee.email})
                     </SelectItem>
@@ -1101,7 +1071,7 @@ export function AutomatedReportFilters({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All employees</SelectItem>
-                  {employeesData?.map((employee: { id: string; name: string; email: string }) => (
+                  {employees?.map((employee: { id: string; name: string; email: string }) => (
                     <SelectItem key={employee.id} value={employee.id}>
                       {employee.name} ({employee.email})
                     </SelectItem>
@@ -1228,8 +1198,8 @@ export function AutomatedReportFilters({
                     } catch {
                       displayValue = String(value)
                     }
-                  } else if (key === 'employeeId' && employeesData) {
-                    const employee = employeesData.find((emp: { id: string; name: string }) => emp.id === value)
+                  } else if (key === 'employeeId' && employees) {
+                    const employee = employees.find((emp: { id: string; name: string }) => emp.id === value)
                     if (employee) {
                       displayValue = employee.name
                     }

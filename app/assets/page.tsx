@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCategories } from '@/hooks/use-categories'
 import { useState, useEffect, useMemo, useRef, useTransition, Suspense, useCallback, memo } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -1858,21 +1859,7 @@ function AssetsPageContent() {
 
   // Lazy load categories - only fetch when category dropdown is opened
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
-  const { data: categoriesData } = useQuery({
-    queryKey: ['categories'],
-    queryFn: async () => {
-      const response = await fetch('/api/categories')
-      if (!response.ok) {
-        // Return empty array on error instead of throwing
-        return []
-      }
-      const data = await response.json()
-      // Ensure we always return an array, never undefined
-      return (data.categories || []) as Array<{ id: string; name: string }>
-    },
-    enabled: canViewAssets && isCategoryDropdownOpen, // Only fetch when dropdown is opened
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
-  })
+  const { data: categoriesData = [], isLoading: isLoadingCategories } = useCategories(canViewAssets && isCategoryDropdownOpen)
 
   // Lazy load statuses - only fetch when status dropdown is opened
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false)
@@ -3166,16 +3153,17 @@ function AssetsPageContent() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Categories</SelectItem>
-                        {categoriesData?.map(category => (
-                          <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
-                        ))}
-                        {isCategoryDropdownOpen && !categoriesData && (
+                        {isLoadingCategories ? (
                           <SelectItem value="loading" disabled>
                             <div className="flex items-center gap-2">
                               <Spinner className="h-4 w-4" />
                               <span>Loading categories...</span>
                             </div>
                           </SelectItem>
+                        ) : (
+                          categoriesData?.map(category => (
+                            <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
+                          ))
                         )}
                       </SelectContent>
                     </Select>

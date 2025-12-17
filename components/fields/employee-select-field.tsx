@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Controller, Control, FieldError } from 'react-hook-form'
+import { useEmployees } from '@/hooks/use-employees'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -75,32 +75,8 @@ export function EmployeeSelectField({
   }, [])
 
   // Fetch employees - fetch all pages to get complete list
-  const { data: employees = [], isLoading: isLoadingEmployees } = useQuery<EmployeeUser[]>({
-    queryKey,
-    queryFn: async () => {
-      let allEmployees: EmployeeUser[] = []
-      let page = 1
-      let hasMore = true
-      const pageSize = 1000 // Large page size to minimize requests
-      
-      while (hasMore) {
-        const response = await fetch(`/api/employees?page=${page}&pageSize=${pageSize}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch employees')
-      }
-      const data = await response.json()
-        
-        allEmployees = [...allEmployees, ...(data.employees || [])]
-        
-        hasMore = data.pagination?.hasNextPage || false
-        page++
-      }
-      
-      return allEmployees
-    },
-    retry: 2,
-    retryDelay: 1000,
-  })
+  const { data: employeesData, isLoading: isLoadingEmployees } = useEmployees(true, undefined, 'unified', 1, 1000)
+  const employees: EmployeeUser[] = employeesData?.employees || []
 
   // Get selected employee for display
   const getSelectedEmployee = (employeeId: string | undefined) => {

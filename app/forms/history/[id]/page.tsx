@@ -4,6 +4,7 @@ import { use } from "react"
 import { useSearchParams } from "next/navigation"
 import { ArrowLeft, FileText } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
+import { useCompanyInfo } from '@/hooks/use-company-info'
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -234,29 +235,12 @@ export default function FormDetailsPage({ params }: { params: Promise<{ id: stri
   )
 }
 
-async function fetchCompanyInfo(): Promise<{ companyInfo: { primaryLogoUrl: string | null; secondaryLogoUrl: string | null } | null }> {
-  try {
-    const response = await fetch('/api/setup/company-info')
-    if (!response.ok) {
-      return { companyInfo: null }
-    }
-    return response.json()
-  } catch {
-    return { companyInfo: null }
-  }
-}
-
 function ReturnFormDetails({ form, formData }: { form: ReturnForm; formData: FormData }) {
   // Fetch company info for logos
-  const { data: companyData } = useQuery({
-    queryKey: ['company-info'],
-    queryFn: fetchCompanyInfo,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: false,
-  })
+  const { data: companyInfo } = useCompanyInfo(true)
 
-  const primaryLogoUrl = companyData?.companyInfo?.primaryLogoUrl || '/ShoreAgents-Logo.png'
-  const secondaryLogoUrl = companyData?.companyInfo?.secondaryLogoUrl || '/ShoreAgents-Logo-only.png'
+  const primaryLogoUrl = companyInfo?.primaryLogoUrl || '/ShoreAgents-Logo.png'
+  const secondaryLogoUrl = companyInfo?.secondaryLogoUrl || '/ShoreAgents-Logo-only.png'
   const selectedAssets = formData.selectedAssets || []
   
   // Group assets by category - use subCategory name if available, otherwise fall back to description
@@ -1064,15 +1048,10 @@ function ReturnFormDetails({ form, formData }: { form: ReturnForm; formData: For
 
 function AccountabilityFormDetails({ form, formData }: { form: AccountabilityForm; formData: FormData }) {
   // Fetch company info for logos
-  const { data: companyData } = useQuery({
-    queryKey: ['company-info'],
-    queryFn: fetchCompanyInfo,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: false,
-  })
+  const { data: companyInfo } = useCompanyInfo(true)
 
-  const primaryLogoUrl = companyData?.companyInfo?.primaryLogoUrl || '/ShoreAgents-Logo.png'
-  const secondaryLogoUrl = companyData?.companyInfo?.secondaryLogoUrl || '/ShoreAgents-Logo-only.png'
+  const primaryLogoUrl = companyInfo?.primaryLogoUrl || '/ShoreAgents-Logo.png'
+  const secondaryLogoUrl = companyInfo?.secondaryLogoUrl || '/ShoreAgents-Logo-only.png'
   const selectedAssets = formData.selectedAssets || []
   
   // Group assets - use subCategory name if available, otherwise fall back to description

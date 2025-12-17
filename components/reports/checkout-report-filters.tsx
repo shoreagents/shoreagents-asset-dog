@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useEmployees } from '@/hooks/use-employees'
+import { useAllEmployees } from '@/hooks/use-employees'
 import { useLocations } from '@/hooks/use-locations'
 import { useSites } from '@/hooks/use-sites'
 import { useDepartments } from '@/hooks/use-departments'
@@ -48,8 +48,7 @@ export function CheckoutReportFilters({ filters, onFiltersChange, disabled = fal
   }, [filters])
 
   // Fetch employees
-  const { data: employeesData } = useEmployees(true, undefined, 'unified', 1, 1000)
-  const employees = employeesData?.employees || []
+  const { data: employees = [] } = useAllEmployees(true)
 
   // Fetch locations
   const { data: locations = [] } = useLocations(true)

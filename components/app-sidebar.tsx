@@ -40,9 +40,9 @@ import {
   Undo,
   Package,
 } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
 import Image from "next/image"
 import { useUserProfile } from "@/hooks/use-user-profile"
+import { useCompanyInfo } from "@/hooks/use-company-info"
 
 import { NavMain } from "@/components/navigation/nav-main"
 import { NavProjects } from "@/components/navigation/nav-projects"
@@ -332,18 +332,6 @@ const data = {
   projects: [],
 }
 
-async function fetchCompanyInfo(): Promise<{ companyInfo: { primaryLogoUrl: string | null } | null }> {
-  try {
-    const response = await fetch('/api/setup/company-info')
-    if (!response.ok) {
-      return { companyInfo: null }
-    }
-    return response.json()
-  } catch {
-    return { companyInfo: null }
-  }
-}
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [mounted, setMounted] = React.useState(false)
 
@@ -355,12 +343,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }, [])
 
   // Fetch company info for logo
-  const { data: companyData } = useQuery({
-    queryKey: ['company-info'],
-    queryFn: fetchCompanyInfo,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: false,
-  })
+  const { data: companyInfo } = useCompanyInfo(true)
 
   const user = profile ? {
     name: profile?.name || '',
@@ -368,7 +351,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     avatar: profile?.avatar || '',
     role: profile?.role || 'user',
   } : null
-  const primaryLogoUrl = companyData?.companyInfo?.primaryLogoUrl || null
+  const primaryLogoUrl = companyInfo?.primaryLogoUrl || null
   const { state, isMobile } = useSidebar()
   const isCollapsed = state === "collapsed"
 

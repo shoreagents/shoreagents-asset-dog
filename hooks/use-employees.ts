@@ -1,6 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createClient } from '@/lib/supabase-client'
 
+export interface CheckoutForEmployee {
+  id: string
+  checkoutDate: string
+  expectedReturnDate: string | null
+  asset: {
+    id: string
+    assetTagId: string
+    description: string
+    status: string | null
+    category: { name: string } | null
+    subCategory: { name: string } | null
+    location: string | null
+    brand: string | null
+    model: string | null
+  }
+  checkins?: Array<{ id: string }>
+}
+
 export interface Employee {
   id: string
   name: string
@@ -8,6 +26,7 @@ export interface Employee {
   department: string | null
   createdAt: string
   updatedAt: string
+  checkouts?: CheckoutForEmployee[]
 }
 
 interface PaginationInfo {
@@ -98,6 +117,72 @@ export const useEmployees = (
         employees: (data.employees || []) as Employee[],
         pagination: data.pagination as PaginationInfo
       }
+    },
+    enabled,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  })
+}
+
+// Fetch all employees by paginating through all pages
+// Useful for dropdowns/selects that need the complete list
+export const useAllEmployees = (enabled: boolean = true, search?: string, searchType: string = 'unified') => {
+  return useQuery({
+    queryKey: ["allEmployees", search, searchType],
+    queryFn: async () => {
+      const baseUrl = getApiBaseUrl()
+      const allEmployees: Employee[] = []
+      let page = 1
+      const pageSize = 100 // Maximum allowed by backend
+      let hasMore = true
+
+      while (hasMore) {
+        const params = new URLSearchParams({
+          page: page.toString(),
+          pageSize: pageSize.toString(),
+        })
+        if (search) {
+          params.append('search', search)
+          params.append('searchType', searchType)
+        }
+        const url = `${baseUrl}/api/employees?${params.toString()}`
+        
+        // Get auth token and add to headers
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers,
+        })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`Failed to fetch employees: ${response.status} ${response.statusText}`, errorText)
+          if (response.status === 401) {
+            throw new Error('Unauthorized - please login again')
+          }
+          // If error on later pages, return what we have so far
+          if (page === 1) {
+            return []
+          }
+          break
+        }
+        
+        const data = await response.json()
+        const employees = (data.employees || []) as Employee[]
+        allEmployees.push(...employees)
+        
+        const pagination = data.pagination as PaginationInfo
+        hasMore = pagination.hasNextPage || false
+        page++
+      }
+      
+      return allEmployees
     },
     enabled,
     staleTime: 10 * 60 * 1000, // Cache for 10 minutes

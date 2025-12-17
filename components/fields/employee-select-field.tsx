@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Controller, Control, FieldError } from 'react-hook-form'
-import { useEmployees } from '@/hooks/use-employees'
+import { useAllEmployees } from '@/hooks/use-employees'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -75,8 +75,7 @@ export function EmployeeSelectField({
   }, [])
 
   // Fetch employees - fetch all pages to get complete list
-  const { data: employeesData, isLoading: isLoadingEmployees } = useEmployees(true, undefined, 'unified', 1, 1000)
-  const employees: EmployeeUser[] = employeesData?.employees || []
+  const { data: employees = [], isLoading: isLoadingEmployees } = useAllEmployees(true)
 
   // Get selected employee for display
   const getSelectedEmployee = (employeeId: string | undefined) => {

@@ -11,6 +11,7 @@ import { QRScannerDialog } from '@/components/dialogs/qr-scanner-dialog'
 import { toast } from 'sonner'
 import { useQuery } from "@tanstack/react-query"
 import { useEmployee } from '@/hooks/use-employees'
+import { useCompanyInfo } from '@/hooks/use-company-info'
 import { motion, AnimatePresence } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -46,31 +47,6 @@ interface Asset {
     id: string
     name: string
   } | null
-}
-
-interface EmployeeUser {
-  id: string
-  name: string
-  email: string
-  department: string | null
-  checkouts?: Array<{
-    id: string
-    asset: {
-      id: string
-      assetTagId: string
-      description: string
-      status?: string
-      category?: {
-        id: string
-        name: string
-      } | null
-      subCategory?: {
-        id: string
-        name: string
-      } | null
-    }
-    checkins: Array<{ id: string }>
-  }>
 }
 
 interface AccountabilityAsset extends Asset {
@@ -139,18 +115,6 @@ const CABLES_AND_EXTENSIONS = [
   'HDMI MALE TO DVI CABLE',
 ]
 
-async function fetchCompanyInfo(): Promise<{ companyInfo: { primaryLogoUrl: string | null; secondaryLogoUrl: string | null } | null }> {
-  try {
-    const response = await fetch('/api/setup/company-info')
-    if (!response.ok) {
-      return { companyInfo: null }
-    }
-    return response.json()
-  } catch {
-    return { companyInfo: null }
-  }
-}
-
 export default function AccountabilityFormPage() {
   const { hasPermission, isLoading: isLoadingPermissions } = usePermissions()
   const { state: sidebarState, open: sidebarOpen } = useSidebar()
@@ -160,15 +124,10 @@ export default function AccountabilityFormPage() {
   const canManageSetup = hasPermission('canManageSetup')
 
   // Fetch company info for logos
-  const { data: companyData } = useQuery({
-    queryKey: ['company-info'],
-    queryFn: fetchCompanyInfo,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: false,
-  })
+  const { data: companyInfo } = useCompanyInfo(true)
 
-  const primaryLogoUrl = companyData?.companyInfo?.primaryLogoUrl || '/ShoreAgents-Logo.png'
-  const secondaryLogoUrl = companyData?.companyInfo?.secondaryLogoUrl || '/ShoreAgents-Logo-only.png'
+  const primaryLogoUrl = companyInfo?.primaryLogoUrl || '/ShoreAgents-Logo.png'
+  const secondaryLogoUrl = companyInfo?.secondaryLogoUrl || '/ShoreAgents-Logo-only.png'
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
   const [assetIdInput, setAssetIdInput] = useState("")
@@ -223,18 +182,24 @@ export default function AccountabilityFormPage() {
     if (selectedEmployee && selectedEmployee.checkouts) {
       // Filter active checkouts (those without checkins)
       const activeCheckouts = selectedEmployee.checkouts.filter(
-        checkout => checkout.checkins.length === 0 && checkout.asset.status === "Checked out"
+        (checkout) => (!checkout.checkins || checkout.checkins.length === 0) && checkout.asset.status === "Checked out"
       )
       
       if (activeCheckouts.length > 0) {
         // Convert checkouts to AccountabilityAsset format
-        const assetsToAdd: AccountabilityAsset[] = activeCheckouts.map(checkout => ({
+        const assetsToAdd: AccountabilityAsset[] = activeCheckouts.map((checkout) => ({
           id: checkout.asset.id,
           assetTagId: checkout.asset.assetTagId,
           description: checkout.asset.description,
-          status: checkout.asset.status,
-          category: checkout.asset.category || null,
-          subCategory: checkout.asset.subCategory || null,
+          status: checkout.asset.status || undefined,
+          category: checkout.asset.category ? {
+            id: '',
+            name: checkout.asset.category.name
+          } : null,
+          subCategory: checkout.asset.subCategory ? {
+            id: '',
+            name: checkout.asset.subCategory.name
+          } : null,
           remarks: '',
         }))
         

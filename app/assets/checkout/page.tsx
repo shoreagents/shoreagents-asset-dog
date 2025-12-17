@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table"
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useEmployees } from '@/hooks/use-employees'
+import { useAllEmployees } from '@/hooks/use-employees'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -586,8 +586,7 @@ function CheckoutPageContent() {
   const selectedAssetsCount = selectedAssets.length
   
   // Fetch employees count for statistics - fetch all pages to get complete list
-  const { data: employeesData } = useEmployees(canViewAssets, undefined, 'unified', 1, 1000)
-  const employees = employeesData?.employees || []
+  const { data: employees = [] } = useAllEmployees(canViewAssets)
   const availableEmployeesCount = employees.length
 
   // Fetch checkout statistics

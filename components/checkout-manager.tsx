@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
-import { useEmployees } from '@/hooks/use-employees'
+import { useAllEmployees } from '@/hooks/use-employees'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -85,8 +85,7 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
   )
 
   // Fetch employees - fetch all pages to get complete list
-  const { data: employeesData } = useEmployees(true, undefined, 'unified', 1, 1000)
-  const employees = employeesData?.employees || []
+  const { data: employees = [] } = useAllEmployees(true)
 
   // Update checkout mutation
   const updateMutation = useMutation({

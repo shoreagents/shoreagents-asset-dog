@@ -97,16 +97,6 @@ interface Employee {
   }[]
 }
 
-interface PaginationInfo {
-  page: number
-  pageSize: number
-  total: number
-  totalPages: number
-  hasNextPage: boolean
-  hasPreviousPage: boolean
-}
-
-
 const formatDate = (dateString: string | null) => {
   if (!dateString) return '-'
   try {
@@ -556,11 +546,9 @@ function EmployeesPageContent() {
     }
     updateMutation.mutate({ 
       id: selectedEmployee.id, 
-      data: {
-        name: data.name,
-        email: data.email,
-        department: data.department,
-      }
+      name: data.name,
+      email: data.email,
+      department: data.department,
     })
   })
 

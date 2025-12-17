@@ -24,9 +24,14 @@ async def verify_auth(request: Request) -> dict:
     Returns the user data if authenticated, raises HTTPException if not.
     """
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        missing = []
+        if not SUPABASE_URL:
+            missing.append("NEXT_PUBLIC_SUPABASE_URL")
+        if not SUPABASE_ANON_KEY:
+            missing.append("NEXT_PUBLIC_SUPABASE_ANON_KEY")
         raise HTTPException(
             status_code=500,
-            detail="Authentication service not configured"
+            detail=f"Authentication service not configured. Missing environment variables: {', '.join(missing)}"
         )
     
     access_token = None

@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent } from '@/components/ui/card'
 import { DashboardStats } from '@/types/dashboard'
@@ -61,13 +62,25 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ initialData }: DashboardClientProps) {
+  // Check if user is authenticated before enabling queries
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false)
+  
+  React.useEffect(() => {
+    const checkAuth = async () => {
+      const token = await getAuthToken()
+      setIsAuthenticated(!!token)
+    }
+    checkAuth()
+  }, [])
+  
   // Use React Query with server-provided initial data
   const { data, isLoading, error } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: fetchDashboardStats,
     initialData, // Hydrate with server data
+    enabled: isAuthenticated, // Only fetch if authenticated
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
+    refetchInterval: isAuthenticated ? 5 * 60 * 1000 : false, // Only refetch if authenticated
     refetchOnWindowFocus: false, // Don't refetch when window regains focus
   })
 

@@ -47,6 +47,35 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { moveSchema, type MoveFormData } from "@/lib/validations/assets"
+import { createClient } from '@/lib/supabase-client'
+import { useAssetSuggestions, type Asset as AssetFromHook } from '@/hooks/use-assets'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      console.warn('No active session found')
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Failed to get auth token:', error)
+    return null
+  }
+}
 
 interface Asset {
   id: string
@@ -179,7 +208,18 @@ function MoveAssetPageContent() {
   }>({
     queryKey: ["move-stats"],
     queryFn: async () => {
-      const response = await fetch("/api/assets/move/stats", {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/move/stats`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
         cache: 'no-store', // Don't cache the fetch request
       })
       if (!response.ok) {
@@ -240,41 +280,16 @@ function MoveAssetPageContent() {
     return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`
   }
 
-  // Fetch asset suggestions based on input (exclude leased assets)
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-move-suggestions", assetIdInput, showSuggestions],
-    queryFn: async () => {
-      // If input is empty, show recent assets
-      if (!assetIdInput.trim() || assetIdInput.length < 1) {
-        const response = await fetch(`/api/assets?search=`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch assets')
-        }
-        const data = await response.json()
-        const assets = data.assets as Asset[]
-        
-        // Filter out leased assets
-        return assets
-          .filter(a => a.status !== "Leased" && (!a.leases || a.leases.length === 0))
-          .slice(0, 10)
-      }
-      
-      // If there's input, search for matching assets
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetIdInput.trim())}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets')
-      }
-      const data = await response.json()
-      const assets = data.assets as Asset[]
-      
-      // Filter out leased assets
-      return assets
-        .filter(a => a.status !== "Leased" && (!a.leases || a.leases.length === 0))
-        .slice(0, 10)
-    },
-    enabled: showSuggestions && canViewAssets && canMove,
-    staleTime: 0, // Always fetch fresh data for suggestions
-  })
+  // Fetch asset suggestions using reusable hook
+  // Include all statuses, limit to 10 results
+  const { suggestions: assetSuggestions, isLoading: isLoadingSuggestions } = useAssetSuggestions(
+    assetIdInput,
+    "", // No status filter - include all statuses
+    [],
+    canViewAssets && canMove,
+    showSuggestions,
+    10 // max results - limit to 10 suggestions
+  )
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -322,7 +337,7 @@ function MoveAssetPageContent() {
 
   // Handle asset selection
   const handleSelectAsset = async (asset?: Asset) => {
-    let assetToAdd = asset || await lookupAsset(assetIdInput.trim())
+    const assetToAdd = asset || await lookupAsset(assetIdInput.trim())
     
     if (!assetToAdd) {
       if (!asset) {
@@ -331,17 +346,8 @@ function MoveAssetPageContent() {
       return
     }
 
-    // Always fetch fresh asset data to ensure we have the latest values
-    try {
-      const response = await fetch(`/api/assets/${assetToAdd.id}`)
-      if (response.ok) {
-        const result = await response.json()
-        assetToAdd = result.asset as Asset
-      }
-    } catch (error) {
-      console.error('Error fetching fresh asset data:', error)
-      // Continue with the asset we have if fetch fails
-    }
+    // Note: Asset data from suggestions already includes checkouts, leases, and other needed fields
+    // No need to fetch again - use the data we already have
 
     setSelectedAsset(assetToAdd)
     form.setValue('assetId', assetToAdd.id)
@@ -376,8 +382,9 @@ function MoveAssetPageContent() {
   }
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (asset: Asset) => {
-    handleSelectAsset(asset)
+  const handleSelectSuggestion = (asset: AssetFromHook) => {
+    // Convert AssetFromHook to local Asset type - use type assertion since types are compatible
+    handleSelectAsset(asset as unknown as Asset)
   }
 
   // Handle keyboard navigation in suggestions
@@ -463,7 +470,19 @@ function MoveAssetPageContent() {
       // Fetch and select the asset from URL
       const selectAssetFromUrl = async () => {
         try {
-          const response = await fetch(`/api/assets/${urlAssetId}`)
+          const baseUrl = getApiBaseUrl()
+          const url = `${baseUrl}/api/assets/${urlAssetId}`
+          
+          const token = await getAuthToken()
+          const headers: HeadersInit = {}
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`
+          }
+
+          const response = await fetch(url, {
+            headers,
+            credentials: 'include',
+          })
           if (response.ok) {
             const data = await response.json()
             const asset = data.asset as Asset
@@ -500,7 +519,19 @@ function MoveAssetPageContent() {
       // Refetch asset data when window regains focus to catch any updates
       const refetchAsset = async () => {
         try {
-          const response = await fetch(`/api/assets/${selectedAsset.id}?_t=${Date.now()}`)
+          const baseUrl = getApiBaseUrl()
+          const url = `${baseUrl}/api/assets/${selectedAsset.id}`
+          
+          const token = await getAuthToken()
+          const headers: HeadersInit = {}
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`
+          }
+
+          const response = await fetch(url, {
+            headers,
+            credentials: 'include',
+          })
           if (response.ok) {
             const result = await response.json()
             const updatedAsset = result.asset as Asset
@@ -619,15 +650,25 @@ function MoveAssetPageContent() {
       reason?: string
       notes?: string
     }) => {
-      const response = await fetch('/api/assets/move', {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/move`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: 'include',
         body: JSON.stringify(data),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to move asset')
+        const error = await response.json().catch(() => ({ error: 'Failed to move asset' }))
+        throw new Error(error.error || error.detail || 'Failed to move asset')
       }
 
       return response.json()
@@ -643,7 +684,19 @@ function MoveAssetPageContent() {
       // Fetch fresh asset data to update selectedAsset if it's still selected
       if (selectedAsset && selectedAsset.id === variables.assetId) {
         try {
-          const response = await fetch(`/api/assets/${variables.assetId}`)
+          const baseUrl = getApiBaseUrl()
+          const url = `${baseUrl}/api/assets/${variables.assetId}`
+          
+          const token = await getAuthToken()
+          const headers: HeadersInit = {}
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`
+          }
+
+          const response = await fetch(url, {
+            headers,
+            credentials: 'include',
+          })
           if (response.ok) {
             const result = await response.json()
             const updatedAsset = result.asset as Asset
@@ -914,7 +967,7 @@ function MoveAssetPageContent() {
                         </div>
                       </div>
                     ) : assetSuggestions.length > 0 ? (
-                      assetSuggestions.map((asset, index) => (
+                      assetSuggestions.map((asset: AssetFromHook, index: number) => (
                         <motion.div
                           key={asset.id}
                           initial={{ opacity: 0, x: -10 }}

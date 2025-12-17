@@ -18,6 +18,13 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { createClient } from "@/lib/supabase-client"
+
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
 
 export function LoginForm({
   className,
@@ -47,19 +54,58 @@ export function LoginForm({
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      })
+      const baseUrl = getApiBaseUrl()
+      const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+      
+      if (useFastAPI) {
+        // FastAPI: Make request and set session in Supabase client
+        const response = await fetch(`${baseUrl}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(data),
+        })
 
-      const responseData = await response.json()
+        const responseData = await response.json()
 
-      if (!response.ok) {
-        toast.error(responseData.error || 'Failed to login')
-        return
+        if (!response.ok) {
+          toast.error(responseData.detail || responseData.error || 'Failed to login')
+          return
+        }
+
+        // Set session in Supabase client
+        if (responseData.session) {
+          const supabase = createClient()
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: responseData.session.access_token,
+            refresh_token: responseData.session.refresh_token,
+          })
+          
+          if (sessionError) {
+            console.error('Failed to set session:', sessionError)
+            toast.error('Failed to set session. Please try again.')
+            return
+          }
+        }
+      } else {
+        // Next.js API: Standard flow
+        const response = await fetch(`${baseUrl}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(data),
+        })
+
+        const responseData = await response.json()
+
+        if (!response.ok) {
+          toast.error(responseData.error || 'Failed to login')
+          return
+        }
       }
 
       // Login successful, check for redirect parameter

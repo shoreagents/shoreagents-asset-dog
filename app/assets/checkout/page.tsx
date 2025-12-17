@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAllEmployees } from '@/hooks/use-employees'
+import { useAssets } from '@/hooks/use-assets'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -42,36 +43,49 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { checkoutSchema, type CheckoutFormData } from "@/lib/validations/checkout"
+import { createClient } from '@/lib/supabase-client'
 
-interface Asset {
-  id: string
-  assetTagId: string
-  description: string
-  status?: string
-  department?: string
-  site?: string
-  location?: string
-  category?: {
-    id: string
-    name: string
-  } | null
-  subCategory?: {
-    id: string
-    name: string
-  } | null
-  employeeUser?: {
-    id: string
-    name: string
-    email: string
+// Using Asset type from hooks/use-assets
+import type { Asset } from '@/hooks/use-assets'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      console.warn('No active session found')
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Failed to get auth token:', error)
+    return null
   }
 }
 
-
-interface CheckoutAsset extends Asset {
+// Local interface for checkout-specific asset data
+interface CheckoutAssetLocal extends Omit<Asset, 'status'> {
+  status?: string | null
   newDepartment?: string
   newSite?: string
   newLocation?: string
 }
+
+
+// CheckoutAsset is now CheckoutAssetLocal
+type CheckoutAsset = CheckoutAssetLocal
 
 // Helper function to get status badge with colors (only for Available status)
 const getStatusBadge = (status: string | null) => {
@@ -148,35 +162,36 @@ function CheckoutPageContent() {
     }
   }, [assetIdInput])
 
-  // Fetch asset suggestions based on debounced input (only Available assets)
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-suggestions", debouncedAssetIdInput.trim(), selectedAssets.length, showSuggestions],
-    queryFn: async () => {
+  // Fetch asset suggestions using useAssets hook (only Available assets)
       const searchTerm = debouncedAssetIdInput.trim() || ''
-      // Fetch only 50 items to account for filtering Available assets, then slice to 10
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=50&status=Available`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch assets')
-        }
-        const data = await response.json()
-        const assets = data.assets as Asset[]
-        
-        // Filter out assets already in selected list and only show Available assets
+  const hasSearchTerm = searchTerm.length > 0
+  const { data: assetsData, isLoading: isLoadingSuggestions } = useAssets(
+    showSuggestions && canViewAssets && canCheckout, // enabled
+    hasSearchTerm ? searchTerm : undefined, // search
+    undefined, // category
+    "Available", // status
+    1, // page
+    50, // pageSize
+    false, // withMaintenance
+    false, // includeDeleted
+    undefined // searchFields
+  )
+
+  // Filter asset suggestions
+  const assetSuggestions = useMemo(() => {
+    if (!assetsData?.assets) return []
         const selectedIds = selectedAssets.map(a => a.id.toLowerCase())
-      const filtered = assets
+    const filtered = assetsData.assets
           .filter(a => {
             const notSelected = !selectedIds.includes(a.id.toLowerCase())
             const isAvailable = !a.status || a.status === "Available"
             return notSelected && isAvailable
           })
-        .slice(0, 10) // Limit suggestions to 10 for UI
-      
-      return filtered
-    },
-    enabled: showSuggestions && canViewAssets && canCheckout,
-    staleTime: 1000, // Cache for 1 second
-    placeholderData: (previousData) => previousData, // Show previous results while loading
-  })
+    
+    // Show 10 results when searching, 20 when empty (same as other pages)
+    const limit = hasSearchTerm ? 10 : 20
+    return filtered.slice(0, limit)
+  }, [assetsData?.assets, selectedAssets, hasSearchTerm])
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -197,10 +212,26 @@ function CheckoutPageContent() {
     }
   }, [])
 
-  // Asset lookup by ID - optimized to fetch only 10 items
+  // Asset lookup by ID using useAssets hook
   const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
     try {
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`)
+      // Use direct fetch for lookup since it's a one-off operation
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch assets')
+      }
       const data = await response.json()
       const assets = data.assets as Asset[]
       
@@ -482,15 +513,25 @@ function CheckoutPageContent() {
       expectedReturnDate?: string
       updates: Record<string, { department?: string; site?: string; location?: string }>
     }) => {
-      const response = await fetch('/api/assets/checkout', {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/checkout`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: 'include',
         body: JSON.stringify(data),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to checkout assets')
+        const error = await response.json().catch(() => ({ error: 'Failed to checkout assets' }))
+        throw new Error(error.error || error.detail || 'Failed to checkout assets')
       }
 
       return response.json()
@@ -571,7 +612,19 @@ function CheckoutPageContent() {
   }>({
     queryKey: ["assets", "checkout-stats-summary"],
     queryFn: async () => {
-      const response = await fetch('/api/assets?summary=true')
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?summary=true`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch asset summary')
       }
@@ -610,12 +663,23 @@ function CheckoutPageContent() {
   }>({
     queryKey: ["checkout-stats"],
     queryFn: async () => {
-      const response = await fetch("/api/assets/checkout/stats", {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/checkout/stats`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
         cache: 'no-store', // Don't cache the fetch request
       })
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to fetch checkout statistics')
+        throw new Error(errorData.error || errorData.detail || 'Failed to fetch checkout statistics')
       }
       const data = await response.json()
       return data

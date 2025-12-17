@@ -58,13 +58,49 @@ const getScheduleTypeColor = (): string => {
   return 'bg-purple-100 text-purple-800 dark:bg-purple-900/80 dark:text-purple-100'
 }
 
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = (await import('@/lib/supabase-client')).createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Error getting auth token:', error)
+    return null
+  }
+}
+
 async function fetchSchedules(startDate: Date, endDate: Date): Promise<Schedule[]> {
   const startDateStr = format(startDate, 'yyyy-MM-dd')
   const endDateStr = format(endDate, 'yyyy-MM-dd')
   
-  const response = await fetch(
-    `/api/assets/schedules?startDate=${startDateStr}&endDate=${endDateStr}`
-  )
+  const baseUrl = getApiBaseUrl()
+  const url = `${baseUrl}/api/assets/schedules?startDate=${startDateStr}&endDate=${endDateStr}`
+  
+  const token = await getAuthToken()
+  const headers: HeadersInit = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  
+  const response = await fetch(url, {
+    headers,
+    credentials: 'include',
+  })
   
   if (!response.ok) {
     throw new Error('Failed to fetch schedules')
@@ -75,9 +111,19 @@ async function fetchSchedules(startDate: Date, endDate: Date): Promise<Schedule[
 }
 
 async function createSchedule(data: ScheduleFormData): Promise<Schedule> {
-  const response = await fetch('/api/assets/schedules', {
+  const baseUrl = getApiBaseUrl()
+  const url = `${baseUrl}/api/assets/schedules`
+  
+  const token = await getAuthToken()
+  const headers: HeadersInit = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  
+  const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
+    credentials: 'include',
     body: JSON.stringify({
       ...data,
       scheduledDate: format(data.scheduledDate, 'yyyy-MM-dd'),
@@ -86,7 +132,7 @@ async function createSchedule(data: ScheduleFormData): Promise<Schedule> {
   
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.error || 'Failed to create schedule')
+    throw new Error(error.error || error.detail || 'Failed to create schedule')
   }
   
   const result = await response.json()
@@ -127,15 +173,25 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
   // Update schedule status mutation
   const updateScheduleStatusMutation = useMutation({
     mutationFn: async ({ scheduleId, status }: { scheduleId: string; status: 'completed' | 'cancelled' }) => {
-      const response = await fetch(`/api/assets/schedules/${scheduleId}`, {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/schedules/${scheduleId}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({ status }),
       })
       
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || 'Failed to update schedule')
+        throw new Error(error.error || error.detail || 'Failed to update schedule')
       }
       
       return response.json()

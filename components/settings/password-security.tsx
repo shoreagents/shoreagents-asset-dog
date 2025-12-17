@@ -18,6 +18,28 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { createClient } from '@/lib/supabase-client'
+
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    return session?.access_token || null
+  } catch (error) {
+    console.error('Failed to get auth token:', error)
+    return null
+  }
+}
 
 export default function PasswordAndSecurity() {
   const router = useRouter()
@@ -38,11 +60,19 @@ export default function PasswordAndSecurity() {
 
   const onSubmit = async (data: ChangePasswordFormData) => {
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const baseUrl = getApiBaseUrl()
+      const token = await getAuthToken()
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${baseUrl}/api/auth/change-password`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include', // Send cookies for authentication (fallback)
+        headers,
         body: JSON.stringify({
           currentPassword: data.currentPassword,
           newPassword: data.newPassword,

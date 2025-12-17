@@ -263,12 +263,26 @@ async def get_assets(
                 }
             )
             
+            # Calculate value of checked out assets only
+            checked_out_where = {
+                **where_clause,
+                "status": {"equals": "Checked out", "mode": "insensitive"}
+            }
+            checked_out_assets_for_value = await prisma.assets.find_many(
+                where=checked_out_where
+            )
+            checked_out_value = sum(
+                float(asset.cost) if asset.cost is not None else 0.0
+                for asset in checked_out_assets_for_value
+            )
+            
             return SummaryResponse(
                 summary=SummaryInfo(
                     totalAssets=total_assets,
                     totalValue=total_value,
                     availableAssets=available_assets,
-                    checkedOutAssets=checked_out_assets
+                    checkedOutAssets=checked_out_assets,
+                    checkedOutAssetsValue=checked_out_value
                 )
             )
         
@@ -500,6 +514,168 @@ async def get_assets(
     except Exception as e:
         logger.error(f"Error fetching assets: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch assets")
+
+@router.get("/{asset_id}", response_model=AssetResponse)
+async def get_asset(
+    asset_id: str,
+    auth: dict = Depends(verify_auth)
+):
+    """Get a single asset by ID"""
+    try:
+        # Find the asset
+        asset_data = await prisma.assets.find_unique(
+            where={"id": asset_id},
+            include={
+                "category": True,
+                "subCategory": True,
+                "checkouts": {
+                    "include": {
+                        "employeeUser": True,
+                        "checkins": True
+                    }
+                },
+                "leases": {
+                    "include": {
+                        "returns": True
+                    }
+                },
+                "auditHistory": True
+            }
+        )
+        
+        if not asset_data:
+            raise HTTPException(status_code=404, detail=f"Asset with ID {asset_id} not found")
+        
+        # Get image count
+        image_counts = {}
+        try:
+            # Count images for this asset
+            image_count = await prisma.assetsimage.count(
+                where={"assetTagId": asset_data.assetTagId}
+            )
+            image_counts[asset_data.assetTagId] = image_count
+        except Exception as e:
+            logger.warning(f"Error counting images: {e}")
+            image_counts[asset_data.assetTagId] = 0
+        
+        # Format category info
+        category_info = None
+        if asset_data.category:
+            category_info = CategoryInfo(
+                id=str(asset_data.category.id),
+                name=str(asset_data.category.name)
+            )
+        
+        # Format subcategory info
+        sub_category_info = None
+        if asset_data.subCategory:
+            sub_category_info = SubCategoryInfo(
+                id=str(asset_data.subCategory.id),
+                name=str(asset_data.subCategory.name)
+            )
+        
+        # Format checkouts
+        checkouts_list = []
+        if asset_data.checkouts:
+            for checkout in asset_data.checkouts:
+                employee_info = None
+                if checkout.employeeUser:
+                    employee_info = EmployeeInfo(
+                        id=str(checkout.employeeUser.id),
+                        name=str(checkout.employeeUser.name),
+                        email=str(checkout.employeeUser.email),
+                        department=checkout.employeeUser.department
+                    )
+                
+                checkouts_list.append(CheckoutInfo(
+                    id=str(checkout.id),
+                    checkoutDate=checkout.checkoutDate,
+                    expectedReturnDate=checkout.expectedReturnDate,
+                    employeeUser=employee_info
+                ))
+        
+        # Format leases
+        leases_list = []
+        if asset_data.leases:
+            for lease in asset_data.leases:
+                leases_list.append(LeaseInfo(
+                    id=str(lease.id),
+                    leaseStartDate=lease.leaseStartDate,
+                    leaseEndDate=lease.leaseEndDate,
+                    lessee=lease.lessee
+                ))
+        
+        # Format audit history
+        audit_history_list = []
+        if asset_data.auditHistory:
+            # Sort by auditDate descending and take only the first 5
+            sorted_audits = sorted(
+                asset_data.auditHistory,
+                key=lambda x: x.auditDate if x.auditDate else datetime.min,
+                reverse=True
+            )[:5]
+            for audit in sorted_audits:
+                audit_history_list.append(AuditHistoryInfo(
+                    id=str(audit.id),
+                    auditDate=audit.auditDate,
+                    auditType=audit.auditType,
+                    auditor=audit.auditor
+                ))
+        
+        asset = Asset(
+            id=str(asset_data.id),
+            assetTagId=str(asset_data.assetTagId),
+            description=str(asset_data.description),
+            purchasedFrom=asset_data.purchasedFrom,
+            purchaseDate=asset_data.purchaseDate,
+            brand=asset_data.brand,
+            cost=asset_data.cost,
+            model=asset_data.model,
+            serialNo=asset_data.serialNo,
+            additionalInformation=asset_data.additionalInformation,
+            xeroAssetNo=asset_data.xeroAssetNo,
+            owner=asset_data.owner,
+            pbiNumber=asset_data.pbiNumber,
+            status=asset_data.status,
+            issuedTo=asset_data.issuedTo,
+            poNumber=asset_data.poNumber,
+            paymentVoucherNumber=asset_data.paymentVoucherNumber,
+            assetType=asset_data.assetType,
+            deliveryDate=asset_data.deliveryDate,
+            unaccountedInventory=asset_data.unaccountedInventory,
+            remarks=asset_data.remarks,
+            qr=asset_data.qr,
+            oldAssetTag=asset_data.oldAssetTag,
+            depreciableAsset=asset_data.depreciableAsset,
+            depreciableCost=asset_data.depreciableCost,
+            salvageValue=asset_data.salvageValue,
+            assetLifeMonths=asset_data.assetLifeMonths,
+            depreciationMethod=asset_data.depreciationMethod,
+            dateAcquired=asset_data.dateAcquired,
+            categoryId=asset_data.categoryId,
+            category=category_info,
+            subCategoryId=asset_data.subCategoryId,
+            subCategory=sub_category_info,
+            department=asset_data.department,
+            site=asset_data.site,
+            location=asset_data.location,
+            createdAt=asset_data.createdAt,
+            updatedAt=asset_data.updatedAt,
+            deletedAt=asset_data.deletedAt,
+            isDeleted=asset_data.isDeleted,
+            checkouts=checkouts_list if checkouts_list else None,
+            leases=leases_list if leases_list else None,
+            auditHistory=audit_history_list if audit_history_list else None,
+            imagesCount=image_counts.get(asset_data.assetTagId, 0)
+        )
+        
+        return AssetResponse(asset=asset)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching asset: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch asset")
 
 @router.post("", response_model=AssetResponse, status_code=201)
 async def create_asset(

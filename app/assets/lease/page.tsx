@@ -37,6 +37,34 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { leaseSchema, type LeaseFormData } from "@/lib/validations/assets"
+import { createClient } from '@/lib/supabase-client'
+import { useAssetSuggestions, type Asset as AssetFromHook } from '@/hooks/use-assets'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Error getting auth token:', error)
+    return null
+  }
+}
 
 interface Asset {
   id: string
@@ -153,7 +181,19 @@ function LeaseAssetPageContent() {
   }>({
     queryKey: ["lease-stats"],
     queryFn: async () => {
-      const response = await fetch("/api/assets/lease/stats")
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/lease/stats`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch lease statistics')
       }
@@ -210,41 +250,35 @@ function LeaseAssetPageContent() {
     return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`
   }
 
-  // Fetch asset suggestions based on input (show all assets including leased)
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-lease-suggestions", assetIdInput, showSuggestions],
-    queryFn: async () => {
-      // If input is empty, show recent/available assets
-      if (!assetIdInput.trim() || assetIdInput.length < 1) {
-        const response = await fetch(`/api/assets?search=&pageSize=1000`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch assets')
-        }
-        const data = await response.json()
-        const assets = data.assets as Asset[]
-        
-        // Filter to only show Available assets (but include those with active leases for display)
-        return assets
-          .filter(a => !a.status || a.status === "Available" || a.status === "Leased")
-          .slice(0, 10)
+  // Fetch asset suggestions using reusable hook (only Available assets, exclude Leased)
+  const { suggestions: allSuggestions, isLoading: isLoadingSuggestions } = useAssetSuggestions(
+    assetIdInput,
+    "Available", // Filter for Available status only
+    [],
+    canViewAssets && canLease,
+    showSuggestions,
+    10 // max results when searching, 20 when empty
+  )
+
+  // Filter out Leased status assets - cannot lease an already leased asset
+  const assetSuggestions = useMemo(() => {
+    return allSuggestions.filter(a => {
+      // Exclude if status is "Leased"
+      if (a.status === "Leased") return false
+      
+      // Convert to Asset type to check for active leases (use unknown first for type safety)
+      const asset = a as unknown as Asset
+      // Exclude if has active lease
+      try {
+        if (hasActiveLease(asset)) return false
+      } catch {
+        // If conversion fails, exclude it to be safe
+        return false
       }
       
-      // If there's input, search for matching assets
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetIdInput.trim())}&pageSize=1000`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets')
-      }
-      const data = await response.json()
-      const assets = data.assets as Asset[]
-      
-      // Filter to only show Available assets (but include those with active leases for display)
-      return assets
-        .filter(a => !a.status || a.status === "Available" || a.status === "Leased")
-        .slice(0, 10)
-    },
-    enabled: showSuggestions && canViewAssets && canLease,
-    staleTime: 300,
-  })
+      return true
+    })
+  }, [allSuggestions])
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -306,14 +340,17 @@ function LeaseAssetPageContent() {
   }
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (asset: Asset) => {
-    // Check if asset has an active lease
-    if (hasActiveLease(asset)) {
+  const handleSelectSuggestion = (asset: AssetFromHook) => {
+    // Convert AssetFromHook to local Asset type
+    const assetToSelect = asset as unknown as Asset
+    
+    // Double-check: asset should already be filtered, but verify it's not leased
+    if (hasActiveLease(assetToSelect) || assetToSelect.status === "Leased") {
       toast.error(`Asset "${asset.assetTagId}" already has an active lease`)
       return
     }
     
-    setSelectedAsset(asset)
+    setSelectedAsset(assetToSelect)
     setAssetIdInput(asset.assetTagId)
     form.setValue('assetId', asset.id)
     setShowSuggestions(false)
@@ -816,7 +853,10 @@ function LeaseAssetPageContent() {
                         </div>
                       </div>
                     ) : assetSuggestions.length > 0 ? (
-                      assetSuggestions.map((asset, index) => (
+                      assetSuggestions.map((asset: AssetFromHook, index: number) => {
+                        // Convert to local Asset type for helper functions
+                        const assetAsLocal = asset as unknown as Asset
+                        return (
                         <motion.div
                           key={asset.id}
                           initial={{ opacity: 0, x: -10 }}
@@ -826,10 +866,10 @@ function LeaseAssetPageContent() {
                           onMouseEnter={() => setSelectedSuggestionIndex(index)}
                           className={cn(
                              "px-4 py-3 transition-colors",
-                             hasActiveLease(asset) 
+                             hasActiveLease(assetAsLocal) 
                                ? "cursor-not-allowed opacity-60" 
                                : "cursor-pointer hover:bg-gray-400/20 hover:bg-clip-padding hover:backdrop-filter hover:backdrop-blur-sm",
-                             selectedSuggestionIndex === index && !hasActiveLease(asset) && "bg-gray-400/20 bg-clip-padding backdrop-filter backdrop-blur-sm"
+                             selectedSuggestionIndex === index && !hasActiveLease(assetAsLocal) && "bg-gray-400/20 bg-clip-padding backdrop-filter backdrop-blur-sm"
                           )}
                         >
                           <div className="flex items-center justify-between">
@@ -840,10 +880,11 @@ function LeaseAssetPageContent() {
                                 {asset.subCategory?.name && ` - ${asset.subCategory.name}`}
                               </div>
                             </div>
-                             {getSuggestionBadge(asset)}
+                             {getSuggestionBadge(assetAsLocal)}
                           </div>
                         </motion.div>
-                      ))
+                        )
+                      })
                     ) : (
                       <div className="px-3 py-2 text-sm text-muted-foreground">
                         No assets found. Start typing to search...

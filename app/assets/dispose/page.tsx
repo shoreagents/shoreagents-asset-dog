@@ -44,6 +44,34 @@ import { Field, FieldLabel, FieldContent, FieldError } from "@/components/ui/fie
 import { cn } from "@/lib/utils"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { disposeSchema, type DisposeFormData } from "@/lib/validations/assets"
+import { createClient } from '@/lib/supabase-client'
+import { useAssetSuggestions, type Asset as AssetFromHook } from '@/hooks/use-assets'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Error getting auth token:', error)
+    return null
+  }
+}
 
 interface Asset {
   id: string
@@ -188,7 +216,19 @@ function DisposeAssetPageContent() {
   }>({
     queryKey: ["dispose-stats"],
     queryFn: async () => {
-      const response = await fetch("/api/assets/dispose/stats")
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/dispose/stats`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch dispose statistics')
       }
@@ -246,54 +286,25 @@ function DisposeAssetPageContent() {
   }
 
   // List of disposal statuses that should be excluded from suggestions
-  const disposalStatuses = ['Disposed', 'Sold', 'Donated', 'Scrapped', 'Lost/Missing', 'Destroyed']
+  const disposalStatuses = useMemo(() => ['Disposed', 'Sold', 'Donated', 'Scrapped', 'Lost/Missing', 'Destroyed'], [])
 
-  // Fetch asset suggestions based on input (exclude already disposed assets)
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-dispose-suggestions", assetIdInput, selectedAssets.length, showSuggestions],
-    queryFn: async () => {
-      // Filter out assets already in selected list
-      const selectedIds = selectedAssets.map(a => a.id.toLowerCase())
-      
-      // If input is empty, show all available assets
-      if (!assetIdInput.trim() || assetIdInput.length < 1) {
-        const response = await fetch(`/api/assets?search=`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch assets')
-        }
-        const data = await response.json()
-        const assets = data.assets as Asset[]
-        
-        // Filter to exclude already disposed assets (any disposal status)
-        return assets
-          .filter(a => {
-            const notSelected = !selectedIds.includes(a.id.toLowerCase())
-            const notDisposed = !a.status || !disposalStatuses.includes(a.status)
-            return notSelected && notDisposed
-          })
-          .slice(0, 20)
-      }
-      
-      // If there's input, search for matching assets
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetIdInput.trim())}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets')
-      }
-      const data = await response.json()
-      const assets = data.assets as Asset[]
-      
-      // Filter to exclude already disposed assets (any disposal status)
-      return assets
-        .filter(a => {
-          const notSelected = !selectedIds.includes(a.id.toLowerCase())
-          const notDisposed = !a.status || !disposalStatuses.includes(a.status)
-          return notSelected && notDisposed
-        })
-        .slice(0, 10)
-    },
-    enabled: showSuggestions && canViewAssets && canDispose,
-    staleTime: 300,
-  })
+  // Fetch asset suggestions using reusable hook (include all statuses, exclude disposed)
+  const { suggestions: allSuggestions, isLoading: isLoadingSuggestions } = useAssetSuggestions(
+    assetIdInput,
+    "", // No status filter - include all statuses
+    selectedAssets.map(a => a.id),
+    canViewAssets && canDispose,
+    showSuggestions,
+    10 // max results when searching, 20 when empty
+  )
+
+  // Filter to exclude already disposed assets (any disposal status)
+  const assetSuggestions = useMemo(() => {
+    return allSuggestions.filter(a => {
+      const notDisposed = !a.status || !disposalStatuses.includes(a.status)
+      return notDisposed
+    })
+  }, [allSuggestions, disposalStatuses])
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -351,9 +362,11 @@ function DisposeAssetPageContent() {
   }
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (asset: Asset) => {
+  const handleSelectSuggestion = (asset: AssetFromHook) => {
+    // Convert AssetFromHook to local Asset type
+    const assetAsLocal = asset as unknown as Asset
     const disposeAsset: DisposeAsset = {
-      ...asset,
+      ...assetAsLocal,
       disposeReason: "",
       disposeValue: "",
       notes: "",
@@ -472,7 +485,19 @@ function DisposeAssetPageContent() {
       // Fetch and add the asset from URL
       const addAssetFromUrl = async () => {
         try {
-          const response = await fetch(`/api/assets/${urlAssetId}`)
+          const baseUrl = getApiBaseUrl()
+          const url = `${baseUrl}/api/assets/${urlAssetId}`
+          
+          const token = await getAuthToken()
+          const headers: HeadersInit = {}
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`
+          }
+
+          const response = await fetch(url, {
+            headers,
+            credentials: 'include',
+          })
           if (response.ok) {
             const data = await response.json()
             const asset = data.asset as Asset
@@ -672,15 +697,25 @@ function DisposeAssetPageContent() {
       disposeValue?: string
       updates: Record<string, { disposeValue?: string; notes?: string }>
     }) => {
-      const response = await fetch('/api/assets/dispose', {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/dispose`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: 'include',
         body: JSON.stringify(data),
       })
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || 'Failed to dispose assets')
+        throw new Error(error.error || error.detail || 'Failed to dispose assets')
       }
 
       return response.json()
@@ -932,7 +967,7 @@ function DisposeAssetPageContent() {
                       No assets found
                     </div>
                   ) : (
-                    assetSuggestions.map((asset, index) => (
+                    assetSuggestions.map((asset: AssetFromHook, index: number) => (
                       <motion.div
                         key={asset.id}
                         initial={{ opacity: 0, x: -10 }}

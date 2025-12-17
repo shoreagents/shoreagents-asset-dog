@@ -123,7 +123,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.3 }}
     >
-      <Card className="gap-0 overflow-hidden relative !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+      <Card className="gap-0 overflow-hidden relative bg-transparent! bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-180 rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
         {/* 3D Bubble Highlight - Top */}
         <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
         
@@ -143,7 +143,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="h-8 gap-2 bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-10 border shadow-sm flex-shrink-0"
+                  className="h-8 gap-2 bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-10 border shadow-sm shrink-0"
                 >
                   <Settings2 className="h-4 w-4" />
                   <span className="hidden sm:inline">Customize</span>
@@ -193,7 +193,7 @@ export function ActivityFeed({ data, isLoading }: ActivityFeedProps) {
               >
                 <tab.icon className="h-4 w-4" />
                 {tab.label}
-                <Badge variant={activeTab === tab.id ? 'default' : 'secondary'} className="ml-1 h-5 px-1.5 min-w-[20px] !bg-transparent bg-[linear-gradient(135deg,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0.1)_100%)] backdrop-blur-md backdrop-saturate-150 border-[1px_solid_rgba(255,255,255,0.3)] shadow-[0_2px_8px_0_rgba(0,0,0,0.1),inset_0_1px_0_0_rgba(255,255,255,0.3)]">
+                <Badge variant={activeTab === tab.id ? 'default' : 'secondary'} className="ml-1 h-5 px-1.5 min-w-[20px] bg-transparent! bg-[linear-gradient(135deg,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0.1)_100%)] backdrop-blur-md backdrop-saturate-150 border-[1px_solid_rgba(255,255,255,0.3)] shadow-[0_2px_8px_0_rgba(0,0,0,0.1),inset_0_1px_0_0_rgba(255,255,255,0.3)]">
                   {tab.count}
                 </Badge>
                 {activeTab === tab.id && (

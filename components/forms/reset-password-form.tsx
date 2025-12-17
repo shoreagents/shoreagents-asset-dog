@@ -19,6 +19,12 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
 export function ResetPasswordForm({
   className,
   ...props
@@ -59,11 +65,13 @@ export function ResetPasswordForm({
     }
 
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const baseUrl = getApiBaseUrl()
+      const response = await fetch(`${baseUrl}/api/auth/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Send cookies for authentication
         body: JSON.stringify({
           code,
           password: data.password,

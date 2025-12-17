@@ -44,6 +44,34 @@ import { Field, FieldLabel, FieldContent, FieldError } from "@/components/ui/fie
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { leaseReturnSchema } from "@/lib/validations/assets"
+import { createClient } from '@/lib/supabase-client'
+import { useAssetSuggestions, type Asset as AssetFromHook } from '@/hooks/use-assets'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Error getting auth token:', error)
+    return null
+  }
+}
 
 interface Asset {
   id: string
@@ -134,7 +162,19 @@ function LeaseReturnPageContent() {
   }>({
     queryKey: ["lease-return-stats"],
     queryFn: async () => {
-      const response = await fetch("/api/assets/lease-return/stats")
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/lease-return/stats`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch lease return statistics')
       }
@@ -191,60 +231,28 @@ function LeaseReturnPageContent() {
     return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`
   }
 
-  // Fetch asset suggestions based on input (only Leased assets)
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-lease-return-suggestions", assetIdInput, selectedAssets.length, showSuggestions],
-    queryFn: async () => {
-      // Filter out assets already in selected list
-      const selectedIds = selectedAssets.map(a => a.id.toLowerCase())
-      
-      // If input is empty, show all leased assets
-      if (!assetIdInput.trim() || assetIdInput.length < 1) {
-        // Fetch with larger page size to get more results
-        const response = await fetch(`/api/assets?search=&pageSize=100`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch assets')
-        }
-        const data = await response.json()
-        const assets = data.assets as Asset[]
-        
-        // Filter to only show assets with active leases that haven't been returned
-        return assets
-          .filter(a => {
-            const notSelected = !selectedIds.includes(a.id.toLowerCase())
-            const activeLease = a.leases && a.leases.length > 0 ? a.leases[0] : null
-            const hasActiveLease = !!activeLease
-            // Check if the active lease has already been returned
-            const isAlreadyReturned = activeLease?.returns && activeLease.returns.length > 0
-            return notSelected && hasActiveLease && !isAlreadyReturned
-          })
-          .slice(0, 20)
-      }
-      
-      // If there's input, search for matching assets with larger page size
-      // Use a large pageSize to ensure we find the asset even if paginated
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetIdInput.trim())}&pageSize=100`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets')
-      }
-      const data = await response.json()
-      const assets = data.assets as Asset[]
-      
-        // Filter to only show assets with active leases that haven't been returned
-        return assets
-          .filter(a => {
-            const notSelected = !selectedIds.includes(a.id.toLowerCase())
-            const activeLease = a.leases && a.leases.length > 0 ? a.leases[0] : null
-            const hasActiveLease = !!activeLease
-            // Check if the active lease has already been returned
-            const isAlreadyReturned = activeLease?.returns && activeLease.returns.length > 0
-            return notSelected && hasActiveLease && !isAlreadyReturned
-          })
-          .slice(0, 10)
-    },
-    enabled: showSuggestions && canViewAssets && canLease,
-    staleTime: 300,
-  })
+  // Fetch asset suggestions using reusable hook (only Leased assets)
+  const { suggestions: allSuggestions, isLoading: isLoadingSuggestions } = useAssetSuggestions(
+    assetIdInput,
+    "Leased", // Filter for Leased status only
+    selectedAssets.map(a => a.id),
+    canViewAssets && canLease,
+    showSuggestions,
+    10 // max results when searching, 20 when empty
+  )
+
+  // Filter to only show assets with active leases that haven't been returned
+  const assetSuggestions = useMemo(() => {
+    return allSuggestions.filter(a => {
+      // Convert to local Asset type to check for active leases
+      const asset = a as unknown as Asset
+      const activeLease = asset.leases && asset.leases.length > 0 ? asset.leases[0] : null
+      const hasActiveLease = !!activeLease
+      // Check if the active lease has already been returned
+      const isAlreadyReturned = activeLease?.returns && activeLease.returns.length > 0
+      return hasActiveLease && !isAlreadyReturned
+    })
+  }, [allSuggestions])
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -310,9 +318,12 @@ function LeaseReturnPageContent() {
   }
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (asset: Asset) => {
+  const handleSelectSuggestion = (asset: AssetFromHook) => {
+    // Convert AssetFromHook to local Asset type
+    const assetAsLocal = asset as unknown as Asset
+    
     // Get the most recent active lease
-    const activeLease = asset.leases?.[0]
+    const activeLease = assetAsLocal.leases?.[0]
     
     if (!activeLease) {
       toast.error('No active lease found for this asset')
@@ -320,7 +331,7 @@ function LeaseReturnPageContent() {
     }
 
     const leaseReturnAsset: LeaseReturnAsset = {
-      ...asset,
+      ...assetAsLocal,
       leaseId: activeLease.id,
       lessee: activeLease.lessee,
       leaseStartDate: activeLease.leaseStartDate,
@@ -887,7 +898,7 @@ function LeaseReturnPageContent() {
                       </div>
                     </div>
                   ) : assetSuggestions.length > 0 ? (
-                    assetSuggestions.map((asset, index) => (
+                    assetSuggestions.map((asset: AssetFromHook, index: number) => (
                       <motion.div
                         key={asset.id}
                         initial={{ opacity: 0, x: -10 }}

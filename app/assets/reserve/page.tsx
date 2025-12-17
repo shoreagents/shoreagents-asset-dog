@@ -46,6 +46,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { createClient } from '@/lib/supabase-client'
+import { useAssetSuggestions, type Asset as AssetFromHook } from '@/hooks/use-assets'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Error getting auth token:', error)
+    return null
+  }
+}
 
 interface Asset {
   id: string
@@ -150,7 +178,18 @@ function ReserveAssetPageContent() {
   }>({
     queryKey: ["reserve-stats"],
     queryFn: async () => {
-      const response = await fetch("/api/assets/reserve/stats", {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/reserve/stats`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
         cache: 'no-store', // Don't cache the fetch request
       })
       if (!response.ok) {
@@ -211,41 +250,15 @@ function ReserveAssetPageContent() {
     return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`
   }
 
-  // Fetch asset suggestions based on input (only Available assets)
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-reserve-suggestions", assetIdInput, showSuggestions],
-    queryFn: async () => {
-      // If input is empty, show recent/available assets
-      if (!assetIdInput.trim() || assetIdInput.length < 1) {
-        const response = await fetch(`/api/assets?search=&pageSize=1000`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch assets')
-        }
-        const data = await response.json()
-        const assets = data.assets as Asset[]
-        
-        // Filter to only show Available assets
-        return assets
-          .filter(a => !a.status || a.status === "Available")
-          .slice(0, 10)
-      }
-      
-      // If there's input, search for matching assets
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetIdInput.trim())}&pageSize=1000`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets')
-      }
-      const data = await response.json()
-      const assets = data.assets as Asset[]
-      
-      // Filter to only show Available assets
-      return assets
-        .filter(a => !a.status || a.status === "Available")
-        .slice(0, 10)
-    },
-    enabled: showSuggestions && canViewAssets && canReserve,
-    staleTime: 0, // Always fetch fresh data for suggestions
-  })
+  // Fetch asset suggestions using reusable hook (only Available assets)
+  const { suggestions: assetSuggestions, isLoading: isLoadingSuggestions } = useAssetSuggestions(
+    assetIdInput,
+    "Available", // Filter for Available status only
+    [],
+    canViewAssets && canReserve,
+    showSuggestions,
+    10 // max results - limit to 10 suggestions
+  )
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -299,8 +312,10 @@ function ReserveAssetPageContent() {
   }
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (asset: Asset) => {
-    setSelectedAsset(asset)
+  const handleSelectSuggestion = (asset: AssetFromHook) => {
+    // Convert AssetFromHook to local Asset type - use type assertion since types are compatible
+    const assetToSelect = asset as unknown as Asset
+    setSelectedAsset(assetToSelect)
     setAssetIdInput(asset.assetTagId)
     form.setValue('assetId', asset.id)
     setShowSuggestions(false)

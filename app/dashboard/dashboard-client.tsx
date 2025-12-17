@@ -8,9 +8,48 @@ import { AssetValueChart } from '@/components/dashboard/asset-value-chart'
 import { CalendarWidget } from '@/components/dashboard/calendar-widget'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import { motion } from 'framer-motion'
+import { createClient } from '@/lib/supabase-client'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Error getting auth token:', error)
+    return null
+  }
+}
 
 async function fetchDashboardStats(): Promise<DashboardStats> {
-  const response = await fetch('/api/dashboard/stats')
+  const baseUrl = getApiBaseUrl()
+  const url = `${baseUrl}/api/dashboard/stats`
+  
+  const token = await getAuthToken()
+  const headers: HeadersInit = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const response = await fetch(url, {
+    headers,
+    credentials: 'include',
+  })
   if (!response.ok) {
     throw new Error('Failed to fetch dashboard statistics')
   }

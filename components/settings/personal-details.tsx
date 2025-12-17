@@ -11,6 +11,28 @@ import { Input } from '@/components/ui/input'
 import { Field, FieldError, FieldGroup, FieldLabel, FieldContent } from '@/components/ui/field'
 import { Skeleton } from '@/components/ui/skeleton'
 import { z } from 'zod'
+import { createClient } from '@/lib/supabase-client'
+
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    return session?.access_token || null
+  } catch (error) {
+    console.error('Failed to get auth token:', error)
+    return null
+  }
+}
 
 const personalDetailsSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -26,7 +48,17 @@ interface UserData {
 }
 
 async function fetchCurrentUser(): Promise<UserData> {
-  const response = await fetch('/api/auth/me')
+  const baseUrl = getApiBaseUrl()
+  const token = await getAuthToken()
+  const headers: HeadersInit = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  
+  const response = await fetch(`${baseUrl}/api/auth/me`, {
+    credentials: 'include', // Send cookies for authentication (fallback)
+    headers,
+  })
   if (!response.ok) {
     throw new Error('Failed to fetch user data')
   }
@@ -40,11 +72,19 @@ async function fetchCurrentUser(): Promise<UserData> {
 }
 
 async function updateUser(data: { name?: string }) {
-  const response = await fetch('/api/auth/me', {
+  const baseUrl = getApiBaseUrl()
+  const token = await getAuthToken()
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  
+  const response = await fetch(`${baseUrl}/api/auth/me`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    credentials: 'include', // Send cookies for authentication (fallback)
+    headers,
     body: JSON.stringify(data),
   })
   if (!response.ok) {

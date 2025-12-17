@@ -390,7 +390,12 @@ export async function GET(request: NextRequest) {
     if (summaryOnly) {
       // Use database aggregation for much faster summary calculation
       // Run all queries in a transaction to use a single connection and improve performance
-      const [totalAssets, totalValueResult, availableAssets, checkedOutAssets] = await retryDbOperation(() =>
+      const checkedOutWhereClause = {
+        ...whereClause,
+        status: { equals: 'Checked out', mode: 'insensitive' },
+      }
+      
+      const [totalAssets, totalValueResult, availableAssets, checkedOutAssets, checkedOutValueResult] = await retryDbOperation(() =>
         prisma.$transaction([
           prisma.assets.count({ where: whereClause }),
           prisma.assets.aggregate({
@@ -406,15 +411,19 @@ export async function GET(request: NextRequest) {
             },
           }),
           prisma.assets.count({
-            where: {
-              ...whereClause,
-              status: { equals: 'Checked out', mode: 'insensitive' },
+            where: checkedOutWhereClause,
+          }),
+          prisma.assets.aggregate({
+            where: checkedOutWhereClause,
+            _sum: {
+              cost: true,
             },
           }),
         ])
       )
 
       const totalValue = totalValueResult._sum.cost ? Number(totalValueResult._sum.cost) : 0
+      const checkedOutAssetsValue = checkedOutValueResult._sum.cost ? Number(checkedOutValueResult._sum.cost) : 0
 
       const summaryResult = {
         summary: {
@@ -422,6 +431,7 @@ export async function GET(request: NextRequest) {
           totalValue,
           availableAssets,
           checkedOutAssets,
+          checkedOutAssetsValue,
         }
       }
       

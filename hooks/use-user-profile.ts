@@ -6,6 +6,28 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase-client'
+
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    return session?.access_token || null
+  } catch (error) {
+    console.error('Failed to get auth token:', error)
+    return null
+  }
+}
 
 export interface UserProfile {
   id: string
@@ -61,7 +83,17 @@ export function useUserProfile() {
   const { data, isLoading, error, refetch } = useQuery<UserData>({
     queryKey: ['user-profile'], // Global cache key - shared across all components
     queryFn: async () => {
-      const response = await fetch('/api/auth/me')
+      const baseUrl = getApiBaseUrl()
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${baseUrl}/api/auth/me`, {
+        credentials: 'include', // Send cookies for authentication (fallback)
+        headers,
+      })
 
       // Handle inactive user (403 with isActive: false)
       if (response.status === 403) {
@@ -69,7 +101,17 @@ export function useUserProfile() {
         if (errorData.isActive === false) {
           // User is inactive, automatically log them out
           try {
-            await fetch('/api/auth/logout', { method: 'POST' })
+            const logoutBaseUrl = getApiBaseUrl()
+            const logoutToken = await getAuthToken()
+            const logoutHeaders: HeadersInit = {}
+            if (logoutToken) {
+              logoutHeaders['Authorization'] = `Bearer ${logoutToken}`
+            }
+            await fetch(`${logoutBaseUrl}/api/auth/logout`, { 
+              method: 'POST',
+              credentials: 'include',
+              headers: logoutHeaders
+            })
           } catch (logoutError) {
             console.error('Logout failed:', logoutError)
           }

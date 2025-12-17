@@ -20,6 +20,33 @@ import {
 import { DashboardStats } from '@/types/dashboard'
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
+import { createClient } from '@/lib/supabase-client'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Error getting auth token:', error)
+    return null
+  }
+}
 
 interface AssetValueChartProps {
   data: DashboardStats['assetValueByCategory'] | undefined
@@ -61,7 +88,19 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
   const { data: groupedData, isLoading: isGroupedLoading } = useQuery<{ data: Array<{ name: string; value: number }> }>({
     queryKey: ['asset-value-grouped', groupBy],
     queryFn: async () => {
-      const response = await fetch(`/api/dashboard/asset-value-grouped?groupBy=${groupBy}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/dashboard/asset-value-grouped?groupBy=${groupBy}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      })
       if (!response.ok) throw new Error('Failed to fetch grouped data')
       return response.json()
     },
@@ -99,7 +138,7 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
 
   if (isChartLoading) {
     return (
-      <Card className="flex flex-col h-full min-h-[500px] animate-pulse relative overflow-hidden bg-transparent! bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+      <Card className="flex flex-col h-full min-h-[500px] animate-pulse relative overflow-hidden bg-transparent! bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-180 rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
         {/* 3D Bubble Highlight - Top */}
         <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
         
@@ -143,7 +182,7 @@ export function AssetValueChart({ data, isLoading }: AssetValueChartProps) {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
     >
-      <Card className="flex flex-col h-full min-h-[500px] relative overflow-hidden transition-all duration-300 group bg-transparent! bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-[180%] rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
+      <Card className="flex flex-col h-full min-h-[500px] relative overflow-hidden transition-all duration-300 group bg-transparent! bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] backdrop-blur-[20px] backdrop-saturate-180 rounded-[24px] border-[1px_solid_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.12),0_2px_8px_0_rgba(0,0,0,0.08),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-1px_0_0_rgba(255,255,255,0.15)]">
         {/* 3D Bubble Highlight - Top */}
         <div className="absolute top-0 left-0 right-0 h-1/2 pointer-events-none z-0 rounded-t-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.25)_0%,rgba(255,255,255,0)_100%)] opacity-60" />
         

@@ -9,14 +9,14 @@ import logging
 from dotenv import load_dotenv
 
 from database import lifespan
-from routers import locations, sites, departments, company_info, categories, employees, assets
+from routers import locations, sites, departments, company_info, categories, employees, assets, checkout, checkin, move, reserve, lease, lease_return, dispose, maintenance, dashboard, schedule, auth
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging - reduce verbosity
 logging.basicConfig(
-    level=logging.WARNING,  # Only show warnings and errors
+    level=logging.INFO,  # Show info, warnings and errors for debugging
     format='%(levelname)s:%(name)s:%(message)s'
 )
 
@@ -64,13 +64,26 @@ app.add_middleware(
 )
 
 # Include routers
+# IMPORTANT: More specific routes (with full paths) must be registered BEFORE parameterized routes
+# This ensures /api/assets/schedules matches before /api/assets/{asset_id}
+app.include_router(auth.router)  # Register auth router first
 app.include_router(locations.router)
 app.include_router(sites.router)
 app.include_router(departments.router)
 app.include_router(company_info.router)
 app.include_router(categories.router)
 app.include_router(employees.router)
+app.include_router(schedule.router)  # Register before assets router to avoid route conflict
 app.include_router(assets.router)
+app.include_router(checkout.router)
+app.include_router(checkin.router)
+app.include_router(move.router)
+app.include_router(reserve.router)
+app.include_router(lease.router)
+app.include_router(lease_return.router)
+app.include_router(dispose.router)
+app.include_router(maintenance.router)
+app.include_router(dashboard.router)
 
 # Health check endpoint
 @app.get("/health")

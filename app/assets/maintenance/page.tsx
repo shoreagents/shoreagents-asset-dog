@@ -46,6 +46,34 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { maintenanceSchema, type MaintenanceFormData } from "@/lib/validations/assets"
 import { InventoryItemsSelector } from "@/components/maintenance/inventory-items-selector"
+import { createClient } from '@/lib/supabase-client'
+import { useAssetSuggestions, type Asset as AssetFromHook } from '@/hooks/use-assets'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Error getting auth token:', error)
+    return null
+  }
+}
 
 interface Asset {
   id: string
@@ -213,7 +241,19 @@ function MaintenancePageContent() {
   }>({
     queryKey: ["maintenance-stats"],
     queryFn: async () => {
-      const response = await fetch("/api/assets/maintenance/stats")
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/maintenance/stats`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch maintenance statistics')
       }
@@ -253,41 +293,15 @@ function MaintenancePageContent() {
     return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`
   }
 
-  // Fetch asset suggestions - only Available and Checked out assets
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-maintenance-suggestions", assetIdInput, showSuggestions],
-    queryFn: async () => {
-      if (!assetIdInput.trim() || assetIdInput.length < 1) {
-        const response = await fetch(`/api/assets?search=`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch assets')
-        }
-        const data = await response.json()
-        const assets = data.assets as Asset[]
-        // Filter to only Available and Checked out assets
-        const filteredAssets = assets.filter(asset => {
-          const status = (asset.status || '').toLowerCase()
-          return status === 'available' || status === 'checked out'
-        })
-        return filteredAssets.slice(0, 20)
-      }
-      
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetIdInput.trim())}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets')
-      }
-      const data = await response.json()
-      const assets = data.assets as Asset[]
-      // Filter to only Available and Checked out assets
-      const filteredAssets = assets.filter(asset => {
-        const status = (asset.status || '').toLowerCase()
-        return status === 'available' || status === 'checked out'
-      })
-      return filteredAssets.slice(0, 10)
-    },
-    enabled: showSuggestions && canViewAssets, // Only fetch if user has permission
-    staleTime: 300,
-  })
+  // Fetch asset suggestions using reusable hook (include all statuses)
+  const { suggestions: assetSuggestions, isLoading: isLoadingSuggestions } = useAssetSuggestions(
+    assetIdInput,
+    "", // No status filter - include all statuses
+    selectedAsset ? [selectedAsset.id] : [],
+    canViewAssets,
+    showSuggestions,
+    10 // max results when searching, 20 when empty
+  )
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -347,10 +361,12 @@ function MaintenancePageContent() {
   }
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (asset: Asset) => {
-    setSelectedAsset(asset)
-    form.setValue('assetId', asset.id)
-    setAssetIdInput(asset.assetTagId)
+  const handleSelectSuggestion = (asset: AssetFromHook) => {
+    // Convert AssetFromHook to local Asset type
+    const assetAsLocal = asset as unknown as Asset
+    setSelectedAsset(assetAsLocal)
+    form.setValue('assetId', assetAsLocal.id)
+    setAssetIdInput(assetAsLocal.assetTagId)
     setShowSuggestions(false)
     setSelectedSuggestionIndex(-1)
     inputRef.current?.blur()
@@ -544,15 +560,25 @@ function MaintenancePageContent() {
         unitCost?: number
       }>
     }) => {
-      const response = await fetch('/api/assets/maintenance', {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/maintenance`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: 'include',
         body: JSON.stringify(data),
       })
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || 'Failed to create maintenance')
+        throw new Error(error.error || error.detail || 'Failed to create maintenance')
       }
 
       return response.json()
@@ -880,7 +906,7 @@ function MaintenancePageContent() {
                           No assets found
                         </div>
                       ) : (
-                        assetSuggestions.map((asset, index) => (
+                        assetSuggestions.map((asset: AssetFromHook, index: number) => (
                           <motion.div
                             key={asset.id}
                             initial={{ opacity: 0, x: -10 }}

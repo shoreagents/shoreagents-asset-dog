@@ -20,6 +20,12 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
 export function SignUpForm({
   className,
   ...props
@@ -41,11 +47,13 @@ export function SignUpForm({
 
   const onSubmit = async (data: SignupFormData) => {
     try {
-      const response = await fetch('/api/auth/signup', {
+      const baseUrl = getApiBaseUrl()
+      const response = await fetch(`${baseUrl}/api/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Send cookies for authentication
         body: JSON.stringify({ email: data.email, password: data.password }),
       })
 

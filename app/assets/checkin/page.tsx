@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table"
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useAssetSuggestions } from '@/hooks/use-assets'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -46,6 +47,35 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { checkinSchema, type CheckinFormData } from "@/lib/validations/assets"
+import { createClient } from '@/lib/supabase-client'
+import type { Asset as AssetFromHook } from '@/hooks/use-assets'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error('Failed to get auth token:', error)
+      return null
+    }
+    if (!session?.access_token) {
+      console.warn('No active session found')
+      return null
+    }
+    return session.access_token
+  } catch (error) {
+    console.error('Failed to get auth token:', error)
+    return null
+  }
+}
 
 interface Asset {
   id: string
@@ -152,38 +182,15 @@ function CheckinPageContent() {
     }
   }, [assetIdInput])
 
-  // Fetch asset suggestions based on debounced input (only Checked out assets)
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-checkin-suggestions", debouncedAssetIdInput.trim(), selectedAssets.length, showSuggestions],
-    queryFn: async () => {
-      const searchTerm = debouncedAssetIdInput.trim() || ''
-      // Fetch only 50 items to account for filtering Checked out assets, then slice
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=50&status=Checked out`)
-        if (!response.ok) {
-          throw new Error('Failed to fetch assets')
-        }
-        const data = await response.json()
-        const assets = data.assets as Asset[]
-        
-        // Filter out assets already in selected list and only show Checked out assets
-      const selectedIds = selectedAssets.map(a => a.id.toLowerCase())
-      const filtered = assets
-          .filter(a => {
-            const notSelected = !selectedIds.includes(a.id.toLowerCase())
-            const isCheckedOut = a.status === "Checked out"
-            return notSelected && isCheckedOut
-          })
-      
-      // Show more when input is empty, less when searching
-      if (!searchTerm) {
-        return filtered.slice(0, 20)
-      }
-      return filtered.slice(0, 10)
-    },
-    enabled: showSuggestions && canViewAssets && canCheckin,
-    staleTime: 1000, // Cache for 1 second
-    placeholderData: (previousData) => previousData, // Show previous results while loading
-  })
+  // Fetch asset suggestions using reusable hook (only Checked out assets)
+  const { suggestions: assetSuggestions, isLoading: isLoadingSuggestions } = useAssetSuggestions(
+    debouncedAssetIdInput,
+    "Checked out", // status filter for checkin
+    selectedAssets.map(a => a.id),
+    canViewAssets && canCheckin,
+    showSuggestions,
+    10 // max results when searching, 20 when empty
+  )
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -301,8 +308,9 @@ function CheckinPageContent() {
   }
 
   // Handle suggestion selection
-  const handleSelectSuggestion = (asset: Asset) => {
-    handleAddAsset(asset)
+  const handleSelectSuggestion = (asset: AssetFromHook) => {
+    // Convert AssetFromHook to local Asset type - use type assertion since types are compatible
+    handleAddAsset(asset as unknown as Asset)
   }
 
   // Handle keyboard navigation in suggestions
@@ -556,15 +564,25 @@ function CheckinPageContent() {
       checkinDate: string
       updates: Record<string, { condition?: string; notes?: string; returnLocation?: string }>
     }) => {
-      const response = await fetch('/api/assets/checkin', {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/checkin`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: 'include',
         body: JSON.stringify(data),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to check in assets')
+        const error = await response.json().catch(() => ({ error: 'Failed to check in assets' }))
+        throw new Error(error.error || error.detail || 'Failed to check in assets')
       }
 
       return response.json()
@@ -632,17 +650,30 @@ function CheckinPageContent() {
     setShowSuggestions(true)
   }
 
-  // Fetch summary statistics (much faster than fetching all assets)
+  // Fetch summary statistics (includes checked out assets value)
   const { data: summaryData, isLoading: isLoadingAssets } = useQuery<{
     summary: {
       totalAssets: number
       availableAssets: number
       checkedOutAssets: number
+      checkedOutAssetsValue?: number
     }
   }>({
     queryKey: ["assets", "checkin-stats-summary"],
     queryFn: async () => {
-      const response = await fetch('/api/assets?summary=true')
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?summary=true`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch asset summary')
       }
@@ -652,29 +683,10 @@ function CheckinPageContent() {
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
-  // Fetch checked out assets for value calculation
-  const { data: checkedOutAssetsForValue = [] } = useQuery<Asset[]>({
-    queryKey: ["assets", "checkin-value-calculation"],
-    queryFn: async () => {
-      const response = await fetch('/api/assets?status=Checked out&pageSize=1000')
-      if (!response.ok) {
-        throw new Error('Failed to fetch checked out assets')
-      }
-      const data = await response.json()
-      return data.assets as Asset[]
-    },
-    enabled: canViewAssets,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  })
-
   // Calculate summary statistics
   const totalCheckedOutAssets = summaryData?.summary?.checkedOutAssets || 0
   const selectedAssetsCount = selectedAssets.length
-  const totalValueOfCheckoutAssets = useMemo(() => {
-    return checkedOutAssetsForValue.reduce((sum, asset) => {
-        return sum + (asset.cost ? Number(asset.cost) : 0)
-      }, 0)
-  }, [checkedOutAssetsForValue])
+  const totalValueOfCheckoutAssets = summaryData?.summary?.checkedOutAssetsValue || 0
 
   // Format currency
   const formatCurrency = (value: number) => {
@@ -706,11 +718,23 @@ function CheckinPageContent() {
   }>({
     queryKey: ["checkin-stats"],
     queryFn: async () => {
-      const response = await fetch("/api/assets/checkin/stats", {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/checkin/stats`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include',
         cache: 'no-store', // Don't cache the fetch request
       })
       if (!response.ok) {
-        throw new Error('Failed to fetch check-in statistics')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || errorData.detail || 'Failed to fetch check-in statistics')
       }
       const data = await response.json()
       return data
@@ -1040,7 +1064,7 @@ function CheckinPageContent() {
                       </div>
                     </div>
                   ) : assetSuggestions.length > 0 ? (
-                    assetSuggestions.map((asset, index) => (
+                    assetSuggestions.map((asset: AssetFromHook, index: number) => (
                       <motion.div
                         key={asset.id}
                         initial={{ opacity: 0, x: -10 }}

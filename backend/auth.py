@@ -13,8 +13,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Supabase configuration
-SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+# Support both naming conventions: NEXT_PUBLIC_* (for frontend) and without prefix (for backend)
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL") or os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY") or os.getenv("SUPABASE_ANON_KEY")
 
 security = HTTPBearer(auto_error=False)
 
@@ -26,9 +27,9 @@ async def verify_auth(request: Request) -> dict:
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         missing = []
         if not SUPABASE_URL:
-            missing.append("NEXT_PUBLIC_SUPABASE_URL")
+            missing.append("SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL")
         if not SUPABASE_ANON_KEY:
-            missing.append("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+            missing.append("SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY")
         raise HTTPException(
             status_code=500,
             detail=f"Authentication service not configured. Missing environment variables: {', '.join(missing)}"

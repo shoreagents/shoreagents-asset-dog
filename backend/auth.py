@@ -61,11 +61,8 @@ async def verify_auth(request: Request) -> dict:
         if auth_token_cookie:
             # Parse the cookie value (Supabase SSR stores it in various formats)
             access_token = _extract_token_from_cookie(auth_token_cookie)
-            if not access_token:
-                logger.warning("Failed to extract token from cookie")
     
     if not access_token:
-        logger.warning("No access token found")
         raise HTTPException(
             status_code=401,
             detail="Unauthorized"
@@ -84,7 +81,6 @@ async def verify_auth(request: Request) -> dict:
             )
             
             if verify_response.status_code != 200:
-                logger.warning(f"Supabase verification failed: {verify_response.status_code}")
                 raise HTTPException(
                     status_code=401,
                     detail="Unauthorized"
@@ -101,7 +97,6 @@ async def verify_auth(request: Request) -> dict:
             
             # Validate user data
             if not user_data or not isinstance(user_data, dict):
-                logger.warning("Invalid user data structure")
                 raise HTTPException(
                     status_code=401,
                     detail="Unauthorized"
@@ -109,7 +104,6 @@ async def verify_auth(request: Request) -> dict:
             
             user_id = user_data.get("id")
             if not user_id:
-                logger.warning("User data missing ID")
                 raise HTTPException(
                     status_code=401,
                     detail="Unauthorized"
@@ -129,8 +123,10 @@ async def verify_auth(request: Request) -> dict:
             status_code=503,
             detail="Service unavailable"
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Authentication error: {type(e).__name__}: {str(e)}")
+        logger.error(f"Authentication error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=401,
             detail="Unauthorized"

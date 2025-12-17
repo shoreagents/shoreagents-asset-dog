@@ -15,6 +15,13 @@ from .sites import (
     SitesResponse,
     SiteResponse
 )
+from .departments import (
+    Department,
+    DepartmentCreate,
+    DepartmentUpdate,
+    DepartmentsResponse,
+    DepartmentResponse
+)
 
 __all__ = [
     "Location",
@@ -27,5 +34,10 @@ __all__ = [
     "SiteUpdate",
     "SitesResponse",
     "SiteResponse",
+    "Department",
+    "DepartmentCreate",
+    "DepartmentUpdate",
+    "DepartmentsResponse",
+    "DepartmentResponse",
 ]
 

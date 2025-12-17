@@ -11,7 +11,6 @@ from prisma_client.cli.prisma import ensure_cached, run
 
 def main():
     # Ensure Prisma CLI is cached
-    print("Ensuring Prisma CLI is cached...")
     ensure_cached()
     
     # Find schema file
@@ -22,11 +21,9 @@ def main():
             break
     
     if not schema_path:
-        print('ERROR: Could not find schema.prisma')
-        print('Checked paths: prisma_client/schema.prisma, prisma/schema.prisma')
+        print('ERROR: Could not find schema.prisma', file=sys.stderr)
+        print('Checked paths: prisma_client/schema.prisma, prisma/schema.prisma', file=sys.stderr)
         sys.exit(1)
-    
-    print(f'Found schema at: {schema_path}')
     
     # Read schema and fix output path
     schema_content = Path(schema_path).read_text()
@@ -40,33 +37,24 @@ def main():
     # Write temporary schema
     temp_schema = Path('schema.temp.prisma')
     temp_schema.write_text(schema_content)
-    print('Created temporary schema with corrected output path')
     
     # Run prisma generate
     args = ['generate', '--generator=python_client', f'--schema={temp_schema}']
-    print(f'Running: prisma {" ".join(args)}')
     result = run(args)
     
     # Clean up temp schema
     temp_schema.unlink()
     
-    print(f'Generate completed with exit code: {result}')
-    
     if result != 0:
-        print('ERROR: prisma generate failed')
+        print('ERROR: prisma generate failed', file=sys.stderr)
         sys.exit(result)
     
     # Verify regeneration worked
     client_file = Path('prisma_client/client.py')
     if client_file.exists():
         content = client_file.read_text()
-        if 'debian-openssl' in content or ('linux' in content.lower() and 'windows' not in content.lower()):
-            print('SUCCESS: Client regenerated with Linux binary paths')
-        else:
-            print('WARNING: Checking BINARY_PATHS content...')
-            match = re.search(r'BINARY_PATHS = model_parse\(BinaryPaths, ({.*?})\)', content, re.DOTALL)
-            if match:
-                print(f'BINARY_PATHS: {match.group(1)[:200]}...')
+        if 'debian-openssl' not in content and ('windows' in content.lower() or 'win32' in content.lower()):
+            print('WARNING: Client may still have Windows paths', file=sys.stderr)
     
     sys.exit(0)
 

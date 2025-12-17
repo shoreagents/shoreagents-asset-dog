@@ -52,14 +52,14 @@ async def get_locations(
                 )
                 locations.append(location)
             except Exception as e:
-                logger.error(f"Error creating Location model from data: {e}, loc data: {loc}")
-                raise
+                logger.error(f"Error creating Location model: {type(e).__name__}: {str(e)}", exc_info=True)
+                continue
         
         return LocationsResponse(locations=locations)
     
     except Exception as e:
         logger.error(f"Error fetching locations: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch locations: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch locations")
 
 @router.post("", response_model=LocationResponse, status_code=201)
 async def create_location(
@@ -104,7 +104,8 @@ async def create_location(
     
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error creating location: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create location")
 
 @router.put("/{location_id}", response_model=LocationResponse)
@@ -163,7 +164,8 @@ async def update_location(
     
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error updating location: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update location")
 
 @router.delete("/{location_id}")
@@ -205,6 +207,7 @@ async def delete_location(
     
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error deleting location: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete location")
 

@@ -3,6 +3,7 @@ Sites API router
 """
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
+import logging
 from models.sites import (
     Site,
     SiteCreate,
@@ -12,6 +13,8 @@ from models.sites import (
 )
 from auth import verify_auth
 from database import prisma
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sites", tags=["sites"])
 
@@ -50,7 +53,8 @@ async def get_sites(
         
         return SitesResponse(sites=sites)
     
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error fetching sites: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch sites")
 
 @router.post("", response_model=SiteResponse, status_code=201)
@@ -96,7 +100,8 @@ async def create_site(
     
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error creating site: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to create site")
 
 @router.put("/{site_id}", response_model=SiteResponse)
@@ -155,7 +160,8 @@ async def update_site(
     
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error updating site: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update site")
 
 @router.delete("/{site_id}")
@@ -197,6 +203,7 @@ async def delete_site(
     
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error deleting site: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete site")
 

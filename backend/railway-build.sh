@@ -21,19 +21,34 @@ python -m prisma py fetch
 echo "📋 Copying query engine binary to app directory..."
 BINARY_NAME="prisma-query-engine-debian-openssl-3.5.x"
 CACHE_DIR="$HOME/.cache/prisma-python/binaries"
-# Find the binary in cache (version may vary)
+
+echo "Looking for binary in cache: $CACHE_DIR"
 if [ -d "$CACHE_DIR" ]; then
-    BINARY_PATH=$(find "$CACHE_DIR" -name "$BINARY_NAME" -type f | head -n 1)
+    echo "Cache directory exists, searching for binary..."
+    BINARY_PATH=$(find "$CACHE_DIR" -name "$BINARY_NAME" -type f 2>/dev/null | head -n 1)
     if [ -n "$BINARY_PATH" ] && [ -f "$BINARY_PATH" ]; then
-        echo "Found binary at: $BINARY_PATH"
+        echo "✅ Found binary at: $BINARY_PATH"
+        echo "Copying to backend directory..."
         cp "$BINARY_PATH" "backend/$BINARY_NAME"
         chmod +x "backend/$BINARY_NAME"
-        echo "✅ Binary copied to backend directory"
+        echo "✅ Binary copied to backend/$BINARY_NAME"
+        # Verify it exists
+        if [ -f "backend/$BINARY_NAME" ]; then
+            echo "✅ Verified: Binary exists at backend/$BINARY_NAME"
+            ls -lh "backend/$BINARY_NAME"
+        else
+            echo "❌ ERROR: Binary copy failed!"
+            exit 1
+        fi
     else
-        echo "⚠️  Binary not found in cache, but prisma py fetch should have downloaded it"
+        echo "⚠️  Binary not found in cache after fetch"
+        echo "Listing cache directory contents:"
+        find "$CACHE_DIR" -type f 2>/dev/null | head -10 || echo "Cache directory is empty or inaccessible"
+        echo "⚠️  Will try to fetch at runtime"
     fi
 else
-    echo "⚠️  Cache directory not found"
+    echo "⚠️  Cache directory not found: $CACHE_DIR"
+    echo "Will try to fetch at runtime"
 fi
 
 # Return to backend directory

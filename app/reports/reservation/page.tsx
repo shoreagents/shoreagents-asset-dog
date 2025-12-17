@@ -704,7 +704,7 @@ function ReservationReportsPageContent() {
           )}
           {filters.employeeId && (
             <Badge variant="secondary" className="gap-1">
-              Employee: {employeesData?.find((e: { id: string }) => e.id === filters.employeeId)?.name || 'Selected'}
+              Employee: {employees.find((e) => e.id === filters.employeeId)?.name || 'Selected'}
               <button
                 onClick={() => removeFilter('employeeId')}
                 className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"

@@ -22,17 +22,6 @@ import {
 import { Field, FieldLabel, FieldContent, FieldError as FieldErrorComponent } from '@/components/ui/field'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
-interface EmployeeUser {
-  id: string
-  name: string
-  email: string
-  department: string | null
-  checkouts?: Array<{
-    asset: {
-      assetTagId: string
-    }
-  }>
-}
 
 interface EmployeeSelectFieldProps {
   // For react-hook-form integration
@@ -64,7 +53,6 @@ export function EmployeeSelectField({
   disabled = false,
   placeholder = 'Select an employee',
   currentEmployeeId,
-  queryKey = ['employees'],
 }: EmployeeSelectFieldProps) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)

@@ -18,10 +18,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code (including prisma_client)
 COPY . .
 
-# Fetch Prisma query engine binaries for Linux (Debian)
-# This must run after copying prisma_client so the CLI is available
-# Prisma Python uses Node.js CLI under the hood, so Node.js must be installed
-RUN cd /app && python -c "import sys; sys.argv = ['prisma', 'py', 'fetch']; from prisma_client.cli.cli import main; main(['py', 'fetch'])"
+# Download Prisma query engine binaries for Linux (Debian)
+# Running prisma generate downloads binaries for the current platform
+# First ensure Prisma CLI is available, then generate to download binaries
+RUN cd /app && \
+    python -c "from prisma_client.cli.prisma import ensure_cached; ensure_cached()" && \
+    python -c "from prisma_client.cli.prisma import run; import sys; import os; schema = 'prisma_client/schema.prisma' if os.path.exists('prisma_client/schema.prisma') else '../prisma/schema.prisma'; sys.exit(run(['generate', f'--schema={schema}']))"
 
 # Expose port
 EXPOSE 8000

@@ -216,7 +216,7 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
       
       // Get auth token for delete
       const deleteSupabase = createClient()
-      const { data: { deleteSession } } = await deleteSupabase.auth.getSession()
+      const { data: { session: deleteSession } } = await deleteSupabase.auth.getSession()
       const deleteHeaders: HeadersInit = {}
       if (deleteSession?.access_token) {
         deleteHeaders['Authorization'] = `Bearer ${deleteSession.access_token}`

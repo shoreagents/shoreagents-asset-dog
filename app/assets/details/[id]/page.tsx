@@ -193,8 +193,29 @@ function DocsTabContent({ assetTagId, isActive }: { assetTagId: string; isActive
   const { data: documentsData, isLoading: loadingDocuments } = useQuery({
     queryKey: ['asset-documents', assetTagId],
     queryFn: async () => {
-      const response = await fetch(`/api/assets/documents/${assetTagId}`)
-      if (!response.ok) return { documents: [] }
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/documents/${assetTagId}`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Failed to fetch documents: ${response.status} ${response.statusText}`, errorText)
+        return { documents: [] }
+      }
       const data = await response.json()
       return { documents: data.documents || [] }
     },
@@ -314,18 +335,39 @@ async function fetchAsset(id: string) {
     throw new Error('Asset ID is required')
   }
   
-  // Add timestamp to prevent caching and ensure fresh data
-  const response = await fetch(`/api/assets/${id}?t=${Date.now()}`, {
+  const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+    ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+    : ''
+  const url = `${baseUrl}/api/assets/${id}?t=${Date.now()}`
+  
+  // Get auth token
+  const { createClient } = await import('@/lib/supabase-client')
+  const supabase = createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+  }
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch(url, {
     cache: 'no-store',
-    headers: {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-    },
+    credentials: 'include',
+    headers,
   })
   
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-    throw new Error(errorData.error || `Failed to fetch asset: ${response.status}`)
+    const errorText = await response.text()
+    let errorMessage = 'Unknown error'
+    try {
+      const errorData = JSON.parse(errorText)
+      errorMessage = errorData.detail || errorData.error || errorMessage
+    } catch {
+      errorMessage = errorText || errorMessage
+    }
+    throw new Error(errorMessage || `Failed to fetch asset: ${response.status}`)
   }
   
   const data = await response.json()
@@ -364,8 +406,27 @@ async function fetchHistoryLogs(assetId: string) {
 }
 
 async function fetchMaintenance(assetId: string) {
-  const response = await fetch(`/api/assets/maintenance?assetId=${assetId}`)
+  const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+    ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+    : ''
+  const url = `${baseUrl}/api/assets/maintenance?assetId=${assetId}`
+  
+  // Get auth token
+  const { createClient } = await import('@/lib/supabase-client')
+  const supabase = createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {}
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers,
+  })
   if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`Failed to fetch maintenance: ${response.status} ${response.statusText}`, errorText)
     return { maintenances: [] }
   }
   return response.json()

@@ -97,8 +97,22 @@ export const useSubCategories = (categoryId: string | null) => {
     queryKey: ["subcategories", categoryId],
     queryFn: async () => {
       if (!categoryId) return []
-      const response = await fetch(`/api/subcategories?categoryId=${categoryId}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/subcategories?categoryId=${categoryId}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Failed to fetch subcategories: ${response.status} ${response.statusText}`, errorText)
         // Return empty array on error instead of undefined
         return []
       }
@@ -205,14 +219,31 @@ export const useCreateSubCategory = () => {
   
   return useMutation({
     mutationFn: async (data: CreateSubCategoryData) => {
-      const response = await fetch("/api/subcategories", {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/subcategories`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: 'include',
+        headers,
         body: JSON.stringify(data),
       })
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to create subcategory")
+        const errorText = await response.text()
+        let errorMessage = "Failed to create subcategory"
+        try {
+          const error = JSON.parse(errorText)
+          errorMessage = error.detail || error.error || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
       return response.json()
     },
@@ -407,14 +438,31 @@ export const useUpdateSubCategory = () => {
   
   return useMutation({
     mutationFn: async ({ id, ...data }: CreateSubCategoryData & { id: string }) => {
-      const response = await fetch(`/api/subcategories/${id}`, {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/subcategories/${id}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        credentials: 'include',
+        headers,
         body: JSON.stringify(data),
       })
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to update subcategory")
+        const errorText = await response.text()
+        let errorMessage = "Failed to update subcategory"
+        try {
+          const error = JSON.parse(errorText)
+          errorMessage = error.detail || error.error || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
       return response.json()
     },
@@ -461,12 +509,30 @@ export const useDeleteSubCategory = () => {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`/api/subcategories/${id}`, {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/subcategories/${id}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
         method: "DELETE",
+        credentials: 'include',
+        headers,
       })
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to delete subcategory")
+        const errorText = await response.text()
+        let errorMessage = "Failed to delete subcategory"
+        try {
+          const error = JSON.parse(errorText)
+          errorMessage = error.detail || error.error || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
       return response.json()
     },

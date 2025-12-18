@@ -9,7 +9,7 @@ import logging
 from dotenv import load_dotenv
 
 from database import lifespan
-from routers import locations, sites, departments, company_info, categories, employees, assets, checkout, checkin, move, reserve, lease, lease_return, dispose, maintenance, dashboard, schedule, auth
+from routers import locations, sites, departments, company_info, categories, subcategories, employees, assets, checkout, checkin, move, reserve, lease, lease_return, dispose, maintenance, dashboard, schedule, auth, audit
 
 # Load environment variables
 load_dotenv()
@@ -71,18 +71,20 @@ app.include_router(locations.router)
 app.include_router(sites.router)
 app.include_router(departments.router)
 app.include_router(company_info.router)
+app.include_router(subcategories.router)  # Register before categories router to avoid route conflict
 app.include_router(categories.router)
 app.include_router(employees.router)
 app.include_router(schedule.router)  # Register before assets router to avoid route conflict
+app.include_router(maintenance.router)  # Register before assets router to avoid route conflict (maintenance matches /api/assets/maintenance)
+app.include_router(reserve.router)  # Register before assets router to avoid route conflict (reserve matches /api/assets/reserve)
+app.include_router(audit.router)  # Register before assets router to avoid route conflict (audit matches /api/assets/audit)
 app.include_router(assets.router)
 app.include_router(checkout.router)
 app.include_router(checkin.router)
 app.include_router(move.router)
-app.include_router(reserve.router)
 app.include_router(lease.router)
 app.include_router(lease_return.router)
 app.include_router(dispose.router)
-app.include_router(maintenance.router)
 app.include_router(dashboard.router)
 
 # Health check endpoint

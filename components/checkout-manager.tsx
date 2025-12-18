@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useAllEmployees } from '@/hooks/use-employees'
+import { createClient } from '@/lib/supabase-client'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -54,8 +55,34 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
   const { data: checkoutData, isLoading: isLoadingCheckouts } = useQuery({
     queryKey: ['checkoutHistory', assetId],
     queryFn: async () => {
-      const response = await fetch(`/api/assets/${assetId}/checkout`)
-      if (!response.ok) throw new Error('Failed to fetch checkout history')
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/${assetId}/checkout`
+      
+      // Get auth token
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = 'Failed to fetch checkout history'
+        try {
+          const error = JSON.parse(errorText)
+          errorMessage = error.detail || error.error || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
       return response.json()
     },
     enabled: true,
@@ -69,7 +96,23 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
   const { data: reservationData, isLoading: isLoadingReservations } = useQuery({
     queryKey: ['reservations', assetId],
     queryFn: async () => {
-      const response = await fetch(`/api/assets/reserve?assetId=${assetId}`)
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/reserve?assetId=${assetId}`
+      
+      // Get auth token
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) throw new Error('Failed to fetch reservations')
       return response.json()
     },
@@ -90,12 +133,36 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
   // Update checkout mutation
   const updateMutation = useMutation({
     mutationFn: async ({ checkoutId, employeeUserId }: { checkoutId: string; employeeUserId: string | null }) => {
-      const response = await fetch(`/api/assets/checkout/${checkoutId}`, {
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/checkout/${checkoutId}`
+      
+      // Get auth token
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers,
         body: JSON.stringify({ employeeUserId }),
       })
-      if (!response.ok) throw new Error('Failed to update checkout')
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = 'Failed to update checkout'
+        try {
+          const error = JSON.parse(errorText)
+          errorMessage = error.detail || error.error || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
       return response.json()
     },
     onSuccess: async () => {
@@ -142,8 +209,23 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
       const result = await response.json()
       
       // Delete the reservation after successful checkout
-      const deleteResponse = await fetch(`/api/assets/reserve/${reservationId}`, {
+      const deleteBaseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const deleteUrl = `${deleteBaseUrl}/api/assets/reserve/${reservationId}`
+      
+      // Get auth token for delete
+      const deleteSupabase = createClient()
+      const { data: { deleteSession } } = await deleteSupabase.auth.getSession()
+      const deleteHeaders: HeadersInit = {}
+      if (deleteSession?.access_token) {
+        deleteHeaders['Authorization'] = `Bearer ${deleteSession.access_token}`
+      }
+      
+      const deleteResponse = await fetch(deleteUrl, {
         method: 'DELETE',
+        credentials: 'include',
+        headers: deleteHeaders,
       })
       if (!deleteResponse.ok) {
         console.error('Failed to delete reservation after checkout')
@@ -206,7 +288,23 @@ export function CheckoutManager({ assetId, assetStatus, invalidateQueryKey = ['a
   const { data: historyData, isLoading: isLoadingHistory, refetch: refetchHistory } = useQuery({
     queryKey: ['historyLogs', assetId],
     queryFn: async () => {
-      const response = await fetch(`/api/assets/${assetId}/history`)
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/${assetId}/history`
+      
+      // Get auth token
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch history logs')
       }

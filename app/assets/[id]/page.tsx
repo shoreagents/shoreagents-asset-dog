@@ -3,7 +3,7 @@
 import { useState, useRef, useMemo, useEffect, useCallback, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { use } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowLeft, Sparkles, ImageIcon, Upload, FileText, PlusIcon, Eye, X, Trash2, Package } from "lucide-react"
@@ -15,6 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { toast } from 'sonner'
 import { useCategories, useSubCategories, useCreateCategory, useCreateSubCategory } from "@/hooks/use-categories"
+import { useAsset, useUpdateAsset, useAssetMaintenances, useDeleteMaintenance } from "@/hooks/use-assets"
 import { CategoryDialog } from "@/components/dialogs/category-dialog"
 import { SubCategoryDialog } from "@/components/dialogs/subcategory-dialog"
 import { MediaBrowserDialog } from "@/components/dialogs/media-browser-dialog"
@@ -64,32 +65,56 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-async function fetchAsset(id: string) {
-  const response = await fetch(`/api/assets/${id}`)
-  if (!response.ok) {
-    throw new Error('Failed to fetch asset')
-  }
-  return response.json()
-}
+// Removed fetchAsset - now using useAsset hook from use-assets.ts
 
 async function fetchHistoryLogs(assetId: string) {
-  const response = await fetch(`/api/assets/${assetId}/history`)
+  const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+    ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+    : ''
+  const url = `${baseUrl}/api/assets/${assetId}/history`
+  
+  // Get auth token
+  const { createClient } = await import('@/lib/supabase-client')
+  const supabase = createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {}
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers,
+  })
   if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`Failed to fetch history logs: ${response.status} ${response.statusText}`, errorText)
     return { logs: [] }
   }
   return response.json()
 }
 
-async function fetchMaintenance(assetId: string) {
-  const response = await fetch(`/api/assets/maintenance?assetId=${assetId}`)
-  if (!response.ok) {
-    return { maintenances: [] }
-  }
-  return response.json()
-}
+// Removed fetchMaintenance - now using useAssetMaintenances hook from use-assets.ts
 
 async function fetchReserve(assetId: string) {
-  const response = await fetch(`/api/assets/reserve?assetId=${assetId}`)
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/reserve?assetId=${assetId}`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
   if (!response.ok) {
     return { reservations: [] }
   }
@@ -97,21 +122,7 @@ async function fetchReserve(assetId: string) {
 }
 
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function updateAsset(id: string, data: any) {
-  const response = await fetch(`/api/assets/${id}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to update asset')
-  }
-  return response.json()
-}
+// Removed updateAsset - now using useUpdateAsset hook from use-assets.ts
 
 export default function EditAssetPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
@@ -125,17 +136,11 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
   const canManageSetup = hasPermission('canManageSetup')
   const [, startTransition] = useTransition()
   
-  // Fetch asset data with retry logic
-  const { data: assetData, isLoading: assetLoading, error: assetError } = useQuery({
-    queryKey: ['asset', resolvedParams.id],
-    queryFn: () => fetchAsset(resolvedParams.id),
-    enabled: !!resolvedParams.id,
-    retry: 2, // Retry up to 2 times on failure
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
-    staleTime: 2 * 60 * 1000, // Cache for 2 minutes
-  })
-
-  const asset = assetData?.asset
+  // Fetch asset data using FastAPI hook
+  const { data: asset, isLoading: assetLoading, error: assetError } = useAsset(resolvedParams.id, !!resolvedParams.id)
+  
+  // Update asset mutation using FastAPI hook
+  const updateAssetMutation = useUpdateAsset()
 
   // Fetch thumbnail image (first image) for top section
   const { data: thumbnailData } = useQuery({
@@ -244,11 +249,14 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
     enabled: !!resolvedParams.id && activeTab === 'history',
   })
 
-  const { data: maintenanceData, isLoading: isLoadingMaintenance } = useQuery({
-    queryKey: ['asset-maintenance', resolvedParams.id],
-    queryFn: () => fetchMaintenance(resolvedParams.id),
-    enabled: !!resolvedParams.id && activeTab === 'maintenance',
-  })
+  // Fetch maintenance records using FastAPI hook
+  const { data: maintenanceData, isLoading: isLoadingMaintenance } = useAssetMaintenances(
+    resolvedParams.id,
+    !!resolvedParams.id && activeTab === 'maintenance'
+  )
+  
+  // Delete maintenance mutation using FastAPI hook
+  const deleteMaintenanceMutation = useDeleteMaintenance()
 
   const { data: reserveData, isLoading: isLoadingReserve } = useQuery({
     queryKey: ['asset-reserve', resolvedParams.id],
@@ -267,56 +275,53 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
   const createCategoryMutation = useCreateCategory()
   const createSubCategoryMutation = useCreateSubCategory()
   
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<EditAssetFormData> }) => updateAsset(id, data),
-    onSuccess: async (response) => {
-      const updatedAsset = response?.asset
-      const updatedAssetTagId = updatedAsset?.assetTagId || asset?.assetTagId
-      
-      // Invalidate ALL assets queries (including paginated/filtered ones)
-      queryClient.invalidateQueries({ 
-        predicate: (query) => {
-          const key = query.queryKey
-          return Array.isArray(key) && (
-            key[0] === 'assets' || 
-            key[0] === 'assets-list'
-          )
-        },
-        refetchType: 'all' // Refetch all matching queries
-      })
-      
-      // Invalidate specific asset and history queries
+  // Wrapper for handling additional cache invalidation after update
+  const handleUpdateSuccess = useCallback(async (updatedAsset: { assetTagId?: string }) => {
+    const updatedAssetTagId = updatedAsset?.assetTagId || asset?.assetTagId
+    
+    // Invalidate ALL assets queries (including paginated/filtered ones)
+    queryClient.invalidateQueries({ 
+      predicate: (query) => {
+        const key = query.queryKey
+        return Array.isArray(key) && (
+          key[0] === 'assets' || 
+          key[0] === 'assets-list'
+        )
+      },
+      refetchType: 'all' // Refetch all matching queries
+    })
+    
+    // Invalidate specific asset and history queries
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['asset', resolvedParams.id], refetchType: 'active' }),
+      queryClient.invalidateQueries({ queryKey: ['asset-history', resolvedParams.id], refetchType: 'active' }),
+    ])
+    
+    // If assetTagId changed, also invalidate queries for the old assetTagId
+    if (asset?.assetTagId && updatedAssetTagId && asset.assetTagId !== updatedAssetTagId) {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['asset', resolvedParams.id], refetchType: 'active' }),
-        queryClient.invalidateQueries({ queryKey: ['asset-history', resolvedParams.id], refetchType: 'active' }),
+        queryClient.invalidateQueries({ queryKey: ['asset-thumbnail', asset.assetTagId] }),
+        queryClient.invalidateQueries({ queryKey: ['asset-images', asset.assetTagId] }),
+        queryClient.invalidateQueries({ queryKey: ['asset-documents', asset.assetTagId] }),
       ])
-      
-      // If assetTagId changed, also invalidate queries for the old assetTagId
-      if (asset?.assetTagId && updatedAssetTagId && asset.assetTagId !== updatedAssetTagId) {
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['asset-thumbnail', asset.assetTagId] }),
-          queryClient.invalidateQueries({ queryKey: ['asset-images', asset.assetTagId] }),
-          queryClient.invalidateQueries({ queryKey: ['asset-documents', asset.assetTagId] }),
-        ])
-      }
-      
-      // Invalidate queries for the updated assetTagId
-      if (updatedAssetTagId) {
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['asset-thumbnail', updatedAssetTagId] }),
-          queryClient.invalidateQueries({ queryKey: ['asset-images', updatedAssetTagId] }),
-          queryClient.invalidateQueries({ queryKey: ['asset-documents', updatedAssetTagId] }),
-          queryClient.invalidateQueries({ queryKey: ['assets', 'images', updatedAssetTagId] }),
-          queryClient.invalidateQueries({ queryKey: ['assets', 'documents', updatedAssetTagId] }),
-        ])
-      }
-      
-      // Refetch the current asset data to update the form
-      await queryClient.refetchQueries({ queryKey: ['asset', resolvedParams.id] })
-    },
-  })
+    }
+    
+    // Invalidate queries for the updated assetTagId
+    if (updatedAssetTagId) {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['asset-thumbnail', updatedAssetTagId] }),
+        queryClient.invalidateQueries({ queryKey: ['asset-images', updatedAssetTagId] }),
+        queryClient.invalidateQueries({ queryKey: ['asset-documents', updatedAssetTagId] }),
+        queryClient.invalidateQueries({ queryKey: ['assets', 'images', updatedAssetTagId] }),
+        queryClient.invalidateQueries({ queryKey: ['assets', 'documents', updatedAssetTagId] }),
+      ])
+    }
+    
+    // Refetch the current asset data to update the form
+    await queryClient.refetchQueries({ queryKey: ['asset', resolvedParams.id] })
+  }, [asset?.assetTagId, queryClient, resolvedParams.id])
 
-  const loading = updateMutation.isPending
+  const loading = updateAssetMutation.isPending
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [selectedExistingImages, setSelectedExistingImages] = useState<Array<{ id: string; imageUrl: string; fileName: string }>>([])
   const [selectedDocuments, setSelectedDocuments] = useState<File[]>([])
@@ -815,29 +820,20 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
     }
   }
 
-  // Delete maintenance function
+  // Delete maintenance function using FastAPI hook
   const deleteMaintenance = async () => {
     if (!maintenanceToDelete) return
 
     setIsDeletingMaintenance(true)
     try {
-      const response = await fetch(`/api/assets/maintenance/${maintenanceToDelete}`, {
-        method: 'DELETE',
-      })
-      if (response.ok) {
-        queryClient.invalidateQueries({ queryKey: ['asset-maintenance', resolvedParams.id] })
-        toast.success('Maintenance record deleted successfully')
-        setIsDeleteMaintenanceDialogOpen(false)
-        setMaintenanceToDelete(null)
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        toast.error(errorData.error || 'Failed to delete maintenance record')
-        setIsDeleteMaintenanceDialogOpen(false)
-        setMaintenanceToDelete(null)
-      }
+      await deleteMaintenanceMutation.mutateAsync(maintenanceToDelete)
+      queryClient.invalidateQueries({ queryKey: ['asset-maintenance', resolvedParams.id] })
+      toast.success('Maintenance record deleted successfully')
+      setIsDeleteMaintenanceDialogOpen(false)
+      setMaintenanceToDelete(null)
     } catch (error) {
       console.error('Error deleting maintenance:', error)
-      toast.error('Failed to delete maintenance record')
+      toast.error(error instanceof Error ? error.message : 'Failed to delete maintenance record')
       setIsDeleteMaintenanceDialogOpen(false)
       setMaintenanceToDelete(null)
     } finally {
@@ -851,8 +847,24 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
     setIsDeletingReservation(true)
     try {
-      const response = await fetch(`/api/assets/reserve/${reservationToDelete}`, {
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/reserve/${reservationToDelete}`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'DELETE',
+        credentials: 'include',
+        headers,
       })
       if (response.ok) {
         queryClient.invalidateQueries({ queryKey: ['asset-reserve', resolvedParams.id] })
@@ -881,8 +893,24 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
     setIsDeletingAudit(true)
     try {
-      const response = await fetch(`/api/assets/audit/${auditToDelete}`, {
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/audit/${auditToDelete}`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'DELETE',
+        credentials: 'include',
+        headers,
       })
       if (response.ok) {
         queryClient.invalidateQueries({ queryKey: ['asset', resolvedParams.id] })
@@ -912,8 +940,24 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
     setIsDeletingHistory(true)
     try {
-      const response = await fetch(`/api/assets/history/${historyLogToDelete}`, {
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/history/${historyLogToDelete}`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'DELETE',
+        credentials: 'include',
+        headers,
       })
       if (response.ok) {
         queryClient.invalidateQueries({ queryKey: ['asset-history', resolvedParams.id] })
@@ -1006,7 +1050,9 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await updateMutation.mutateAsync({ id: resolvedParams.id, data: updateData as any })
+      const updatedAsset = await updateAssetMutation.mutateAsync({ id: resolvedParams.id, ...updateData as any })
+      // Trigger additional cache invalidation for images/documents
+      await handleUpdateSuccess(updatedAsset)
 
       // Upload images and link existing images after asset is updated
       const totalImages = selectedImages.length + selectedExistingImages.length
@@ -1262,7 +1308,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
 
   // Get assigned to user from active checkout
   const activeCheckout = asset?.checkouts?.find(
-    (checkout: { checkins?: Array<{ id: string }> | null }) => {
+    (checkout) => {
       const checkinsCount = checkout.checkins?.length ?? 0
       return checkinsCount === 0
     }
@@ -2802,7 +2848,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {asset.auditHistory.map((audit: { id: string; auditType: string; auditDate: string | Date; auditor: string | null; status: string | null; notes: string | null }) => (
+                        {asset.auditHistory.map((audit) => (
                           <TableRow key={audit.id} className="group relative">
                             <TableCell className="font-medium">
                               {formatDate(audit.auditDate || null)}
@@ -2901,27 +2947,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {maintenances.map((maintenance: { 
-                          id: string
-                          title: string
-                          details?: string | null
-                          dueDate?: string | Date | null
-                          status?: string | null
-                          maintenanceBy?: string | null
-                          dateCompleted?: string | Date | null
-                          cost?: number | string | null
-                          inventoryItems?: {
-                            id: string
-                            quantity: number | string
-                            unitCost: number | null
-                            inventoryItem: {
-                              id: string
-                              itemCode: string
-                              name: string
-                              unit: string | null
-                            }
-                          }[]
-                        }) => (
+                        {maintenances.map((maintenance) => (
                           <TableRow key={maintenance.id} className="group relative">
                             <TableCell>
                               <span className="text-sm font-medium">{maintenance.title || 'N/A'}</span>
@@ -2963,7 +2989,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
                                   <div className="text-xs text-muted-foreground">
                                     {maintenance.inventoryItems.slice(0, 2).map((item, idx) => (
                                       <span key={item.id}>
-                                        {item.inventoryItem.itemCode} ({item.quantity} {item.inventoryItem.unit || ''})
+                                        {item.inventoryItem?.itemCode} ({item.quantity} {item.inventoryItem?.unit || ''})
                                         {idx < Math.min(maintenance.inventoryItems!.length, 2) - 1 && ', '}
                                       </span>
                                     ))}
@@ -3262,7 +3288,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
             variant="outline"
             size="lg"
             onClick={clearForm}
-            className="min-w-[120px] bg-accent!"
+            className="min-w-[120px] btn-glass"
           >
             Cancel
           </Button>

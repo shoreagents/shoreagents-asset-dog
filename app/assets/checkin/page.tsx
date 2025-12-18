@@ -1423,7 +1423,7 @@ function CheckinPageContent() {
             variant="outline"
             size="lg"
             onClick={clearForm}
-            className="min-w-[120px] bg-accent!"
+            className="min-w-[120px] btn-glass"
           >
             Cancel
           </Button>

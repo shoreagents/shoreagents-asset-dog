@@ -3,7 +3,25 @@ Pydantic models for Employees API
 """
 from pydantic import BaseModel, ConfigDict, EmailStr
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
+
+class AssetInfoForCheckout(BaseModel):
+    id: str
+    assetTagId: str
+    description: str
+    status: Optional[str] = None
+    category: Optional[dict] = None
+    subCategory: Optional[dict] = None
+    location: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+
+class CheckoutForEmployee(BaseModel):
+    id: str
+    checkoutDate: date
+    expectedReturnDate: Optional[date] = None
+    asset: AssetInfoForCheckout
+    checkins: Optional[List[dict]] = []
 
 class Employee(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -14,6 +32,7 @@ class Employee(BaseModel):
     department: Optional[str] = None
     createdAt: datetime
     updatedAt: datetime
+    checkouts: Optional[List[CheckoutForEmployee]] = []
 
 class EmployeeCreate(BaseModel):
     name: str

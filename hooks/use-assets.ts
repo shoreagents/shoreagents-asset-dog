@@ -19,11 +19,16 @@ export interface EmployeeInfo {
   email: string
 }
 
+export interface CheckinInfo {
+  id: string
+}
+
 export interface CheckoutInfo {
   id: string
   checkoutDate: Date
   expectedReturnDate: Date | null
   employeeUser: EmployeeInfo | null
+  checkins?: CheckinInfo[] | null
 }
 
 export interface LeaseInfo {
@@ -38,6 +43,8 @@ export interface AuditHistoryInfo {
   auditDate: Date
   auditType: string | null
   auditor: string | null
+  status: string | null
+  notes: string | null
 }
 
 export interface Asset {
@@ -225,6 +232,7 @@ interface AssetApiResponse {
     checkoutDate: string
     expectedReturnDate: string | null
     employeeUser: EmployeeInfo | null
+    checkins?: Array<{ id: string }> | null
   }>
   leases?: Array<{
     id: string
@@ -237,6 +245,8 @@ interface AssetApiResponse {
     auditDate: string
     auditType: string | null
     auditor: string | null
+    status: string | null
+    notes: string | null
   }>
   imagesCount: number
 }
@@ -255,6 +265,7 @@ function convertAssetDates(asset: AssetApiResponse): Asset {
       ...chk,
       checkoutDate: new Date(chk.checkoutDate),
       expectedReturnDate: chk.expectedReturnDate ? new Date(chk.expectedReturnDate) : null,
+      checkins: chk.checkins || null,
     })) || null,
     leases: asset.leases?.map((lease) => ({
       ...lease,
@@ -264,6 +275,8 @@ function convertAssetDates(asset: AssetApiResponse): Asset {
     auditHistory: asset.auditHistory?.map((audit) => ({
       ...audit,
       auditDate: new Date(audit.auditDate),
+      status: audit.status || null,
+      notes: audit.notes || null,
     })) || null,
   }
 }
@@ -737,6 +750,135 @@ export const useAssetSuggestions = (
   }
 }
 
+// Bulk delete assets mutation
+export interface BulkDeleteResponse {
+  success: boolean
+  deletedCount: number
+  message: string
+}
+
+export const useBulkDeleteAssets = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (assetIds: string[]) => {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/bulk-delete`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ids: assetIds }),
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Failed to bulk delete assets: ${response.status} ${response.statusText}`, errorText)
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.detail || errorData.error || "Failed to delete assets")
+        } catch {
+          throw new Error("Failed to delete assets")
+        }
+      }
+      
+      return await response.json() as BulkDeleteResponse
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets"] })
+      queryClient.invalidateQueries({ queryKey: ["assets-summary"] })
+      queryClient.invalidateQueries({ queryKey: ["assets-list"] })
+    },
+  })
+}
+
+// Restore asset mutation (un-delete soft-deleted asset)
+export const useRestoreAsset = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (assetId: string) => {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/${assetId}/restore`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Failed to restore asset: ${response.status} ${response.statusText}`, errorText)
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.detail || errorData.error || "Failed to restore asset")
+        } catch {
+          throw new Error("Failed to restore asset")
+        }
+      }
+      
+      return await response.json()
+    },
+    onSuccess: (_, assetId) => {
+      queryClient.invalidateQueries({ queryKey: ["assets"] })
+      queryClient.invalidateQueries({ queryKey: ["asset", assetId] })
+      queryClient.invalidateQueries({ queryKey: ["assets-summary"] })
+    },
+  })
+}
+
+// Permanent delete asset mutation
+export const usePermanentDeleteAsset = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (assetId: string) => {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/${assetId}?permanent=true`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        method: "DELETE",
+        headers,
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Failed to permanently delete asset: ${response.status} ${response.statusText}`, errorText)
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.detail || errorData.error || "Failed to permanently delete asset")
+        } catch {
+          throw new Error("Failed to permanently delete asset")
+        }
+      }
+      
+      return await response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets"] })
+      queryClient.invalidateQueries({ queryKey: ["assets-summary"] })
+    },
+  })
+}
+
 // Create checkout mutation
 export const useCreateCheckout = () => {
   const queryClient = useQueryClient()
@@ -782,6 +924,190 @@ export const useCreateCheckout = () => {
         })
       }
       queryClient.invalidateQueries({ queryKey: ["checkout-stats"] })
+    },
+  })
+}
+
+// Maintenance types
+export interface MaintenanceRecord {
+  id: string
+  assetId: string
+  title: string
+  details: string | null
+  dueDate: string | null
+  maintenanceBy: string | null
+  status: string
+  dateCompleted: string | null
+  dateCancelled: string | null
+  cost: number | null
+  isRepeating: boolean
+  createdAt: string
+  asset?: {
+    id: string
+    assetTagId: string
+    description: string
+    category?: { id: string; name: string } | null
+    subCategory?: { id: string; name: string } | null
+  } | null
+  inventoryItems?: Array<{
+    id: string
+    maintenanceId: string
+    inventoryItemId: string
+    quantity: number
+    unitCost: number | null
+    inventoryItem?: {
+      id: string
+      itemCode: string
+      name: string
+      unit: string | null
+    } | null
+  }>
+}
+
+export interface MaintenancesResponse {
+  maintenances: MaintenanceRecord[]
+  pagination?: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+    hasNextPage: boolean
+    hasPreviousPage: boolean
+  }
+}
+
+// Fetch maintenance records for an asset
+export const useAssetMaintenances = (assetId: string | null, enabled: boolean = true) => {
+  return useQuery<MaintenancesResponse>({
+    queryKey: ["asset-maintenance", assetId],
+    queryFn: async () => {
+      if (!assetId) return { maintenances: [] }
+      
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/maintenance?assetId=${assetId}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Failed to fetch maintenances: ${response.status} ${response.statusText}`, errorText)
+        return { maintenances: [] }
+      }
+      
+      return await response.json()
+    },
+    enabled: enabled && !!assetId,
+    staleTime: 2 * 60 * 1000,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  })
+}
+
+// Delete maintenance record mutation
+export const useDeleteMaintenance = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (maintenanceId: string) => {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/maintenance/${maintenanceId}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        method: "DELETE",
+        headers,
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Failed to delete maintenance: ${response.status} ${response.statusText}`, errorText)
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.detail || errorData.error || "Failed to delete maintenance")
+        } catch {
+          throw new Error("Failed to delete maintenance")
+        }
+      }
+      
+      return await response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["asset-maintenance"] })
+      queryClient.invalidateQueries({ queryKey: ["maintenance-stats"] })
+    },
+  })
+}
+
+// Hook to update a maintenance record
+export interface MaintenanceUpdateData {
+  id: string
+  title?: string
+  details?: string
+  dueDate?: string
+  maintenanceBy?: string
+  status?: string
+  dateCompleted?: string
+  dateCancelled?: string
+  cost?: string
+  isRepeating?: boolean
+  inventoryItems?: Array<{
+    inventoryItemId: string
+    quantity: number
+    unitCost?: number
+  }>
+}
+
+export const useUpdateMaintenance = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (data: MaintenanceUpdateData) => {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets/maintenance`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(data),
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Failed to update maintenance: ${response.status} ${response.statusText}`, errorText)
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.detail || errorData.error || "Failed to update maintenance")
+        } catch {
+          throw new Error("Failed to update maintenance")
+        }
+      }
+      
+      return await response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["asset-maintenance"] })
+      queryClient.invalidateQueries({ queryKey: ["maintenance-stats"] })
+      queryClient.invalidateQueries({ queryKey: ["maintenances-list"] })
     },
   })
 }

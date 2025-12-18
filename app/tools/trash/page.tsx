@@ -261,8 +261,24 @@ function TrashPageContent() {
   // Restore mutation
   const restoreMutation = useMutation({
     mutationFn: async (assetId: string) => {
-      const response = await fetch(`/api/assets/${assetId}/restore`, {
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/${assetId}/restore`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'PATCH',
+        credentials: 'include',
+        headers,
       })
       if (!response.ok) {
         const error = await response.json()
@@ -308,8 +324,24 @@ function TrashPageContent() {
   // Empty trash mutation
   const emptyTrashMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/assets/trash/empty', {
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/trash/empty`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'DELETE',
+        credentials: 'include',
+        headers,
       })
       if (!response.ok) {
         const error = await response.json()
@@ -705,8 +737,24 @@ function TrashPageContent() {
     try {
       for (let i = 0; i < selectedArray.length; i++) {
         const assetId = selectedArray[i]
-        const response = await fetch(`/api/assets/${assetId}/restore`, {
+        const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+          ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+          : ''
+        const url = `${baseUrl}/api/assets/${assetId}/restore`
+        
+        // Get auth token
+        const { createClient } = await import('@/lib/supabase-client')
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        const headers: HeadersInit = {}
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`
+        }
+        
+        const response = await fetch(url, {
           method: 'PATCH',
+          credentials: 'include',
+          headers,
         })
         if (!response.ok) {
           const error = await response.json()

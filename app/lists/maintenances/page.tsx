@@ -37,7 +37,8 @@ import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldLabel, FieldContent } from '@/components/ui/field'
 import { Badge } from '@/components/ui/badge'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
+import { useUpdateMaintenance, useDeleteMaintenance } from '@/hooks/use-assets'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
@@ -682,62 +683,40 @@ function ListOfMaintenancesPageContent() {
     }
   }, [isFetching, isManualRefresh])
 
-  // Update maintenance mutation
-  const updateMaintenanceMutation = useMutation({
-    mutationFn: async (data: {
-      id: string
-      status: string
-      dateCompleted?: string
-      dateCancelled?: string
-    }) => {
-      const response = await fetch('/api/assets/maintenance', {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to update maintenance')
+  // Update maintenance mutation - using FastAPI hook
+  const updateMaintenanceHook = useUpdateMaintenance()
+  
+  // Delete maintenance mutation - using FastAPI hook
+  const deleteMaintenanceHook = useDeleteMaintenance()
+  
+  // Mutation functions using FastAPI hooks
+  const doUpdateMaintenance = useCallback((data: { id: string; status: string; dateCompleted?: string; dateCancelled?: string }) => {
+    updateMaintenanceHook.mutate(data, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["maintenances-list"] })
+        toast.success('Maintenance status updated successfully')
+        setEditingMaintenance(null)
+        setEditStatus("")
+        setEditDateCompleted("")
+        setEditDateCancelled("")
+      },
+      onError: (error: Error) => {
+        toast.error(error.message || 'Failed to update maintenance')
       }
-
-      return response.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["maintenances-list"] })
-      toast.success('Maintenance status updated successfully')
-      setEditingMaintenance(null)
-      setEditStatus("")
-      setEditDateCompleted("")
-      setEditDateCancelled("")
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to update maintenance')
-    }
-  })
-
-  // Delete maintenance mutation
-  const deleteMaintenanceMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/assets/maintenance/${id}`, {
-        method: "DELETE",
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to delete maintenance')
+    })
+  }, [updateMaintenanceHook, queryClient])
+  
+  const doDeleteMaintenance = useCallback((id: string) => {
+    deleteMaintenanceHook.mutate(id, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["maintenances-list"] })
+        toast.success('Maintenance record deleted successfully')
+      },
+      onError: (error: Error) => {
+        toast.error(error.message || 'Failed to delete maintenance')
       }
-
-      return response.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["maintenances-list"] })
-      toast.success('Maintenance record deleted successfully')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to delete maintenance')
-    }
-  })
+    })
+  }, [deleteMaintenanceHook, queryClient])
 
   // Handle delete maintenance
   const handleDeleteMaintenance = useCallback((id: string) => {
@@ -752,10 +731,10 @@ function ListOfMaintenancesPageContent() {
   // Handle confirm delete
   const handleConfirmDelete = useCallback(() => {
     if (deletingMaintenanceId) {
-      deleteMaintenanceMutation.mutate(deletingMaintenanceId)
+      doDeleteMaintenance(deletingMaintenanceId)
       setDeletingMaintenanceId(null)
     }
-  }, [deletingMaintenanceId, deleteMaintenanceMutation])
+  }, [deletingMaintenanceId, doDeleteMaintenance])
 
 
   // Handle edit status change
@@ -791,7 +770,7 @@ function ListOfMaintenancesPageContent() {
       return
     }
 
-    updateMaintenanceMutation.mutate({
+    doUpdateMaintenance({
       id: editingMaintenance.id,
       status: editStatus,
       dateCompleted: editStatus === 'Completed' ? editDateCompleted : undefined,
@@ -1463,9 +1442,9 @@ function ListOfMaintenancesPageContent() {
               <Button
                 type="button"
                 onClick={handleUpdateMaintenance}
-                disabled={updateMaintenanceMutation.isPending || !canManageMaintenance}
+                disabled={updateMaintenanceHook.isPending || !canManageMaintenance}
               >
-                {updateMaintenanceMutation.isPending ? (
+                {updateMaintenanceHook.isPending ? (
                   <>
                     <Spinner className="mr-2 h-4 w-4" />
                     Updating...
@@ -1495,7 +1474,7 @@ function ListOfMaintenancesPageContent() {
               })()
             : 'Are you sure you want to delete this maintenance record? This action cannot be undone.'
         }
-        isLoading={deleteMaintenanceMutation.isPending}
+        isLoading={deleteMaintenanceHook.isPending}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         loadingLabel="Deleting..."

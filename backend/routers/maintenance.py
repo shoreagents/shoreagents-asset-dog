@@ -1,19 +1,345 @@
 """
 Maintenance API router
 """
-from fastapi import APIRouter, HTTPException, Depends, status
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, status, Query
+from typing import Dict, Any, Optional
 from datetime import datetime
 from decimal import Decimal
 import logging
 
-from models.maintenance import MaintenanceCreate, MaintenanceResponse, MaintenanceStatsResponse, MaintenanceInventoryItem
+from models.maintenance import MaintenanceCreate, MaintenanceUpdate, MaintenanceResponse, MaintenancesListResponse, MaintenanceDeleteResponse, MaintenanceStatsResponse, MaintenanceInventoryItem
 from auth import verify_auth
 from database import prisma
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/assets/maintenance", tags=["maintenance"])
+
+
+@router.get("", response_model=MaintenancesListResponse)
+async def list_maintenances(
+    assetId: Optional[str] = Query(None, description="Filter by asset ID"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    search: Optional[str] = Query(None, description="Search in title, details, maintenanceBy"),
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(50, ge=1, le=500),
+    auth: dict = Depends(verify_auth)
+):
+    """List maintenance records with optional filters"""
+    try:
+        skip = (page - 1) * pageSize
+        
+        # Build where clause
+        where: Dict[str, Any] = {}
+        if assetId:
+            where["assetId"] = assetId
+        if status:
+            where["status"] = status
+        if search:
+            where["OR"] = [
+                {"title": {"contains": search, "mode": "insensitive"}},
+                {"details": {"contains": search, "mode": "insensitive"}},
+                {"maintenanceBy": {"contains": search, "mode": "insensitive"}}
+            ]
+        
+        # Get total count
+        total = await prisma.assetsmaintenance.count(where=where)
+        
+        # Fetch maintenances
+        maintenances = await prisma.assetsmaintenance.find_many(
+            where=where,
+            include={
+                "asset": {
+                    "include": {
+                        "category": True,
+                        "subCategory": True
+                    }
+                },
+                "inventoryItems": {
+                    "include": {
+                        "inventoryItem": True
+                    }
+                }
+            },
+            order={"createdAt": "desc"},
+            skip=skip,
+            take=pageSize
+        )
+        
+        total_pages = (total + pageSize - 1) // pageSize
+        
+        # Format response
+        maintenances_list = []
+        for m in maintenances:
+            maintenance_dict = {
+                "id": str(m.id),
+                "assetId": str(m.assetId),
+                "title": m.title,
+                "details": m.details,
+                "dueDate": m.dueDate.isoformat() if m.dueDate and hasattr(m.dueDate, 'isoformat') else (str(m.dueDate) if m.dueDate else None),
+                "maintenanceBy": m.maintenanceBy,
+                "status": m.status,
+                "dateCompleted": m.dateCompleted.isoformat() if m.dateCompleted and hasattr(m.dateCompleted, 'isoformat') else (str(m.dateCompleted) if m.dateCompleted else None),
+                "dateCancelled": m.dateCancelled.isoformat() if m.dateCancelled and hasattr(m.dateCancelled, 'isoformat') else (str(m.dateCancelled) if m.dateCancelled else None),
+                "cost": float(m.cost) if m.cost else None,
+                "isRepeating": m.isRepeating,
+                "createdAt": m.createdAt.isoformat() if hasattr(m.createdAt, 'isoformat') else str(m.createdAt),
+                "asset": {
+                    "id": str(m.asset.id),
+                    "assetTagId": str(m.asset.assetTagId),
+                    "description": str(m.asset.description),
+                    "category": {
+                        "id": str(m.asset.category.id),
+                        "name": str(m.asset.category.name)
+                    } if m.asset.category else None,
+                    "subCategory": {
+                        "id": str(m.asset.subCategory.id),
+                        "name": str(m.asset.subCategory.name)
+                    } if m.asset.subCategory else None
+                } if m.asset else None,
+                "inventoryItems": [
+                    {
+                        "id": str(inv_item.id),
+                        "maintenanceId": str(inv_item.maintenanceId),
+                        "inventoryItemId": str(inv_item.inventoryItemId),
+                        "quantity": float(inv_item.quantity),
+                        "unitCost": float(inv_item.unitCost) if inv_item.unitCost else None,
+                        "inventoryItem": {
+                            "id": str(inv_item.inventoryItem.id),
+                            "itemCode": str(inv_item.inventoryItem.itemCode),
+                            "name": str(inv_item.inventoryItem.name),
+                            "unit": str(inv_item.inventoryItem.unit) if inv_item.inventoryItem.unit else None
+                        } if inv_item.inventoryItem else None
+                    }
+                    for inv_item in (m.inventoryItems or [])
+                ] if m.inventoryItems else []
+            }
+            maintenances_list.append(maintenance_dict)
+        
+        return MaintenancesListResponse(
+            maintenances=maintenances_list,
+            pagination={
+                "page": page,
+                "pageSize": pageSize,
+                "total": total,
+                "totalPages": total_pages,
+                "hasNextPage": page < total_pages,
+                "hasPreviousPage": page > 1
+            }
+        )
+    
+    except Exception as e:
+        logger.error(f"Error listing maintenances: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch maintenances")
+
+
+@router.delete("/{maintenance_id}", response_model=MaintenanceDeleteResponse)
+async def delete_maintenance(
+    maintenance_id: str,
+    auth: dict = Depends(verify_auth)
+):
+    """Delete a maintenance record"""
+    try:
+        # Check if maintenance record exists
+        maintenance = await prisma.assetsmaintenance.find_unique(
+            where={"id": maintenance_id}
+        )
+        
+        if not maintenance:
+            raise HTTPException(status_code=404, detail="Maintenance record not found")
+        
+        # Delete the maintenance record
+        await prisma.assetsmaintenance.delete(
+            where={"id": maintenance_id}
+        )
+        
+        return MaintenanceDeleteResponse(success=True, message="Maintenance record deleted successfully")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting maintenance: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete maintenance record")
+
+
+@router.get("/{maintenance_id}")
+async def get_maintenance(
+    maintenance_id: str,
+    auth: dict = Depends(verify_auth)
+):
+    """Get a single maintenance record by ID"""
+    try:
+        maintenance = await prisma.assetsmaintenance.find_unique(
+            where={"id": maintenance_id},
+            include={
+                "asset": True,
+                "inventoryItems": {
+                    "include": {
+                        "inventoryItem": True
+                    }
+                }
+            }
+        )
+        
+        if not maintenance:
+            raise HTTPException(status_code=404, detail="Maintenance record not found")
+        
+        # Convert to dict for response
+        maintenance_dict = maintenance.model_dump() if hasattr(maintenance, 'model_dump') else maintenance.__dict__.copy()
+        
+        return {"maintenance": maintenance_dict}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching maintenance: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch maintenance record")
+
+
+@router.put("", response_model=MaintenanceResponse)
+async def update_maintenance(
+    data: MaintenanceUpdate,
+    auth: dict = Depends(verify_auth)
+):
+    """Update a maintenance record"""
+    try:
+        if not data.id:
+            raise HTTPException(status_code=400, detail="Maintenance ID is required")
+        
+        # Get current maintenance
+        current_maintenance = await prisma.assetsmaintenance.find_unique(
+            where={"id": data.id},
+            include={
+                "inventoryItems": {
+                    "include": {
+                        "inventoryItem": True
+                    }
+                }
+            }
+        )
+        
+        if not current_maintenance:
+            raise HTTPException(status_code=404, detail="Maintenance not found")
+        
+        previous_status = current_maintenance.status
+        is_status_changing_to_completed = data.status and data.status == 'Completed' and previous_status != 'Completed'
+        is_status_changing_from_completed = data.status and previous_status == 'Completed' and data.status != 'Completed'
+        
+        # Validate status-specific fields
+        if data.status == 'Completed' and not data.dateCompleted:
+            raise HTTPException(status_code=400, detail="Date completed is required when status is Completed")
+        
+        if data.status == 'Cancelled' and not data.dateCancelled:
+            raise HTTPException(status_code=400, detail="Date cancelled is required when status is Cancelled")
+        
+        # Build update data
+        update_data = {}
+        
+        if data.title is not None:
+            update_data["title"] = data.title
+        if data.details is not None:
+            update_data["details"] = data.details
+        if data.dueDate is not None:
+            update_data["dueDate"] = parse_date(data.dueDate) if data.dueDate else None
+        if data.maintenanceBy is not None:
+            update_data["maintenanceBy"] = data.maintenanceBy
+        if data.status is not None:
+            update_data["status"] = data.status
+        if data.dateCompleted is not None:
+            update_data["dateCompleted"] = parse_date(data.dateCompleted) if data.dateCompleted else None
+        if data.dateCancelled is not None:
+            update_data["dateCancelled"] = parse_date(data.dateCancelled) if data.dateCancelled else None
+        if data.cost is not None:
+            update_data["cost"] = data.cost
+        if data.isRepeating is not None:
+            update_data["isRepeating"] = data.isRepeating
+        
+        # Handle inventory items if status is changing to Completed
+        if is_status_changing_to_completed and data.inventoryItems:
+            async with prisma.tx() as transaction:
+                # Validate and deduct inventory stock
+                for item in data.inventoryItems:
+                    inventory_item = await transaction.inventoryitem.find_unique(
+                        where={"id": item.inventoryItemId}
+                    )
+                    
+                    if not inventory_item:
+                        raise HTTPException(status_code=404, detail=f"Inventory item not found: {item.inventoryItemId}")
+                    
+                    current_stock = float(inventory_item.currentStock) if inventory_item.currentStock else 0
+                    if current_stock < item.quantity:
+                        raise HTTPException(
+                            status_code=400, 
+                            detail=f"Insufficient stock for {inventory_item.name} ({inventory_item.itemCode}). Available: {current_stock}, Required: {item.quantity}"
+                        )
+                    
+                    # Deduct stock
+                    await transaction.inventoryitem.update(
+                        where={"id": item.inventoryItemId},
+                        data={"currentStock": {"decrement": item.quantity}}
+                    )
+                
+                # Update maintenance
+                maintenance = await transaction.assetsmaintenance.update(
+                    where={"id": data.id},
+                    data=update_data,
+                    include={
+                        "asset": True,
+                        "inventoryItems": {
+                            "include": {
+                                "inventoryItem": True
+                            }
+                        }
+                    }
+                )
+        elif is_status_changing_from_completed and current_maintenance.inventoryItems:
+            async with prisma.tx() as transaction:
+                # Restore inventory stock
+                for inv_item in current_maintenance.inventoryItems:
+                    await transaction.inventoryitem.update(
+                        where={"id": inv_item.inventoryItemId},
+                        data={"currentStock": {"increment": float(inv_item.quantity)}}
+                    )
+                
+                # Update maintenance
+                maintenance = await transaction.assetsmaintenance.update(
+                    where={"id": data.id},
+                    data=update_data,
+                    include={
+                        "asset": True,
+                        "inventoryItems": {
+                            "include": {
+                                "inventoryItem": True
+                            }
+                        }
+                    }
+                )
+        else:
+            # Simple update without inventory changes
+            maintenance = await prisma.assetsmaintenance.update(
+                where={"id": data.id},
+                data=update_data,
+                include={
+                    "asset": True,
+                    "inventoryItems": {
+                        "include": {
+                            "inventoryItem": True
+                        }
+                    }
+                }
+            )
+        
+        # Convert to dict for response
+        maintenance_dict = maintenance.model_dump() if hasattr(maintenance, 'model_dump') else maintenance.__dict__.copy()
+        
+        return MaintenanceResponse(success=True, maintenance=maintenance_dict)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating maintenance: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update maintenance")
+
 
 def parse_date(date_str: str) -> datetime:
     """Parse date string to datetime"""

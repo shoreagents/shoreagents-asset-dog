@@ -3,6 +3,7 @@ Employees API router
 """
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
+from datetime import date as date_type
 import logging
 from models.employees import (
     Employee,
@@ -10,7 +11,9 @@ from models.employees import (
     EmployeeUpdate,
     EmployeesResponse,
     EmployeeResponse,
-    PaginationInfo
+    PaginationInfo,
+    CheckoutForEmployee,
+    AssetInfoForCheckout
 )
 from auth import verify_auth
 from database import prisma
@@ -24,7 +27,7 @@ async def get_employees(
     search: Optional[str] = Query(None),
     searchType: Optional[str] = Query("unified", description="Search type: unified, name, email, department"),
     page: int = Query(1, ge=1),
-    pageSize: int = Query(50, ge=1, le=100),
+    pageSize: int = Query(50, ge=1, le=1000),
     auth: dict = Depends(verify_auth)
 ):
     """Get all employees with optional search filter and pagination"""
@@ -68,9 +71,22 @@ async def get_employees(
         # Get total count for pagination
         total_count = await prisma.employeeuser.count(where=where_clause)
         
-        # Get employees
+        # Get employees with checkouts
         employees_data = await prisma.employeeuser.find_many(
             where=where_clause,
+            include={
+                "checkouts": {
+                    "include": {
+                        "asset": {
+                            "include": {
+                                "category": True,
+                                "subCategory": True
+                            }
+                        },
+                        "checkins": True
+                    }
+                }
+            },
             order={"name": "asc"},
             skip=skip,
             take=pageSize
@@ -79,13 +95,54 @@ async def get_employees(
         employees = []
         for emp in employees_data:
             try:
+                # Filter checkouts to only include active ones (those without checkins)
+                # Also filter by asset status "Checked out"
+                active_checkouts = []
+                if emp.checkouts:
+                    for checkout in emp.checkouts:
+                        # Only include checkouts where asset status is "Checked out" and there are no checkins
+                        if (checkout.asset and 
+                            checkout.asset.status == "Checked out" and 
+                            (not checkout.checkins or len(checkout.checkins) == 0)):
+                            
+                            asset_info = AssetInfoForCheckout(
+                                id=str(checkout.asset.id),
+                                assetTagId=str(checkout.asset.assetTagId),
+                                description=str(checkout.asset.description),
+                                status=checkout.asset.status if checkout.asset.status else None,
+                                category={"name": str(checkout.asset.category.name)} if checkout.asset.category else None,
+                                subCategory={"name": str(checkout.asset.subCategory.name)} if checkout.asset.subCategory else None,
+                                location=checkout.asset.location if checkout.asset.location else None,
+                                brand=checkout.asset.brand if checkout.asset.brand else None,
+                                model=checkout.asset.model if checkout.asset.model else None
+                            )
+                            
+                            # Convert datetime to date for checkoutDate and expectedReturnDate
+                            checkout_date = checkout.checkoutDate.date() if hasattr(checkout.checkoutDate, 'date') else checkout.checkoutDate
+                            expected_return_date = None
+                            if checkout.expectedReturnDate:
+                                expected_return_date = checkout.expectedReturnDate.date() if hasattr(checkout.expectedReturnDate, 'date') else checkout.expectedReturnDate
+                            
+                            checkout_info = CheckoutForEmployee(
+                                id=str(checkout.id),
+                                checkoutDate=checkout_date,
+                                expectedReturnDate=expected_return_date,
+                                asset=asset_info,
+                                checkins=[{"id": str(c.id)} for c in checkout.checkins] if checkout.checkins else []
+                            )
+                            active_checkouts.append(checkout_info)
+                
+                # Sort checkouts by checkoutDate descending
+                active_checkouts.sort(key=lambda x: x.checkoutDate, reverse=True)
+                
                 employee = Employee(
                     id=str(emp.id),
                     name=str(emp.name),
                     email=str(emp.email),
                     department=emp.department if emp.department else None,
                     createdAt=emp.createdAt,
-                    updatedAt=emp.updatedAt
+                    updatedAt=emp.updatedAt,
+                    checkouts=active_checkouts
                 )
                 employees.append(employee)
             except Exception as e:

@@ -29,8 +29,35 @@ export function AuditHistoryManager({ assetId, readOnly = false }: AuditHistoryM
   const { data: auditData, isLoading, refetch } = useQuery({
     queryKey: ['auditHistory', assetId],
     queryFn: async () => {
-      const response = await fetch(`/api/assets/${assetId}/audit`)
-      if (!response.ok) throw new Error('Failed to fetch audit history')
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/${assetId}/audit`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = 'Failed to fetch audit history'
+        try {
+          const error = JSON.parse(errorText)
+          errorMessage = error.detail || error.error || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
       return response.json()
     },
   })
@@ -40,10 +67,36 @@ export function AuditHistoryManager({ assetId, readOnly = false }: AuditHistoryM
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (auditId: string) => {
-      const response = await fetch(`/api/assets/audit/${auditId}`, {
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/audit/${auditId}`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'DELETE',
+        credentials: 'include',
+        headers,
       })
-      if (!response.ok) throw new Error('Failed to delete audit')
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = 'Failed to delete audit'
+        try {
+          const error = JSON.parse(errorText)
+          errorMessage = error.detail || error.error || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
       return response.json()
     },
     onSuccess: async () => {
@@ -64,9 +117,24 @@ export function AuditHistoryManager({ assetId, readOnly = false }: AuditHistoryM
   // Add mutation
   const addMutation = useMutation({
     mutationFn: async (data: AuditFormData) => {
-      const response = await fetch(`/api/assets/${assetId}/audit`, {
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/${assetId}/audit`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers,
         body: JSON.stringify({
           auditType: data.auditType,
           auditDate: data.auditDate,
@@ -75,7 +143,17 @@ export function AuditHistoryManager({ assetId, readOnly = false }: AuditHistoryM
           notes: data.notes || null,
         }),
       })
-      if (!response.ok) throw new Error('Failed to create audit')
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = 'Failed to create audit'
+        try {
+          const error = JSON.parse(errorText)
+          errorMessage = error.detail || error.error || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
       return response.json()
     },
     onSuccess: async () => {

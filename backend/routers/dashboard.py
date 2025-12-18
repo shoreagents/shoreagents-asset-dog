@@ -296,7 +296,6 @@ async def get_dashboard_stats(
             )
             recent_assets = await transaction.assets.find_many(
                 where={"isDeleted": False, "createdAt": {"gte": thirty_days_ago}},
-                select={"id": True, "assetTagId": True, "description": True, "createdAt": True, "issuedTo": True},
                 order={"createdAt": "desc"},
                 take=10
             )

@@ -36,3 +36,19 @@ class CategoriesResponse(BaseModel):
 class CategoryResponse(BaseModel):
     category: Category
 
+class SubCategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    categoryId: str
+
+class SubCategoryUpdate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    categoryId: str
+
+class SubCategoriesResponse(BaseModel):
+    subcategories: List[SubCategory]
+
+class SubCategoryResponse(BaseModel):
+    subcategory: SubCategory
+

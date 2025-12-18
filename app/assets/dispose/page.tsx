@@ -1313,7 +1313,7 @@ function DisposeAssetPageContent() {
             variant="outline"
             size="lg"
             onClick={clearForm}
-            className="min-w-[120px]"
+            className="min-w-[120px] btn-glass"
           >
             Cancel
           </Button>

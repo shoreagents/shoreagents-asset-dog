@@ -337,8 +337,27 @@ async function fetchAsset(id: string) {
 }
 
 async function fetchHistoryLogs(assetId: string) {
-  const response = await fetch(`/api/assets/${assetId}/history`)
+  const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+    ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+    : ''
+  const url = `${baseUrl}/api/assets/${assetId}/history`
+  
+  // Get auth token
+  const { createClient } = await import('@/lib/supabase-client')
+  const supabase = createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {}
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers,
+  })
   if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`Failed to fetch history logs: ${response.status} ${response.statusText}`, errorText)
     return { logs: [] }
   }
   return response.json()
@@ -353,7 +372,24 @@ async function fetchMaintenance(assetId: string) {
 }
 
 async function fetchReserve(assetId: string) {
-  const response = await fetch(`/api/assets/reserve?assetId=${assetId}`)
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      const url = `${baseUrl}/api/assets/reserve?assetId=${assetId}`
+      
+      // Get auth token
+      const { createClient } = await import('@/lib/supabase-client')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: HeadersInit = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
   if (!response.ok) {
     return { reservations: [] }
   }

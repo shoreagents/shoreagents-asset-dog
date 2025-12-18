@@ -1,8 +1,8 @@
 'use client'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCategories } from '@/hooks/use-categories'
-import { useAssets, useAssetsStatuses } from '@/hooks/use-assets'
+import { useAssets, useAssetsStatuses, useDeleteAsset, useBulkDeleteAssets } from '@/hooks/use-assets'
 import { createClient } from '@/lib/supabase-client'
 import { useState, useEffect, useMemo, useRef, useTransition, Suspense, useCallback, memo } from 'react'
 import Link from 'next/link'
@@ -185,16 +185,7 @@ const ALL_COLUMNS = [
 ]
 
 // Removed fetchAssets function - now using useAssets hook
-
-async function deleteAsset(id: string) {
-  const response = await fetch(`/api/assets/${id}`, {
-    method: 'DELETE',
-  })
-  if (!response.ok) {
-    throw new Error('Failed to delete asset')
-  }
-  return response.json()
-}
+// Removed deleteAsset function - now using useDeleteAsset hook from use-assets.ts
 
 
 // Helper functions for formatting
@@ -1412,21 +1403,21 @@ const AssetActions = memo(function AssetActions({ asset, isSelectionMode, hasSel
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteAsset,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assets'] })
-      setIsDeleteOpen(false)
-      toast.success('Asset deleted successfully. It will be permanently deleted after 30 days.')
-    },
-    onError: () => {
-      toast.error('Failed to delete asset')
-    },
-  })
+  // Use the FastAPI-integrated delete hook
+  const deleteAssetMutation = useDeleteAsset()
 
   const confirmDelete = useCallback(() => {
-    deleteMutation.mutate(asset.id)
-  }, [deleteMutation, asset.id])
+    deleteAssetMutation.mutate(asset.id, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['assets'] })
+        setIsDeleteOpen(false)
+        toast.success('Asset deleted successfully. It will be permanently deleted after 30 days.')
+      },
+      onError: () => {
+        toast.error('Failed to delete asset')
+      },
+    })
+  }, [deleteAssetMutation, asset.id, queryClient])
 
   const handleEdit = useCallback(() => {
     if (!hasPermission('canEditAssets')) {
@@ -1663,7 +1654,7 @@ const AssetActions = memo(function AssetActions({ asset, isSelectionMode, hasSel
         onOpenChange={setIsDeleteOpen}
         onConfirm={confirmDelete}
         itemName={asset.assetTagId}
-        isLoading={deleteMutation.isPending}
+        isLoading={deleteAssetMutation.isPending}
         title={`Move ${asset.assetTagId} to Trash?`}
         description={`This asset will be moved to Trash and can be restored later if needed.`}
         confirmLabel="Move to Trash"
@@ -1837,6 +1828,9 @@ function AssetsPageContent() {
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false)
   const { data: statusesData } = useAssetsStatuses(canViewAssets && isStatusDropdownOpen)
   const allStatusesData = statusesData?.statuses
+
+  // Bulk delete mutation using FastAPI hook
+  const bulkDeleteMutation = useBulkDeleteAssets()
 
   // Check if any assets are selected (before table is created, use rowSelection directly)
   const hasSelectedAssetsInitial = Object.keys(rowSelection).length > 0
@@ -2366,11 +2360,24 @@ function AssetsPageContent() {
       const allResults: Array<{ asset: string; action: string; reason?: string; error?: string }> = []
       
       for (const batch of batches) {
-        const response = await fetch('/api/assets/import', {
+        const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+          ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+          : ''
+        const url = `${baseUrl}/api/assets/import`
+        
+        // Get auth token
+        const { createClient } = await import('@/lib/supabase-client')
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        const headers: HeadersInit = { 'Content-Type': 'application/json' }
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`
+        }
+        
+        const response = await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          credentials: 'include',
+          headers,
           body: JSON.stringify({ assets: batch }),
         })
         
@@ -2481,21 +2488,8 @@ function AssetsPageContent() {
     setDeletingProgress({ current: 0, total: selectedArray.length })
 
     try {
-      // Use bulk delete endpoint for faster deletion
-      const response = await fetch('/api/assets/bulk-delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ids: selectedArray }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to delete assets')
-      }
-
-      const result = await response.json()
+      // Use FastAPI bulk delete hook
+      const result = await bulkDeleteMutation.mutateAsync(selectedArray)
       setDeletingProgress({ current: selectedArray.length, total: selectedArray.length })
 
       toast.success(`Successfully deleted ${result.deletedCount} asset(s). They will be permanently deleted after 30 days.`)

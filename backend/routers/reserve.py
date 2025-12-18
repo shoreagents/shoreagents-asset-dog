@@ -1,8 +1,8 @@
 """
 Reserve API router
 """
-from fastapi import APIRouter, HTTPException, Depends, status
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, status, Query
+from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
 
@@ -13,6 +13,68 @@ from database import prisma
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/assets/reserve", tags=["reserve"])
+
+@router.get("")
+async def get_reservations(
+    assetId: Optional[str] = Query(None, description="Filter by asset ID"),
+    auth: dict = Depends(verify_auth)
+):
+    """Get reservations, optionally filtered by asset ID"""
+    try:
+        if not assetId:
+            raise HTTPException(status_code=400, detail="Asset ID is required")
+        
+        # Verify asset exists
+        asset = await prisma.assets.find_unique(
+            where={"id": assetId}
+        )
+        
+        if not asset:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        
+        # Get reservations for this asset
+        reservations_data = await prisma.assetsreserve.find_many(
+            where={"assetId": assetId},
+            include={
+                "employeeUser": True,
+                "asset": True
+            },
+            order={"reservationDate": "desc"}
+        )
+        
+        # Format reservations for response
+        reservations = []
+        for reservation in reservations_data:
+            reservation_dict = {
+                "id": str(reservation.id),
+                "assetId": str(reservation.assetId),
+                "reservationType": reservation.reservationType,
+                "reservationDate": reservation.reservationDate.isoformat() if hasattr(reservation.reservationDate, 'isoformat') else str(reservation.reservationDate),
+                "employeeUserId": str(reservation.employeeUserId) if reservation.employeeUserId else None,
+                "department": reservation.department,
+                "purpose": reservation.purpose,
+                "notes": reservation.notes,
+                "createdAt": reservation.createdAt.isoformat() if hasattr(reservation.createdAt, 'isoformat') else str(reservation.createdAt),
+                "employeeUser": {
+                    "id": str(reservation.employeeUser.id),
+                    "name": str(reservation.employeeUser.name),
+                    "email": str(reservation.employeeUser.email)
+                } if reservation.employeeUser else None,
+                "asset": {
+                    "id": str(reservation.asset.id),
+                    "assetTagId": str(reservation.asset.assetTagId),
+                    "description": str(reservation.asset.description)
+                } if reservation.asset else None
+            }
+            reservations.append(reservation_dict)
+        
+        return {"reservations": reservations}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching reservations: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch reservations")
 
 def parse_date(date_str: str) -> datetime:
     """Parse date string to datetime"""
@@ -202,4 +264,73 @@ async def get_reserve_stats(
     except Exception as e:
         logger.error(f"Error fetching reservation statistics: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch reservation statistics")
+
+
+@router.delete("/{reservation_id}")
+async def delete_reservation(
+    reservation_id: str,
+    auth: dict = Depends(verify_auth)
+):
+    """Delete a reservation record and update asset status if needed"""
+    try:
+        # Get user info for history logging
+        user_metadata = auth.get('user', {}).get('user_metadata', {})
+        user_name = (
+            user_metadata.get('name') or
+            user_metadata.get('full_name') or
+            auth.get('user', {}).get('email', '').split('@')[0] if auth.get('user', {}).get('email') else '' or
+            auth.get('user', {}).get('email') or
+            auth.get('user', {}).get('id', 'Unknown')
+        )
+        
+        # Delete reservation and update asset status in a transaction
+        async with prisma.tx() as transaction:
+            # Check if reservation record exists
+            reservation = await transaction.assetsreserve.find_unique(
+                where={"id": reservation_id},
+                include={"asset": True}
+            )
+            
+            if not reservation:
+                raise HTTPException(status_code=404, detail="Reservation record not found")
+            
+            asset_id = reservation.assetId
+            
+            # Delete the reservation record
+            await transaction.assetsreserve.delete(
+                where={"id": reservation_id}
+            )
+            
+            # Check if there are any other active reservations for this asset
+            other_reservations_count = await transaction.assetsreserve.count(
+                where={"assetId": asset_id}
+            )
+            
+            # If no other reservations exist and asset status is "Reserved", change it back to "Available"
+            if other_reservations_count == 0 and reservation.asset.status == "Reserved":
+                await transaction.assets.update(
+                    where={"id": asset_id},
+                    data={"status": "Available"}
+                )
+                
+                # Log status change
+                await transaction.assetshistorylogs.create(
+                    data={
+                        "assetId": asset_id,
+                        "eventType": "edited",
+                        "field": "status",
+                        "changeFrom": "Reserved",
+                        "changeTo": "Available",
+                        "actionBy": user_name,
+                        "eventDate": datetime.now()
+                    }
+                )
+        
+        return {"success": True}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting reservation: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete reservation record")
 

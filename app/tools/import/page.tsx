@@ -564,11 +564,24 @@ export default function ImportPage() {
       for (const batch of batches) {
         let response: Response
         try {
-          response = await fetch('/api/assets/import', {
+          const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+            ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+            : ''
+          const url = `${baseUrl}/api/assets/import`
+          
+          // Get auth token
+          const { createClient } = await import('@/lib/supabase-client')
+          const supabase = createClient()
+          const { data: { session } } = await supabase.auth.getSession()
+          const headers: HeadersInit = { 'Content-Type': 'application/json' }
+          if (session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`
+          }
+          
+          response = await fetch(url, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            credentials: 'include',
+            headers,
             body: JSON.stringify({ assets: batch }),
           })
         } catch {

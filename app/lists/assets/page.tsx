@@ -1,7 +1,7 @@
 'use client'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useAssets, type Asset as AssetFromHook } from '@/hooks/use-assets'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAssets, useDeleteAsset, type Asset as AssetFromHook } from '@/hooks/use-assets'
 import React, { useState, useMemo, useCallback, useEffect, useRef, useTransition, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -1257,31 +1257,20 @@ const AssetActions = React.memo(function AssetActions({ asset }: { asset: AssetF
   const [isAuditOpen, setIsAuditOpen] = useState(false)
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
 
-  async function deleteAsset(id: string) {
-    const response = await fetch(`/api/assets/${id}`, {
-      method: 'DELETE',
-    })
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to delete asset')
-    }
-    return response.json()
-  }
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteAsset,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assets-list'] })
-      setIsDeleteOpen(false)
-      toast.success('Asset deleted successfully. It will be permanently deleted after 30 days.')
-    },
-    onError: () => {
-      toast.error('Failed to delete asset')
-    },
-  })
+  // Use the FastAPI-integrated delete hook
+  const deleteAssetMutation = useDeleteAsset()
 
   const confirmDelete = () => {
-    deleteMutation.mutate(asset.id)
+    deleteAssetMutation.mutate(asset.id, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['assets-list'] })
+        setIsDeleteOpen(false)
+        toast.success('Asset deleted successfully. It will be permanently deleted after 30 days.')
+      },
+      onError: () => {
+        toast.error('Failed to delete asset')
+      },
+    })
   }
 
   const handleViewDetails = useCallback(() => {
@@ -1509,7 +1498,7 @@ const AssetActions = React.memo(function AssetActions({ asset }: { asset: AssetF
         onOpenChange={setIsDeleteOpen}
         onConfirm={confirmDelete}
         itemName={asset.assetTagId}
-        isLoading={deleteMutation.isPending}
+        isLoading={deleteAssetMutation.isPending}
         title={`Move ${asset.assetTagId} to Trash?`}
         description={`This asset will be moved to Trash and can be restored later if needed.`}
         confirmLabel="Move to Trash"

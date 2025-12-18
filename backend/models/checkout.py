@@ -25,3 +25,11 @@ class CheckoutResponse(BaseModel):
 class CheckoutStatsResponse(BaseModel):
     recentCheckouts: List[Dict]
 
+class CheckoutUpdate(BaseModel):
+    employeeUserId: Optional[str] = None
+    checkoutDate: Optional[str] = None
+    expectedReturnDate: Optional[str] = None
+
+class CheckoutDetailResponse(BaseModel):
+    checkout: Dict
+

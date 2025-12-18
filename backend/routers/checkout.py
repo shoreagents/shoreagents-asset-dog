@@ -6,7 +6,7 @@ from typing import Dict, Any
 from datetime import datetime
 import logging
 
-from models.checkout import CheckoutCreate, CheckoutResponse, CheckoutStatsResponse, AssetUpdateInfo
+from models.checkout import CheckoutCreate, CheckoutUpdate, CheckoutResponse, CheckoutStatsResponse, CheckoutDetailResponse, AssetUpdateInfo
 from auth import verify_auth
 from database import prisma
 
@@ -250,4 +250,202 @@ async def get_checkout_stats(
     except Exception as e:
         logger.error(f"Error fetching checkout statistics: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch checkout statistics")
+
+
+@router.get("/{checkout_id}", response_model=CheckoutDetailResponse)
+async def get_checkout(
+    checkout_id: str,
+    auth: dict = Depends(verify_auth)
+):
+    """Get a single checkout record by ID"""
+    try:
+        checkout = await prisma.assetscheckout.find_unique(
+            where={"id": checkout_id},
+            include={
+                "asset": True,
+                "employeeUser": True,
+                "checkins": True
+            }
+        )
+        
+        if not checkout:
+            raise HTTPException(status_code=404, detail="Checkout record not found")
+        
+        # Convert to dict for response
+        checkout_dict = {
+            "id": str(checkout.id),
+            "assetId": str(checkout.assetId),
+            "employeeUserId": str(checkout.employeeUserId) if checkout.employeeUserId else None,
+            "checkoutDate": checkout.checkoutDate.isoformat() if hasattr(checkout.checkoutDate, 'isoformat') else str(checkout.checkoutDate),
+            "expectedReturnDate": checkout.expectedReturnDate.isoformat() if checkout.expectedReturnDate and hasattr(checkout.expectedReturnDate, 'isoformat') else (str(checkout.expectedReturnDate) if checkout.expectedReturnDate else None),
+            "createdAt": checkout.createdAt.isoformat() if hasattr(checkout.createdAt, 'isoformat') else str(checkout.createdAt),
+            "updatedAt": checkout.updatedAt.isoformat() if hasattr(checkout.updatedAt, 'isoformat') else str(checkout.updatedAt),
+            "asset": {
+                "id": str(checkout.asset.id),
+                "assetTagId": str(checkout.asset.assetTagId),
+                "description": str(checkout.asset.description),
+                "status": checkout.asset.status,
+            } if checkout.asset else None,
+            "employeeUser": {
+                "id": str(checkout.employeeUser.id),
+                "name": str(checkout.employeeUser.name),
+                "email": str(checkout.employeeUser.email)
+            } if checkout.employeeUser else None,
+            "checkins": [
+                {
+                    "id": str(c.id),
+                    "checkinDate": c.checkinDate.isoformat() if hasattr(c.checkinDate, 'isoformat') else str(c.checkinDate),
+                }
+                for c in sorted(checkout.checkins or [], key=lambda x: x.checkinDate if hasattr(x, 'checkinDate') else datetime.min, reverse=True)[:1]
+            ] if checkout.checkins else []
+        }
+        
+        return CheckoutDetailResponse(checkout=checkout_dict)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching checkout: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch checkout record")
+
+
+@router.patch("/{checkout_id}", response_model=CheckoutDetailResponse)
+async def update_checkout(
+    checkout_id: str,
+    checkout_data: CheckoutUpdate,
+    auth: dict = Depends(verify_auth)
+):
+    """Update a checkout record (e.g., assign employee, update dates)"""
+    try:
+        # Get user info for history logging
+        user_metadata = auth.get('user', {}).get('user_metadata', {})
+        user_name = (
+            user_metadata.get('name') or
+            user_metadata.get('full_name') or
+            auth.get('user', {}).get('email', '').split('@')[0] if auth.get('user', {}).get('email') else '' or
+            auth.get('user', {}).get('email') or
+            auth.get('user', {}).get('id', 'Unknown')
+        )
+        
+        # Get current checkout to capture old employee assignment
+        current_checkout = await prisma.assetscheckout.find_unique(
+            where={"id": checkout_id},
+            include={
+                "asset": True,
+                "employeeUser": True
+            }
+        )
+        
+        if not current_checkout:
+            raise HTTPException(status_code=404, detail="Checkout record not found")
+        
+        old_employee_user_id = current_checkout.employeeUserId
+        new_employee_user_id = checkout_data.employeeUserId if checkout_data.employeeUserId is not None else old_employee_user_id
+        
+        # Build update data
+        update_data: Dict[str, Any] = {}
+        
+        if checkout_data.employeeUserId is not None:
+            update_data["employeeUserId"] = checkout_data.employeeUserId if checkout_data.employeeUserId else None
+        
+        if checkout_data.checkoutDate:
+            update_data["checkoutDate"] = parse_date(checkout_data.checkoutDate)
+        
+        if checkout_data.expectedReturnDate is not None:
+            update_data["expectedReturnDate"] = parse_date(checkout_data.expectedReturnDate) if checkout_data.expectedReturnDate else None
+        
+        # Update checkout record
+        async with prisma.tx() as transaction:
+            checkout = await transaction.assetscheckout.update(
+                where={"id": checkout_id},
+                data=update_data,
+                include={
+                    "asset": True,
+                    "employeeUser": True
+                }
+            )
+            
+            # Log assignedEmployee change if employee changed
+            if old_employee_user_id != new_employee_user_id:
+                try:
+                    # Get employee names for logging
+                    old_employee = None
+                    if old_employee_user_id:
+                        old_employee = await transaction.employeeuser.find_unique(
+                            where={"id": old_employee_user_id}
+                        )
+                    
+                    new_employee = None
+                    if new_employee_user_id:
+                        new_employee = await transaction.employeeuser.find_unique(
+                            where={"id": new_employee_user_id}
+                        )
+                    
+                    old_employee_name = old_employee.name if old_employee else (old_employee_user_id or '')
+                    new_employee_name = new_employee.name if new_employee else (new_employee_user_id or '')
+                    
+                    # Use checkout date or current date for eventDate
+                    event_date = checkout.checkoutDate if checkout.checkoutDate else datetime.now()
+                    
+                    # Create history log for assignedEmployee change
+                    await transaction.assetshistorylogs.create(
+                        data={
+                            "assetId": checkout.assetId,
+                            "eventType": "edited",
+                            "field": "assignedEmployee",
+                            "changeFrom": old_employee_name,
+                            "changeTo": new_employee_name,
+                            "actionBy": user_name,
+                            "eventDate": event_date
+                        }
+                    )
+                except Exception as e:
+                    logger.error(f"Error creating assignedEmployee history log: {type(e).__name__}: {str(e)}", exc_info=True)
+                    # Still try to create log with IDs as fallback
+                    try:
+                        event_date = checkout.checkoutDate if checkout.checkoutDate else datetime.now()
+                        await transaction.assetshistorylogs.create(
+                            data={
+                                "assetId": checkout.assetId,
+                                "eventType": "edited",
+                                "field": "assignedEmployee",
+                                "changeFrom": old_employee_user_id or '',
+                                "changeTo": new_employee_user_id or '',
+                                "actionBy": user_name,
+                                "eventDate": event_date
+                            }
+                        )
+                    except Exception as fallback_error:
+                        logger.error(f"Error creating fallback history log: {type(fallback_error).__name__}: {str(fallback_error)}", exc_info=True)
+                        # Don't fail the request if history logging fails
+        
+        # Convert to dict for response
+        checkout_dict = {
+            "id": str(checkout.id),
+            "assetId": str(checkout.assetId),
+            "employeeUserId": str(checkout.employeeUserId) if checkout.employeeUserId else None,
+            "checkoutDate": checkout.checkoutDate.isoformat() if hasattr(checkout.checkoutDate, 'isoformat') else str(checkout.checkoutDate),
+            "expectedReturnDate": checkout.expectedReturnDate.isoformat() if checkout.expectedReturnDate and hasattr(checkout.expectedReturnDate, 'isoformat') else (str(checkout.expectedReturnDate) if checkout.expectedReturnDate else None),
+            "createdAt": checkout.createdAt.isoformat() if hasattr(checkout.createdAt, 'isoformat') else str(checkout.createdAt),
+            "updatedAt": checkout.updatedAt.isoformat() if hasattr(checkout.updatedAt, 'isoformat') else str(checkout.updatedAt),
+            "asset": {
+                "id": str(checkout.asset.id),
+                "assetTagId": str(checkout.asset.assetTagId),
+                "description": str(checkout.asset.description),
+                "status": checkout.asset.status,
+            } if checkout.asset else None,
+            "employeeUser": {
+                "id": str(checkout.employeeUser.id),
+                "name": str(checkout.employeeUser.name),
+                "email": str(checkout.employeeUser.email)
+            } if checkout.employeeUser else None
+        }
+        
+        return CheckoutDetailResponse(checkout=checkout_dict)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating checkout: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update checkout record")
 

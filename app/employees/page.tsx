@@ -363,7 +363,8 @@ function EmployeesPageContent() {
     if (updates.search !== undefined) {
       if (updates.search === '') {
         params.delete('search')
-        params.delete('searchType')
+        // Preserve searchType when clearing search - don't delete it
+        // The user's selected search type should persist even after clearing
       } else {
         params.set('search', updates.search)
       }
@@ -1086,6 +1087,7 @@ function EmployeesPageContent() {
                   setIsCreateDialogOpen(false)
                   createForm.reset()
                 }}
+                className='btn-glass'
               >
                 Cancel
               </Button>
@@ -1179,6 +1181,7 @@ function EmployeesPageContent() {
                   editForm.reset()
                   setSelectedEmployee(null)
                 }}
+                className='btn-glass'
               >
                 Cancel
               </Button>
@@ -1231,7 +1234,7 @@ function EmployeesPageContent() {
                     }) : '-'
 
                     return (
-                      <Card key={checkout.id} className='gap-0'>
+                      <Card key={checkout.id} className='gap-0 bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-10 py-4!'>
                         <CardHeader className="pb-4">
                           <div className="space-y-3">
                             <div className="flex items-center justify-between gap-3">
@@ -1505,7 +1508,7 @@ function EmployeesPageContent() {
           </ScrollArea>
           <div className="shrink-0 px-6 py-4 border-t">
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCheckoutsDialogOpen(false)}>
+              <Button variant="outline" className='btn-glass' onClick={() => setIsCheckoutsDialogOpen(false)}>
                 Close
               </Button>
             </DialogFooter>

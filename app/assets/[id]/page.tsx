@@ -16,6 +16,23 @@ import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { toast } from 'sonner'
 import { useCategories, useSubCategories, useCreateCategory, useCreateSubCategory } from "@/hooks/use-categories"
 import { useAsset, useUpdateAsset, useAssetMaintenances, useDeleteMaintenance } from "@/hooks/use-assets"
+import { createClient } from '@/lib/supabase-client'
+
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+const getAuthToken = async (): Promise<string | null> => {
+  try {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token || null
+  } catch {
+    return null
+  }
+}
 import { CategoryDialog } from "@/components/dialogs/category-dialog"
 import { SubCategoryDialog } from "@/components/dialogs/subcategory-dialog"
 import { MediaBrowserDialog } from "@/components/dialogs/media-browser-dialog"
@@ -1139,10 +1156,22 @@ export default function EditAssetPage({ params }: { params: Promise<{ id: string
     }
   }
 
-  // Check if asset tag exists
+  // Check if asset tag exists using FastAPI
   const checkAssetTagExists = async (assetTag: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTag)}&pageSize=1`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTag)}&pageSize=10`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) return false
       const data = await response.json()
       return data.assets?.some((a: { assetTagId: string; id: string }) => a.assetTagId === assetTag && a.id !== resolvedParams.id) || false

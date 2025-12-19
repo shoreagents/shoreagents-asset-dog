@@ -261,10 +261,11 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 | `/api/inventory/[id]/restore` | POST | ✅ | `inventory.py` | `app/inventory/trash/page.tsx` | ✅ FastAPI (updated page) |
 | `/api/inventory/[id]/transactions` | GET, POST | ✅ | `inventory.py` | `app/inventory/[itemCode]/transaction-history/page.tsx`, `app/inventory/page.tsx` | ✅ FastAPI (updated pages) |
 | `/api/inventory/[id]/transactions/bulk-delete` | DELETE | ✅ | `inventory.py` | `app/inventory/[itemCode]/transaction-history/page.tsx` | ✅ FastAPI (updated page) |
-| `/api/inventory/generate-code` | GET | ❌ | - | `components/dialogs/inventory-item-dialog.tsx` | 📄 Direct (Next.js API) |
-| `/api/inventory/export` | GET | ❌ | - | `app/tools/export/page.tsx` | 📄 Direct (Next.js API) |
+| `/api/inventory/generate-code` | GET | ✅ | `inventory.py` | `components/dialogs/inventory-item-dialog.tsx` | ✅ FastAPI (updated component) |
+| `/api/inventory/export` | GET | ✅ | `inventory.py` | `app/inventory/page.tsx` | ✅ FastAPI (updated page) |
 | `/api/inventory/pdf` | GET | ❌ | - | `app/inventory/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/inventory/trash/empty` | DELETE | ❌ | - | `app/inventory/trash/page.tsx` | 📄 Direct (Next.js API) |
+| `/api/inventory/trash/empty` | DELETE | ✅ | `routers/inventory.py` | `app/inventory/trash/page.tsx` | 🐍 FastAPI |
+| `/api/inventory/bulk-delete` | DELETE | ✅ | `routers/inventory.py` | `app/inventory/trash/page.tsx` | 🐍 FastAPI |
 
 ---
 
@@ -300,10 +301,10 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 
 | Route | Method(s) | Status | FastAPI Router | Pages/Components Using | Integration |
 |-------|-----------|--------|----------------|----------------------|-------------|
-| `/api/forms/accountability-form` | GET, POST | ❌ | - | `app/forms/accountability-form/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/forms/return-form` | GET, POST | ❌ | - | `app/forms/return-form/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/forms/history` | GET | ❌ | - | `app/forms/history/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/forms/history/[id]` | GET, DELETE | ❌ | - | `app/forms/history/[id]/page.tsx` | 📄 Direct (Next.js API) |
+| `/api/forms/accountability-form` | GET, POST | ✅ | `backend/routers/forms.py` | `app/forms/accountability-form/page.tsx` | 🎣 `useCreateAccountabilityForm` hook |
+| `/api/forms/return-form` | GET, POST | ✅ | `backend/routers/forms.py` | `app/forms/return-form/page.tsx` | 🎣 `useCreateReturnForm` hook |
+| `/api/forms/history` | GET | ✅ | `backend/routers/forms.py` | `app/forms/history/page.tsx` | 🎣 `useFormHistory` hook |
+| `/api/forms/history/[id]` | GET, DELETE | ✅ | `backend/routers/forms.py` | `app/forms/history/[id]/page.tsx` | 🎣 `useFormById`, `useDeleteForm` hooks |
 
 ---
 
@@ -311,9 +312,9 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 
 | Route | Method(s) | Status | FastAPI Router | Pages/Components Using | Integration |
 |-------|-----------|--------|----------------|----------------------|-------------|
-| `/api/users` | GET, POST | ❌ | - | `app/settings/users/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/users/[id]` | GET, PUT, DELETE | ❌ | - | `app/settings/users/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/users/[id]/send-password-reset` | POST | ❌ | - | `app/settings/users/page.tsx` | 📄 Direct (Next.js API) |
+| `/api/users` | GET, POST | ✅ | `routers/users.py` | `app/settings/users/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/users/[id]` | GET, PUT, DELETE | ✅ | `routers/users.py` | `app/settings/users/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/users/[id]/send-password-reset` | POST | ✅ | `routers/users.py` | `app/settings/users/page.tsx` | 🔄 Proxy (FastAPI) |
 
 ---
 
@@ -321,8 +322,9 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 
 | Route | Method(s) | Status | FastAPI Router | Pages/Components Using | Integration |
 |-------|-----------|--------|----------------|----------------------|-------------|
-| `/api/settings/asset-events` | GET, POST | ❌ | - | `app/settings/asset-events/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/settings/asset-events/[id]` | PUT, DELETE | ❌ | - | `app/settings/asset-events/page.tsx` | 📄 Direct (Next.js API) |
+| `/api/settings/asset-events` | GET | ✅ | `routers/asset_events.py` | `app/settings/asset-events/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/settings/asset-events/bulk-delete` | DELETE | ✅ | `routers/asset_events.py` | `app/settings/asset-events/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/settings/asset-events/[id]` | DELETE | ✅ | `routers/asset_events.py` | `app/settings/asset-events/page.tsx` | 🔄 Proxy (FastAPI) |
 
 ---
 

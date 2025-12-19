@@ -1,7 +1,7 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useInventoryItems, useCreateInventoryItem, useUpdateInventoryItem, useDeleteInventoryItem } from '@/hooks/use-inventory'
+import { useInventoryItems, useCreateInventoryItem, useUpdateInventoryItem, useDeleteInventoryItem, useExportInventory } from '@/hooks/use-inventory'
 import { useState, useMemo, useCallback, useTransition, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -1248,6 +1248,9 @@ function InventoryPageContent() {
     toast.success('PDF exported successfully')
   }, [selectedSummaryFields, selectedExportFields, data?.items, generateInventoryReportHTML])
 
+  // Export inventory hook
+  const exportMutation = useExportInventory()
+
   // Export inventory items to Excel or PDF
   const handleExport = useCallback(async () => {
     if (selectedExportFields.size === 0 && selectedSummaryFields.size === 0) {
@@ -1262,34 +1265,21 @@ function InventoryPageContent() {
         const summaryData = calculateSummaryData()
         await handlePDFExport([], summaryData)
       } else {
-        // Handle Excel export via API
-        const params = new URLSearchParams()
-        params.set('format', 'excel')
-        if (searchQuery) params.set('search', searchQuery)
-        if (categoryFilter && categoryFilter !== 'all') params.set('category', categoryFilter)
-        if (lowStockFilter) params.set('lowStock', 'true')
-        
-        // Summary fields
-        params.set('includeSummary', selectedSummaryFields.has('summary').toString())
-        params.set('includeByCategory', selectedSummaryFields.has('byCategory').toString())
-        params.set('includeByStatus', selectedSummaryFields.has('byStatus').toString())
-        params.set('includeTotalCost', selectedSummaryFields.has('totalCost').toString())
-        params.set('includeLowStock', selectedSummaryFields.has('lowStock').toString())
-        params.set('includeItemList', (selectedExportFields.size > 0).toString())
-        
-        // Item fields
-        if (selectedExportFields.size > 0) {
-          params.set('itemFields', Array.from(selectedExportFields).join(','))
-        }
+        // Handle Excel export via hook
+        const blob = await exportMutation.mutateAsync({
+          format: 'excel',
+          search: searchQuery || undefined,
+          category: categoryFilter && categoryFilter !== 'all' ? categoryFilter : undefined,
+          lowStock: lowStockFilter || undefined,
+          includeSummary: selectedSummaryFields.has('summary'),
+          includeByCategory: selectedSummaryFields.has('byCategory'),
+          includeByStatus: selectedSummaryFields.has('byStatus'),
+          includeTotalCost: selectedSummaryFields.has('totalCost'),
+          includeLowStock: selectedSummaryFields.has('lowStock'),
+          includeItemList: selectedExportFields.size > 0,
+          itemFields: selectedExportFields.size > 0 ? Array.from(selectedExportFields) : undefined,
+        })
 
-        const response = await fetch(`/api/inventory/export?${params.toString()}`)
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Export failed' }))
-          throw new Error(errorData.error || 'Export failed')
-        }
-
-        const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -1309,7 +1299,7 @@ function InventoryPageContent() {
     } finally {
       setIsExporting(false)
     }
-  }, [selectedExportFields, selectedSummaryFields, exportFormat, searchQuery, categoryFilter, lowStockFilter, calculateSummaryData, handlePDFExport])
+  }, [selectedExportFields, selectedSummaryFields, exportFormat, searchQuery, categoryFilter, lowStockFilter, calculateSummaryData, handlePDFExport, exportMutation])
 
   const handleExportClick = useCallback((format: 'excel' | 'pdf' = 'excel') => {
     if (!data?.items || data.items.length === 0) {
@@ -1409,32 +1399,39 @@ function InventoryPageContent() {
     toast.success('Template downloaded successfully')
   }, [])
 
-  // Check if item code exists (including soft-deleted items)
-  const checkItemCodeExists = async (itemCode: string): Promise<boolean> => {
+  // Check which item codes already exist (batch check including soft-deleted items)
+  const checkItemCodesExist = async (itemCodes: string[], token: string | null): Promise<Set<string>> => {
     try {
-      // Check both active and soft-deleted items
-      const [activeResponse, deletedResponse] = await Promise.all([
-        fetch(`/api/inventory?search=${encodeURIComponent(itemCode)}&pageSize=1000`),
-        fetch(`/api/inventory?search=${encodeURIComponent(itemCode)}&includeDeleted=true&pageSize=1000`),
-      ])
+      if (itemCodes.length === 0) return new Set()
       
-      if (activeResponse.ok) {
-        const activeData = await activeResponse.json()
-        if (activeData.items?.some((item: InventoryItem) => item.itemCode === itemCode)) {
-          return true
-        }
+      const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+        ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+        : ''
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
       }
       
-      if (deletedResponse.ok) {
-        const deletedData = await deletedResponse.json()
-        if (deletedData.items?.some((item: InventoryItem) => item.itemCode === itemCode)) {
-          return true
-        }
+      const response = await fetch(`${baseUrl}/api/inventory/check-codes`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ itemCodes }),
+      })
+      
+      if (!response.ok) {
+        console.error('Failed to check item codes')
+        return new Set()
       }
       
-      return false
-    } catch {
-      return false
+      const data = await response.json()
+      return new Set(data.existingCodes || [])
+    } catch (error) {
+      console.error('Error checking item codes:', error)
+      return new Set()
     }
   }
 
@@ -1593,19 +1590,44 @@ function InventoryPageContent() {
         return
       }
 
+      // Get auth token for API calls
+      const token = await getAuthToken()
+
+      // Batch check all item codes that are provided (single API call instead of multiple)
+      const itemCodesFromImport = itemsToImport
+        .map(item => item.itemCode)
+        .filter((code): code is string => !!code && code.length > 0)
+      
+      const existingCodes = await checkItemCodesExist(itemCodesFromImport, token)
+
       // Import items via API
       let successCount = 0
       let skippedCount = 0
       let errorCount = 0
+      const totalItems = itemsToImport.length
+      
+      // Create a loading toast with progress
+      const toastId = toast.loading(`Importing items... 0/${totalItems} (0%)`, {
+        duration: Infinity,
+      })
 
-      for (const item of itemsToImport) {
+      for (let i = 0; i < itemsToImport.length; i++) {
+        const item = itemsToImport[i]
+        const processed = i + 1
+        const percentage = Math.round((processed / totalItems) * 100)
+        
+        // Update toast with progress
+        toast.loading(`Importing items... ${processed}/${totalItems} (${percentage}%)`, {
+          id: toastId,
+          duration: Infinity,
+        })
+        
         try {
           let finalItemCode = item.itemCode
 
-          // If item code is provided, check if it exists (including soft-deleted)
+          // If item code is provided, check if it exists using pre-fetched data
           if (finalItemCode) {
-            const exists = await checkItemCodeExists(finalItemCode)
-            if (exists) {
+            if (existingCodes.has(finalItemCode)) {
               // Skip this item if code already exists (even if soft-deleted)
               skippedCount++
               continue
@@ -1644,6 +1666,9 @@ function InventoryPageContent() {
           }
         }
       }
+      
+      // Dismiss the loading toast
+      toast.dismiss(toastId)
 
       // Refresh the inventory list
       queryClient.invalidateQueries({ queryKey: ['inventory'] })

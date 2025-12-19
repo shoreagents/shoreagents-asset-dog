@@ -25,6 +25,7 @@ import { Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { LocationSelectField } from '@/components/fields/location-select-field'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useGenerateItemCode } from '@/hooks/use-inventory'
 
 export interface InventoryItem {
   id: string
@@ -64,26 +65,22 @@ export function InventoryItemDialog({
   isLoading = false,
 }: InventoryItemDialogProps) {
   const [formData, setFormData] = useState<Partial<InventoryItem>>({})
-  const [isGeneratingCode, setIsGeneratingCode] = useState(false)
   const { hasPermission } = usePermissions()
   const canManageSetup = hasPermission('canManageSetup')
+  
+  const generateCodeMutation = useGenerateItemCode()
 
   const generateItemCode = async () => {
-    setIsGeneratingCode(true)
     try {
-      const response = await fetch('/api/inventory/generate-code')
-      if (!response.ok) {
-        throw new Error('Failed to generate item code')
-      }
-      const data = await response.json()
-      setFormData({ ...formData, itemCode: data.itemCode })
+      const itemCode = await generateCodeMutation.mutateAsync()
+      setFormData({ ...formData, itemCode })
     } catch (error) {
       toast.error('Failed to generate item code')
       console.error('Error generating item code:', error)
-    } finally {
-      setIsGeneratingCode(false)
     }
   }
+  
+  const isGeneratingCode = generateCodeMutation.isPending
 
   useEffect(() => {
     if (open) {

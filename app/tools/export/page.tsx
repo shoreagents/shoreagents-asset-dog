@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useAssets, Asset } from '@/hooks/use-assets'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Download, History, FileDown, Trash2, MoreHorizontal, Package, RefreshCw, FileSpreadsheet, Layers, Database, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
@@ -66,72 +67,16 @@ const ALL_COLUMNS = [
   { key: 'lastAuditor', label: 'Last Auditor' },
   { key: 'auditCount', label: 'Audit Count' },
   { key: 'images', label: 'Images' },
+  { key: 'documents', label: 'Documents' },
 ]
 
-interface Asset {
-  id: string
-  assetTagId: string
-  description: string
-  status: string | null
-  category: {
-    name: string
-  } | null
-  subCategory: {
-    name: string
-  } | null
-  location: string | null
-  issuedTo: string | null
-  purchasedFrom: string | null
-  purchaseDate: string | null
-  brand: string | null
-  cost: number | null
-  model: string | null
-  serialNo: string | null
-  additionalInformation: string | null
-  xeroAssetNo: string | null
-  owner: string | null
-  pbiNumber: string | null
-  poNumber: string | null
-  paymentVoucherNumber: string | null
-  assetType: string | null
-  deliveryDate: string | null
-  unaccountedInventory: boolean | null
-  remarks: string | null
-  qr: string | null
-  oldAssetTag: string | null
-  depreciableAsset: boolean | null
-  depreciableCost: number | null
-  salvageValue: number | null
-  assetLifeMonths: number | null
-  depreciationMethod: string | null
-  dateAcquired: string | null
-  department: string | null
-  site: string | null
-}
-
-async function fetchAssets(page: number = 1, pageSize: number = 10, search?: string, category?: string, status?: string): Promise<{ assets: Asset[], pagination: { total: number, page: number, pageSize: number, totalPages: number } }> {
-  const params = new URLSearchParams({
-    page: page.toString(),
-    pageSize: pageSize.toString(),
-  })
-  if (search) params.append('search', search)
-  if (category && category !== 'all') params.append('category', category)
-  if (status && status !== 'all') params.append('status', status)
-  
-  const response = await fetch(`/api/assets?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error('Failed to fetch assets')
-  }
-  const data = await response.json()
-  return { assets: data.assets, pagination: data.pagination }
-}
-
-const formatDate = (dateString: string | null) => {
-  if (!dateString) return '-'
+const formatDate = (dateValue: string | Date | null | undefined): string => {
+  if (!dateValue) return '-'
   try {
-    return new Date(dateString).toLocaleDateString()
+    const date = dateValue instanceof Date ? dateValue : new Date(dateValue)
+    return date.toLocaleDateString()
   } catch {
-    return dateString
+    return String(dateValue)
   }
 }
 
@@ -212,9 +157,35 @@ const getCellValue = (asset: Asset, columnKey: string): string | number => {
       return asset.site || '-'
     case 'location':
       return asset.location || '-'
+    case 'checkoutDate':
+      return formatDate(asset.checkouts?.[0]?.checkoutDate || null)
+    case 'expectedReturnDate':
+      return formatDate(asset.checkouts?.[0]?.expectedReturnDate || null)
+    case 'lastAuditDate':
+      const lastAudit = asset.auditHistory?.[0]
+      if (!lastAudit?.auditDate) return '-'
+      try {
+        const date = lastAudit.auditDate instanceof Date 
+          ? lastAudit.auditDate 
+          : new Date(lastAudit.auditDate)
+        return date.toLocaleDateString()
+      } catch {
+        return '-'
+      }
+    case 'lastAuditType':
+      return asset.auditHistory?.[0]?.auditType || '-'
+    case 'lastAuditor':
+      return asset.auditHistory?.[0]?.auditor || '-'
+    case 'auditCount':
+      return (asset.auditHistory?.length || 0).toString()
     case 'images':
       // Images will be fetched separately and added to asset
-      return (asset as Asset & { images?: string }).images || '-'
+      const imageValue = (asset as Asset & { images?: string }).images
+      return imageValue !== undefined && imageValue !== null ? imageValue : '-'
+    case 'documents':
+      // Documents will be fetched separately and added to asset
+      const documentValue = (asset as Asset & { documents?: string }).documents
+      return documentValue !== undefined && documentValue !== null ? documentValue : '-'
     default:
       return '-'
   }
@@ -266,7 +237,7 @@ export default function ExportPage() {
     staleTime: 30000, // Cache for 30 seconds
     refetchOnWindowFocus: false, // Don't refetch on window focus
     refetchOnMount: false, // Don't refetch on mount if data exists
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData: { fileHistory: FileHistory[], pagination: { total: number, page: number, pageSize: number, totalPages: number } } | undefined) => previousData,
   })
 
   // Reset manual refresh flag after successful fetch
@@ -321,15 +292,15 @@ export default function ExportPage() {
     }
   }
   
-  // Fetch all assets for export
-  const { data, isLoading: assetsLoading } = useQuery({
-    queryKey: ['assets', 'export'],
-    queryFn: () => fetchAssets(1, 10000),
-    enabled: !permissionsLoading && canViewAssets,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    refetchOnWindowFocus: false, // Don't refetch on window focus
-    refetchOnMount: false, // Don't refetch on mount if data exists
-  })
+  // Fetch all assets for export using the useAssets hook
+  const { data, isLoading: assetsLoading } = useAssets(
+    !permissionsLoading && canViewAssets, // enabled
+    undefined, // search
+    undefined, // category
+    undefined, // status
+    1, // page
+    10000 // pageSize
+  )
 
   // Set mobile dock content
   useEffect(() => {
@@ -446,18 +417,87 @@ export default function ExportPage() {
             const imagesData = await imagesResponse.json()
             // Create a map of assetTagId to comma-separated image URLs
             const imageUrlMap = new Map<string, string>()
+            if (Array.isArray(imagesData)) {
             imagesData.forEach((item: { assetTagId: string; images: Array<{ imageUrl: string }> }) => {
-              const urls = item.images.map((img: { imageUrl: string }) => img.imageUrl).join(', ')
+                if (item && item.assetTagId && item.images && Array.isArray(item.images)) {
+                  const urls = item.images
+                    .map((img: { imageUrl: string }) => img?.imageUrl)
+                    .filter((url: string | undefined): url is string => !!url)
+                    .join(', ')
+                  // Always set in map, even if empty (so we know the asset was processed)
               imageUrlMap.set(item.assetTagId, urls)
+                }
             })
-            // Add images to each asset
-            assetsToExport = assetsToExport.map(asset => ({
+            }
+            // Add images to each asset - preserve existing properties
+            // Always set images property, even if empty string
+            assetsToExport = assetsToExport.map(asset => {
+              const imageUrls = imageUrlMap.get(asset.assetTagId) ?? ''
+              const result = {
               ...asset,
-              images: imageUrlMap.get(asset.assetTagId) || '',
-            }))
+                images: imageUrls,
+              }
+              return result
+            })
           }
         } catch (error) {
           console.warn('Failed to fetch images for export:', error)
+        }
+      }
+
+      // If documents column is selected, fetch document URLs for all assets
+      if (selectedExportFields.has('documents')) {
+        const assetTagIds = assetsToExport.map(a => a.assetTagId)
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+            ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+            : ''
+          const url = `${baseUrl}/api/assets/documents/bulk?assetTagIds=${assetTagIds.join(',')}`
+          
+          // Get auth token
+          const { createClient } = await import('@/lib/supabase-client')
+          const supabase = createClient()
+          const { data: { session } } = await supabase.auth.getSession()
+          const headers: HeadersInit = {
+            'Content-Type': 'application/json',
+          }
+          if (baseUrl && session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`
+          }
+          
+          const documentsResponse = await fetch(url, {
+            headers,
+            credentials: 'include',
+          })
+          if (documentsResponse.ok) {
+            const documentsData = await documentsResponse.json()
+            // Create a map of assetTagId to comma-separated document URLs
+            const documentUrlMap = new Map<string, string>()
+            if (Array.isArray(documentsData)) {
+              documentsData.forEach((item: { assetTagId: string; documents: Array<{ documentUrl?: string }> }) => {
+                if (item && item.assetTagId && item.documents && Array.isArray(item.documents)) {
+                  const urls = item.documents
+                    .map((doc: { documentUrl?: string }) => doc?.documentUrl)
+                    .filter((url: string | undefined): url is string => !!url)
+                    .join(', ')
+                  // Always set in map, even if empty (so we know the asset was processed)
+                  documentUrlMap.set(item.assetTagId, urls)
+                }
+              })
+            }
+            // Add documents to each asset - preserve existing properties including images
+            // Always set documents property, even if empty string
+            assetsToExport = assetsToExport.map((asset: Asset & { images?: string }) => {
+              const documentUrls = documentUrlMap.get(asset.assetTagId) ?? ''
+              const result = {
+                ...asset,
+                documents: documentUrls,
+              } as Asset & { images?: string; documents: string }
+              return result
+            })
+          }
+        } catch (error) {
+          console.warn('Failed to fetch documents for export:', error)
         }
       }
       
@@ -471,7 +511,7 @@ export default function ExportPage() {
       })
       
       // Create data rows
-      const rows = assetsToExport.map(asset => 
+      const rows = assetsToExport.map((asset: Asset & { images?: string; documents?: string }) => 
         fieldsToExport.map(key => {
           const value = getCellValue(asset, key)
           return value

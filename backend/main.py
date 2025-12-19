@@ -9,7 +9,7 @@ import logging
 from dotenv import load_dotenv
 
 from database import lifespan
-from routers import locations, sites, departments, company_info, categories, subcategories, employees, assets, checkout, checkin, move, reserve, lease, lease_return, dispose, maintenance, dashboard, schedule, auth, audit, inventory
+from routers import locations, sites, departments, company_info, categories, subcategories, employees, assets, checkout, checkin, move, reserve, lease, lease_return, dispose, maintenance, dashboard, schedule, auth, audit, inventory, users, asset_events, forms
 
 # Load environment variables
 load_dotenv()
@@ -87,6 +87,9 @@ app.include_router(lease_return.router)
 app.include_router(dispose.router)
 app.include_router(dashboard.router)
 app.include_router(inventory.router)
+app.include_router(users.router)
+app.include_router(asset_events.router)
+app.include_router(forms.router)
 
 # Health check endpoint
 @app.get("/health")

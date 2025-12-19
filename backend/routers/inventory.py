@@ -7,6 +7,8 @@ import logging
 from decimal import Decimal
 import re
 from datetime import datetime
+from fastapi.responses import StreamingResponse
+import io
 from models.inventory import (
     InventoryItem,
     InventoryItemCreate,
@@ -22,7 +24,13 @@ from models.inventory import (
     RestoreResponse,
     BulkRestoreRequest,
     BulkRestoreResponse,
-    PaginationInfo
+    BulkDeleteItemsRequest,
+    BulkDeleteItemsResponse,
+    PaginationInfo,
+    GenerateCodeResponse,
+    EmptyTrashResponse,
+    CheckItemCodesRequest,
+    CheckItemCodesResponse,
 )
 from auth import verify_auth
 from database import prisma
@@ -47,6 +55,501 @@ def is_uuid(value: str) -> bool:
     """Check if a string is a UUID"""
     uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
     return bool(uuid_pattern.match(value))
+
+
+def get_company_initials(company_name: Optional[str]) -> str:
+    """
+    Extract company initials from company name
+    Handles:
+    - Multiple words: "Shore Agents" -> "SA"
+    - CamelCase/combined words: "ShoreAgents" -> "SA", "ABCCompany" -> "AC"
+    - Single word: "XYZ" -> "XY"
+    """
+    if not company_name or not company_name.strip():
+        return 'SA'  # Default fallback
+    
+    trimmed = company_name.strip()
+    
+    # First, try splitting by spaces (multiple words)
+    words = [w for w in trimmed.split() if w]
+    
+    if len(words) >= 2:
+        # Multiple words: take first letter of first two words
+        first = words[0][0].upper()
+        second = words[1][0].upper()
+        return f"{first}{second}"
+    elif len(words) == 1:
+        word = words[0]
+        
+        # Check for camelCase pattern - handles both "ShoreAgents" and "shoreAgents"
+        # Pattern 1: Uppercase letter followed by lowercase, then uppercase (e.g., "ShoreAgents")
+        match1 = re.match(r'^([A-Z][a-z]+)([A-Z][a-z]*)', word)
+        if match1:
+            first_part = match1.group(1)
+            second_part = match1.group(2)
+            return f"{first_part[0].upper()}{second_part[0].upper()}"
+        
+        # Pattern 2: Lowercase followed by uppercase (e.g., "shoreAgents")
+        match2 = re.match(r'^([a-z]+)([A-Z][a-z]*)', word)
+        if match2:
+            first_part = match2.group(1)
+            second_part = match2.group(2)
+            return f"{first_part[0].upper()}{second_part[0].upper()}"
+        
+        # Check for all caps with word boundaries (e.g., "ABCCOMPANY" -> "AC")
+        if word == word.upper() and len(word) > 2:
+            first = word[0]
+            for i in range(1, len(word)):
+                if word[i].isalpha():
+                    return f"{first}{word[i]}"
+        
+        # No camelCase detected: take first 2 letters
+        return trimmed[:2].upper().ljust(2, 'X')
+    
+    return 'SA'
+
+@router.get("/generate-code", response_model=GenerateCodeResponse)
+async def generate_item_code(auth: dict = Depends(verify_auth)):
+    """Generate a unique item code for a new inventory item"""
+    try:
+        user_id = auth.get("user", {}).get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Get company info to extract initials
+        company_info = await prisma.companyinfo.find_first(
+            order={"createdAt": "desc"}
+        )
+        
+        # Get company initials (e.g., "Shore Agents" -> "SA")
+        company_suffix = get_company_initials(company_info.companyName if company_info else None)
+        
+        # Get all item codes that match the pattern INV-XXX-[SUFFIX]
+        items = await prisma.inventoryitem.find_many(
+            where={
+                "itemCode": {"startswith": "INV-"},
+                "isDeleted": False,
+            },
+            order={"itemCode": "desc"}
+        )
+        
+        # Extract the highest sequential number for this suffix
+        next_number = 1
+        pattern = re.compile(rf'^INV-(\d+)-{company_suffix}$')
+        
+        for item in items:
+            match = pattern.match(item.itemCode)
+            if match:
+                num = int(match.group(1))
+                if num >= next_number:
+                    next_number = num + 1
+        
+        # Format: INV-001-[SUFFIX] (3 digits, zero-padded)
+        next_code = f"INV-{str(next_number).zfill(3)}-{company_suffix}"
+        
+        # Check if the generated code already exists (safety check)
+        exists = await prisma.inventoryitem.find_unique(
+            where={"itemCode": next_code}
+        )
+        
+        if exists:
+            # If exists, try next number
+            next_number += 1
+            next_code = f"INV-{str(next_number).zfill(3)}-{company_suffix}"
+        
+        return GenerateCodeResponse(itemCode=next_code)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating item code: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate item code")
+
+
+@router.post("/check-codes", response_model=CheckItemCodesResponse)
+async def check_item_codes(
+    request: CheckItemCodesRequest = Body(...),
+    auth: dict = Depends(verify_auth)
+):
+    """Check which item codes already exist (including soft-deleted)"""
+    try:
+        if not request.itemCodes or len(request.itemCodes) == 0:
+            return CheckItemCodesResponse(existingCodes=[])
+        
+        # Find all items with matching item codes (including soft-deleted)
+        existing_items = await prisma.inventoryitem.find_many(
+            where={
+                "itemCode": {"in": request.itemCodes}
+            }
+        )
+        
+        existing_codes = [item.itemCode for item in existing_items]
+        
+        return CheckItemCodesResponse(existingCodes=existing_codes)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking item codes: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to check item codes")
+
+
+@router.get("/export")
+async def export_inventory(
+    format: str = Query("excel", description="Export format"),
+    search: Optional[str] = Query(None, description="Search term"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    lowStock: bool = Query(False, description="Filter low stock items only"),
+    includeSummary: bool = Query(False, description="Include summary sheet"),
+    includeByCategory: bool = Query(False, description="Include by category sheet"),
+    includeByStatus: bool = Query(False, description="Include by status sheet"),
+    includeTotalCost: bool = Query(False, description="Include total cost sheet"),
+    includeLowStock: bool = Query(False, description="Include low stock items sheet"),
+    includeItemList: bool = Query(False, description="Include item list sheet"),
+    itemFields: Optional[str] = Query(None, description="Comma-separated item fields to include"),
+    auth: dict = Depends(verify_auth)
+):
+    """Export inventory data to Excel"""
+    try:
+        user_id = auth.get("user", {}).get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Import openpyxl for Excel generation
+        try:
+            from openpyxl import Workbook  # type: ignore
+        except ImportError:
+            raise HTTPException(
+                status_code=500, 
+                detail="Excel export not available - openpyxl not installed"
+            )
+        
+        # Build where clause
+        where_clause = {"isDeleted": False}
+        
+        # Search filter
+        if search:
+            where_clause["OR"] = [
+                {"itemCode": {"contains": search, "mode": "insensitive"}},
+                {"name": {"contains": search, "mode": "insensitive"}},
+                {"description": {"contains": search, "mode": "insensitive"}},
+                {"sku": {"contains": search, "mode": "insensitive"}},
+                {"barcode": {"contains": search, "mode": "insensitive"}},
+            ]
+        
+        # Category filter
+        if category:
+            where_clause["category"] = category
+        
+        # Fetch all items
+        items = await prisma.inventoryitem.find_many(
+            where=where_clause,
+            order={"createdAt": "desc"}
+        )
+        
+        # Filter low stock items if requested
+        filtered_items = items
+        if lowStock:
+            filtered_items = [
+                item for item in items
+                if item.minStockLevel is not None 
+                and float(item.currentStock) <= float(item.minStockLevel)
+            ]
+        
+        # Helper function to format numbers
+        def format_number(value) -> str:
+            if value is None:
+                return ''
+            return f"{float(value):,.2f}"
+        
+        # Calculate summary data
+        total_items = len(filtered_items)
+        total_stock = sum(float(item.currentStock) for item in filtered_items)
+        total_cost = sum(
+            float(item.currentStock) * (float(item.unitCost) if item.unitCost else 0)
+            for item in filtered_items
+        )
+        
+        # Group by category
+        by_category = {}
+        for item in filtered_items:
+            cat = item.category or 'Uncategorized'
+            if cat not in by_category:
+                by_category[cat] = {'count': 0, 'totalStock': 0, 'totalCost': 0}
+            by_category[cat]['count'] += 1
+            by_category[cat]['totalStock'] += float(item.currentStock)
+            cost = float(item.unitCost) if item.unitCost else 0
+            by_category[cat]['totalCost'] += float(item.currentStock) * cost
+        
+        # Group by status
+        by_status = {}
+        for item in filtered_items:
+            stock = float(item.currentStock)
+            min_level = float(item.minStockLevel) if item.minStockLevel else None
+            if stock == 0:
+                status = 'Out of Stock'
+            elif min_level is not None and stock <= min_level:
+                status = 'Low Stock'
+            else:
+                status = 'In Stock'
+            
+            if status not in by_status:
+                by_status[status] = {'count': 0, 'totalStock': 0, 'totalCost': 0}
+            by_status[status]['count'] += 1
+            by_status[status]['totalStock'] += stock
+            cost = float(item.unitCost) if item.unitCost else 0
+            by_status[status]['totalCost'] += stock * cost
+        
+        # Low stock items
+        low_stock_items = [
+            item for item in filtered_items
+            if item.minStockLevel is not None 
+            and float(item.currentStock) <= float(item.minStockLevel)
+        ]
+        
+        # Create workbook
+        wb = Workbook()
+        # Remove default sheet
+        wb.remove(wb.active)
+        
+        # Create Summary sheet
+        if includeSummary:
+            ws = wb.create_sheet("Summary")
+            ws.append(["Metric", "Value"])
+            ws.append(["Total Items", total_items])
+            ws.append(["Total Stock", int(total_stock)])
+            ws.append(["Total Cost", format_number(total_cost)])
+        
+        # Create By Category sheet
+        if includeByCategory and by_category:
+            ws = wb.create_sheet("By Category")
+            ws.append(["Category", "Item Count", "Total Stock", "Total Cost"])
+            for cat, data in by_category.items():
+                ws.append([cat, data['count'], int(data['totalStock']), format_number(data['totalCost'])])
+        
+        # Create By Status sheet
+        if includeByStatus and by_status:
+            ws = wb.create_sheet("By Status")
+            ws.append(["Status", "Item Count", "Total Stock", "Total Cost"])
+            for status, data in by_status.items():
+                ws.append([status, data['count'], int(data['totalStock']), format_number(data['totalCost'])])
+        
+        # Create Total Cost sheet
+        if includeTotalCost:
+            ws = wb.create_sheet("Total Cost")
+            ws.append(["Description", "Amount"])
+            ws.append(["Total Inventory Value", format_number(total_cost)])
+        
+        # Create Low Stock Items sheet
+        if includeLowStock and low_stock_items:
+            ws = wb.create_sheet("Low Stock Items")
+            ws.append(["Item Code", "Name", "Current Stock", "Min Level"])
+            for item in low_stock_items:
+                ws.append([
+                    item.itemCode,
+                    item.name,
+                    int(float(item.currentStock)),
+                    int(float(item.minStockLevel)) if item.minStockLevel else ''
+                ])
+        
+        # Create Item List sheet
+        if includeItemList and itemFields:
+            field_list = [f.strip() for f in itemFields.split(',') if f.strip()]
+            if field_list:
+                field_labels = {
+                    'itemCode': 'Item Code',
+                    'name': 'Name',
+                    'description': 'Description',
+                    'category': 'Category',
+                    'unit': 'Unit',
+                    'currentStock': 'Current Stock',
+                    'minStockLevel': 'Min Stock Level',
+                    'maxStockLevel': 'Max Stock Level',
+                    'unitCost': 'Unit Cost',
+                    'location': 'Location',
+                    'supplier': 'Supplier',
+                    'brand': 'Brand',
+                    'model': 'Model',
+                    'sku': 'SKU',
+                    'barcode': 'Barcode',
+                    'remarks': 'Remarks',
+                }
+                
+                ws = wb.create_sheet("Item List")
+                # Header row
+                headers = [field_labels.get(f, f) for f in field_list]
+                ws.append(headers)
+                
+                # Data rows
+                for item in filtered_items:
+                    row = []
+                    for field in field_list:
+                        if field == 'itemCode':
+                            row.append(item.itemCode)
+                        elif field == 'name':
+                            row.append(item.name)
+                        elif field == 'description':
+                            row.append(item.description or '')
+                        elif field == 'category':
+                            row.append(item.category or '')
+                        elif field == 'unit':
+                            row.append(item.unit or '')
+                        elif field == 'currentStock':
+                            row.append(int(float(item.currentStock)))
+                        elif field == 'minStockLevel':
+                            row.append(int(float(item.minStockLevel)) if item.minStockLevel else '')
+                        elif field == 'maxStockLevel':
+                            row.append(int(float(item.maxStockLevel)) if item.maxStockLevel else '')
+                        elif field == 'unitCost':
+                            row.append(format_number(item.unitCost) if item.unitCost else '')
+                        elif field == 'location':
+                            row.append(item.location or '')
+                        elif field == 'supplier':
+                            row.append(item.supplier or '')
+                        elif field == 'brand':
+                            row.append(item.brand or '')
+                        elif field == 'model':
+                            row.append(item.model or '')
+                        elif field == 'sku':
+                            row.append(item.sku or '')
+                        elif field == 'barcode':
+                            row.append(item.barcode or '')
+                        elif field == 'remarks':
+                            row.append(item.remarks or '')
+                        else:
+                            row.append('')
+                    ws.append(row)
+        
+        # If no sheets were created, add a default empty sheet
+        if len(wb.sheetnames) == 0:
+            ws = wb.create_sheet("Inventory")
+            ws.append(["No data selected for export"])
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        filename = f"inventory-export-{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting inventory: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to export inventory")
+
+
+@router.delete("/trash/empty", response_model=EmptyTrashResponse)
+async def empty_inventory_trash(auth: dict = Depends(verify_auth)):
+    """Permanently delete all soft-deleted inventory items"""
+    try:
+        user_id = auth.get("user", {}).get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    
+        
+        # Find all soft-deleted items
+        deleted_items = await prisma.inventoryitem.find_many(
+            where={"isDeleted": True}
+        )
+        
+        if len(deleted_items) == 0:
+            return EmptyTrashResponse(
+                success=True,
+                message="Trash is already empty",
+                deletedCount=0
+            )
+        
+        # Get IDs of deleted items
+        deleted_ids = [item.id for item in deleted_items]
+        
+        # Delete related transactions first (to avoid foreign key constraints)
+        await prisma.inventorytransaction.delete_many(
+            where={"inventoryItemId": {"in": deleted_ids}}
+        )
+        
+        # Permanently delete all soft-deleted items
+        result = await prisma.inventoryitem.delete_many(
+            where={"isDeleted": True}
+        )
+        
+        return EmptyTrashResponse(
+            success=True,
+            message=f"Permanently deleted {result} item(s)",
+            deletedCount=result
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error emptying inventory trash: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to empty trash")
+
+
+@router.delete("/bulk-delete", response_model=BulkDeleteItemsResponse)
+async def bulk_delete_inventory_items(
+    request: BulkDeleteItemsRequest = Body(...),
+    auth: dict = Depends(verify_auth)
+):
+    """Bulk delete multiple inventory items (permanently or soft delete)"""
+    try:
+        user_id = auth.get("user", {}).get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        if not request.ids or len(request.ids) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid request. Expected an array of item IDs."
+            )
+        
+        if request.permanent:
+            # Delete related transactions first (to avoid foreign key constraints)
+            await prisma.inventorytransaction.delete_many(
+                where={"inventoryItemId": {"in": request.ids}}
+            )
+            
+            # Permanently delete items
+            result = await prisma.inventoryitem.delete_many(
+                where={"id": {"in": request.ids}}
+            )
+            
+            return BulkDeleteItemsResponse(
+                success=True,
+                deletedCount=result,
+                message=f"Permanently deleted {result} item(s)"
+            )
+        else:
+            # Soft delete items
+            result = await prisma.inventoryitem.update_many(
+                where={"id": {"in": request.ids}},
+                data={
+                    "isDeleted": True,
+                    "deletedAt": datetime.now()
+                }
+            )
+            
+            return BulkDeleteItemsResponse(
+                success=True,
+                deletedCount=result,
+                message=f"Archived {result} item(s). They will be permanently deleted after 30 days."
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error bulk deleting inventory items: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete inventory items")
+
 
 @router.get("", response_model=InventoryItemsResponse)
 async def get_inventory_items(

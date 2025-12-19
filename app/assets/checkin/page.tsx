@@ -211,10 +211,25 @@ function CheckinPageContent() {
     }
   }, [])
 
-  // Asset lookup by ID - optimized to fetch only 10 items
+  // Asset lookup by ID - optimized to fetch only 10 items using FastAPI
   const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
     try {
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch assets')
+      }
       const data = await response.json()
       const assets = data.assets as Asset[]
       

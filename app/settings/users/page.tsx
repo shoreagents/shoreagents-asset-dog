@@ -139,7 +139,102 @@ interface UserPermissions {
   canManageInventory: boolean
 }
 
+// API helper functions with FastAPI support
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+const getAuthHeaders = async (): Promise<HeadersInit> => {
+  try {
+    const { createClient } = await import('@/lib/supabase-client')
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      return { 'Authorization': `Bearer ${session.access_token}` }
+    }
+  } catch {
+    // Ignore
+  }
+  return {}
+}
+
+async function createUser(data: { email: string; password?: string; name?: string | null; role: string; permissions?: UserPermissions }) {
+  const baseUrl = getApiBaseUrl()
+  const authHeaders = await getAuthHeaders()
+  const response = await fetch(`${baseUrl}/api/users`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Failed to create user')
+  }
+  return response.json()
+}
+
+async function updateUser(id: string, data: { role: string; permissions?: UserPermissions; isActive?: boolean; isApproved?: boolean; name?: string | null }) {
+  const baseUrl = getApiBaseUrl()
+  const authHeaders = await getAuthHeaders()
+  const response = await fetch(`${baseUrl}/api/users/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Failed to update user')
+  }
+  return response.json()
+}
+
+async function deleteUser(id: string) {
+  const baseUrl = getApiBaseUrl()
+  const authHeaders = await getAuthHeaders()
+  const response = await fetch(`${baseUrl}/api/users/${id}`, {
+    method: 'DELETE',
+    headers: {
+      ...authHeaders,
+    },
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Failed to delete user')
+  }
+  return response.json()
+}
+
+async function sendPasswordReset(userId: string) {
+  const baseUrl = getApiBaseUrl()
+  const authHeaders = await getAuthHeaders()
+  const response = await fetch(`${baseUrl}/api/users/${userId}/send-password-reset`, {
+    method: 'POST',
+    headers: {
+      ...authHeaders,
+    },
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Failed to send password reset email')
+  }
+  return response.json()
+}
+
 async function fetchUsers(search?: string, searchType: string = 'unified', page: number = 1, pageSize: number = 50): Promise<{ users: AssetUser[], pagination: PaginationInfo }> {
+  const baseUrl = getApiBaseUrl()
+  const authHeaders = await getAuthHeaders()
   const params = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
@@ -149,53 +244,18 @@ async function fetchUsers(search?: string, searchType: string = 'unified', page:
     params.append('searchType', searchType)
   }
   
-  const response = await fetch(`/api/users?${params.toString()}`)
+  const response = await fetch(`${baseUrl}/api/users?${params.toString()}`, {
+    headers: {
+      ...authHeaders,
+    },
+    credentials: 'include',
+  })
   if (!response.ok) {
-    throw new Error('Failed to fetch users')
+    const error = await response.json()
+    throw new Error(error.detail || error.error || 'Failed to fetch users')
   }
   const data = await response.json()
   return { users: data.users, pagination: data.pagination }
-}
-
-async function createUser(data: { email: string; password?: string; name?: string | null; role: string; permissions?: UserPermissions }) {
-  const response = await fetch('/api/users', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to create user')
-  }
-  return response.json()
-}
-
-async function updateUser(id: string, data: { role: string; permissions?: UserPermissions; isActive?: boolean; isApproved?: boolean; name?: string | null }) {
-  const response = await fetch(`/api/users/${id}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to update user')
-  }
-  return response.json()
-}
-
-async function deleteUser(id: string) {
-  const response = await fetch(`/api/users/${id}`, {
-    method: 'DELETE',
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to delete user')
-  }
-  return response.json()
 }
 
 const formatDate = (dateString: string | null) => {
@@ -434,7 +494,12 @@ function UsersPageContent() {
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const response = await fetch('/api/auth/me')
+        const baseUrl = getApiBaseUrl()
+        const authHeaders = await getAuthHeaders()
+        const response = await fetch(`${baseUrl}/api/auth/me`, {
+          headers: { ...authHeaders },
+          credentials: 'include',
+        })
         if (response.ok) {
           const data = await response.json()
           setCurrentUserId(data.user?.id || null)
@@ -756,16 +821,7 @@ function UsersPageContent() {
   })
 
   const sendPasswordResetMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const response = await fetch(`/api/users/${userId}/send-password-reset`, {
-        method: 'POST',
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to send password reset email')
-      }
-      return response.json()
-    },
+    mutationFn: sendPasswordReset,
     onSuccess: (data) => {
       toast.success(data.message || 'Password reset email sent successfully')
     },

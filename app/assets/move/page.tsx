@@ -310,11 +310,26 @@ function MoveAssetPageContent() {
     }
   }, [])
 
-  // Asset lookup by ID - always fetch fresh data
+  // Asset lookup by ID - always fetch fresh data using FastAPI
   const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
     try {
       // Use a cache-busting timestamp to ensure fresh data
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&_t=${Date.now()}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10&_t=${Date.now()}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch assets')
+      }
       const data = await response.json()
       const assets = data.assets as Asset[]
       

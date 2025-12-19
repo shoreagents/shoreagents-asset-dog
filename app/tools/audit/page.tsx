@@ -237,7 +237,7 @@ function AuditPageContent() {
       const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
         ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
         : ''
-      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10000`
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10`
       
       // Get auth token
       const { createClient } = await import('@/lib/supabase-client')
@@ -297,7 +297,7 @@ function AuditPageContent() {
       const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
         ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
         : ''
-      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=100`
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`
       
       // Get auth token
       const { createClient } = await import('@/lib/supabase-client')

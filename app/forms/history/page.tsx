@@ -3,7 +3,8 @@
 import { useState, useCallback, useEffect, useRef, useTransition, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { FileText, ClipboardList, Search, X, RefreshCw, ArrowLeft, ArrowRight, Eye, MoreHorizontal, Trash2 } from "lucide-react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
+import { useFormHistory, useDeleteForm, type ReturnForm, type AccountabilityForm, type PaginationInfo, type FormHistoryCounts } from '@/hooks/use-forms'
 import { usePermissions } from "@/hooks/use-permissions"
 import { Spinner } from "@/components/ui/shadcn-io/spinner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -41,79 +42,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { DeleteConfirmationDialog } from "@/components/dialogs/delete-confirmation-dialog"
 import { toast } from "sonner"
-import { useMutation } from "@tanstack/react-query"
 
-interface ReturnForm {
-  id: string
-  dateReturned: string
-  department: string | null
-  ctrlNo: string | null
-  returnType: string
-  formData: unknown | null
-  employeeUser: {
-    id: string
-    name: string
-    email: string
-    department: string | null
-  }
-}
-
-interface AccountabilityForm {
-  id: string
-  dateIssued: string
-  department: string | null
-  accountabilityFormNo: string | null
-  formData: unknown | null
-  employeeUser: {
-    id: string
-    name: string
-    email: string
-    department: string | null
-  }
-}
-
-interface PaginationInfo {
-  page: number
-  pageSize: number
-  total: number
-  totalPages: number
-  hasNextPage: boolean
-  hasPreviousPage: boolean
-}
-
-interface FormCounts {
-  returnForms: number
-  accountabilityForms: number
-}
-
-async function fetchForms(
-  formType: "accountability" | "return",
-  search?: string,
-  searchType: string = "unified",
-  page: number = 1,
-  pageSize: number = 50
-): Promise<{
-  returnForms?: ReturnForm[]
-  accountabilityForms?: AccountabilityForm[]
-  pagination: PaginationInfo
-  counts?: FormCounts
-}> {
-  const params = new URLSearchParams({
-    formType,
-    page: page.toString(),
-    pageSize: pageSize.toString(),
-  })
-  if (search) {
-    params.append("search", search)
-    params.append("searchType", searchType)
-  }
-
-  const response = await fetch(`/api/forms/history?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error("Failed to fetch form history")
-  }
-  return response.json()
-}
+// Note: ReturnForm, AccountabilityForm, PaginationInfo, FormCounts moved to hooks/use-forms.ts
 
 function FormsHistoryPageContent() {
   const router = useRouter()
@@ -181,7 +111,8 @@ function FormsHistoryPageContent() {
       if (updates.search !== undefined) {
         if (updates.search === "") {
           params.delete("search")
-          params.delete("searchType")
+          // Preserve searchType when clearing search - don't delete it
+          // The user's selected search type should persist even after clearing
         } else {
           params.set("search", updates.search)
         }
@@ -209,11 +140,12 @@ function FormsHistoryPageContent() {
     [searchParams, router, startTransition]
   )
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["forms-history", activeTab, searchQuery, searchType, page, pageSize],
-    queryFn: () => fetchForms(activeTab, searchQuery || undefined, searchType, page, pageSize),
-    placeholderData: (previousData) => previousData,
-    enabled: (activeTab === "return" && canViewReturnForms) || (activeTab === "accountability" && canViewAccountabilityForms),
+  const { data, isLoading, isFetching } = useFormHistory({
+    formType: activeTab,
+    search: searchQuery || undefined,
+    searchType,
+    page,
+    pageSize,
   })
 
   // Reset manual refresh flag after successful fetch
@@ -289,29 +221,21 @@ function FormsHistoryPageContent() {
     lastSearchQueryRef.current = searchQuery
   }, [searchQuery])
 
-  // Delete form mutation
-  const deleteFormMutation = useMutation({
-    mutationFn: async ({ id, type }: { id: string; type: "accountability" | "return" }) => {
-      const response = await fetch(`/api/forms/history/${id}?type=${type}`, {
-        method: "DELETE",
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to delete form")
-      }
-      return response.json()
-    },
-    onMutate: async ({ id, type }) => {
+  // Delete form mutation with optimistic updates
+  const deleteFormMutation = useDeleteForm()
+  
+  // Handle delete with optimistic updates
+  const handleDeleteWithOptimistic = async ({ id, type }: { id: string; type: "accountability" | "return" }) => {
       // Cancel any outgoing refetches to avoid overwriting optimistic update
-      await queryClient.cancelQueries({ queryKey: ["forms-history", activeTab, searchQuery, searchType, page, pageSize] })
+    await queryClient.cancelQueries({ queryKey: ["formHistory", { formType: activeTab, search: searchQuery, searchType, page, pageSize }] })
 
       // Snapshot the previous value
       const previousData = queryClient.getQueryData<{
-        returnForms?: ReturnForm[]
-        accountabilityForms?: AccountabilityForm[]
+      returnForms?: ReturnForm[] | null
+      accountabilityForms?: AccountabilityForm[] | null
         pagination: PaginationInfo
-        counts?: FormCounts
-      }>(["forms-history", activeTab, searchQuery, searchType, page, pageSize])
+      counts: FormHistoryCounts
+    }>(["formHistory", { formType: activeTab, search: searchQuery, searchType, page, pageSize }])
 
       // Optimistically update the cache
       if (previousData) {
@@ -322,56 +246,48 @@ function FormsHistoryPageContent() {
             ...updatedData.pagination,
             total: updatedData.pagination.total - 1,
           }
-          if (updatedData.counts) {
             updatedData.counts.returnForms = Math.max(0, updatedData.counts.returnForms - 1)
-          }
         } else if (type === "accountability" && updatedData.accountabilityForms) {
           updatedData.accountabilityForms = updatedData.accountabilityForms.filter(form => form.id !== id)
           updatedData.pagination = {
             ...updatedData.pagination,
             total: updatedData.pagination.total - 1,
           }
-          if (updatedData.counts) {
             updatedData.counts.accountabilityForms = Math.max(0, updatedData.counts.accountabilityForms - 1)
-          }
         }
 
         queryClient.setQueryData(
-          ["forms-history", activeTab, searchQuery, searchType, page, pageSize],
+        ["formHistory", { formType: activeTab, search: searchQuery, searchType, page, pageSize }],
           updatedData
         )
       }
 
-      return { previousData }
-    },
-    onSuccess: async () => {
+    try {
+      await deleteFormMutation.mutateAsync({ formId: id, formType: type })
       // Don't immediately refetch - let the optimistic update persist
-      // Only invalidate to mark queries as stale for background refetch
-      // This prevents the "flash" of old data before server confirms deletion
       queryClient.invalidateQueries({ 
-        queryKey: ["forms-history"],
+        queryKey: ["formHistory"],
         refetchType: 'none' // Don't refetch immediately, let optimistic update stay
       })
       toast.success("Form deleted successfully")
       setDeleteDialogOpen(false)
       setFormToDelete(null)
-    },
-    onError: (error: Error, variables, context) => {
+    } catch (error) {
       // Rollback optimistic update on error
-      if (context?.previousData) {
+      if (previousData) {
         queryClient.setQueryData(
-          ["forms-history", activeTab, searchQuery, searchType, page, pageSize],
-          context.previousData
+          ["formHistory", { formType: activeTab, search: searchQuery, searchType, page, pageSize }],
+          previousData
         )
       }
-      toast.error(error.message || "Failed to delete form")
-    },
-  })
+      toast.error(error instanceof Error ? error.message : "Failed to delete form")
+    }
+  }
 
   const handleDeleteClick = (form: ReturnForm | AccountabilityForm, type: "accountability" | "return") => {
     const formName = type === "accountability"
-      ? (form as AccountabilityForm).accountabilityFormNo || `Accountability Form - ${(form as AccountabilityForm).employeeUser.name}`
-      : (form as ReturnForm).ctrlNo || `Return Form - ${(form as ReturnForm).employeeUser.name}`
+      ? (form as AccountabilityForm).accountabilityFormNo || `Accountability Form - ${(form as AccountabilityForm).employeeUser?.name || 'Unknown'}`
+      : (form as ReturnForm).ctrlNo || `Return Form - ${(form as ReturnForm).employeeUser?.name || 'Unknown'}`
     
     setFormToDelete({ id: form.id, type, name: formName })
     setDeleteDialogOpen(true)
@@ -379,7 +295,7 @@ function FormsHistoryPageContent() {
 
   const handleDeleteConfirm = () => {
     if (formToDelete) {
-      deleteFormMutation.mutate({ id: formToDelete.id, type: formToDelete.type })
+      handleDeleteWithOptimistic({ id: formToDelete.id, type: formToDelete.type })
     }
   }
 
@@ -667,10 +583,10 @@ function FormsHistoryPageContent() {
                                 <TableCell className="text-sm">
                                   <div className="flex flex-col">
                                     <span className="font-medium">
-                                      {(form as AccountabilityForm).employeeUser.name}
+                                      {(form as AccountabilityForm).employeeUser?.name || 'Unknown'}
                                     </span>
                                     <span className="text-muted-foreground text-xs">
-                                      {(form as AccountabilityForm).employeeUser.email}
+                                      {(form as AccountabilityForm).employeeUser?.email || '-'}
                                     </span>
                                   </div>
                                 </TableCell>
@@ -683,7 +599,7 @@ function FormsHistoryPageContent() {
                                 </TableCell>
                                 <TableCell className="text-sm text-muted-foreground">
                                   {(form as AccountabilityForm).department ||
-                                    (form as AccountabilityForm).employeeUser.department ||
+                                    (form as AccountabilityForm).employeeUser?.department ||
                                     "-"}
                                 </TableCell>
                                 <TableCell className="text-sm">
@@ -731,10 +647,10 @@ function FormsHistoryPageContent() {
                                 <TableCell className="text-sm">
                                   <div className="flex flex-col">
                                     <span className="font-medium">
-                                      {(form as ReturnForm).employeeUser.name}
+                                      {(form as ReturnForm).employeeUser?.name || 'Unknown'}
                                     </span>
                                     <span className="text-muted-foreground text-xs">
-                                      {(form as ReturnForm).employeeUser.email}
+                                      {(form as ReturnForm).employeeUser?.email || '-'}
                                     </span>
                                   </div>
                                 </TableCell>
@@ -747,7 +663,7 @@ function FormsHistoryPageContent() {
                                 </TableCell>
                                 <TableCell className="text-sm text-muted-foreground">
                                   {(form as ReturnForm).department ||
-                                    (form as ReturnForm).employeeUser.department ||
+                                    (form as ReturnForm).employeeUser?.department ||
                                     "-"}
                                 </TableCell>
                                 <TableCell className="text-sm">
@@ -903,7 +819,7 @@ function FormsHistoryPageContent() {
         title="Delete Form"
         description={formToDelete ? `Are you sure you want to delete "${formToDelete.name}"? This action cannot be undone.` : undefined}
         itemName={formToDelete?.name}
-        isLoading={deleteFormMutation.isPending}
+        isLoading={deleteFormMutation.isPending || false}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         loadingLabel="Deleting..."

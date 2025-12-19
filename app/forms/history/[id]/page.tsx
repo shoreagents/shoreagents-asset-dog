@@ -3,14 +3,14 @@
 import { use } from "react"
 import { useSearchParams } from "next/navigation"
 import { ArrowLeft, FileText } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
+import { useFormById } from '@/hooks/use-forms'
 import { useCompanyInfo } from '@/hooks/use-company-info'
+import { usePermissions } from "@/hooks/use-permissions"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/shadcn-io/spinner"
 import { Card, CardContent } from "@/components/ui/card"
-import { usePermissions } from "@/hooks/use-permissions"
 
 interface FormData {
   returnDate?: string
@@ -140,13 +140,7 @@ const CABLES_AND_EXTENSIONS = [
   'HDMI MALE TO DVI CABLE',
 ]
 
-async function fetchForm(id: string, type: string) {
-  const response = await fetch(`/api/forms/history/${id}?type=${type}`)
-  if (!response.ok) {
-    throw new Error("Failed to fetch form")
-  }
-  return response.json()
-}
+// Note: fetchForm moved to useFormById hook
 
 export default function FormDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
@@ -156,12 +150,12 @@ export default function FormDetailsPage({ params }: { params: Promise<{ id: stri
   
   const canViewReturnForms = hasPermission("canViewReturnForms")
   const canViewAccountabilityForms = hasPermission("canViewAccountabilityForms")
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["form-details", resolvedParams.id, formType],
-    queryFn: () => fetchForm(resolvedParams.id, formType),
-    enabled: (formType === "return" && canViewReturnForms) || (formType === "accountability" && canViewAccountabilityForms),
-  })
+  
+  const { data, isLoading, error } = useFormById(
+    resolvedParams.id,
+    formType,
+    (formType === "return" && canViewReturnForms) || (formType === "accountability" && canViewAccountabilityForms)
+  )
 
 
   if (isLoading) {
@@ -191,7 +185,9 @@ export default function FormDetailsPage({ params }: { params: Promise<{ id: stri
     )
   }
 
-  const form = formType === "return" ? data.returnForm : data.accountabilityForm
+  const form = formType === "return" 
+    ? ('returnForm' in data ? data.returnForm : null)
+    : ('accountabilityForm' in data ? data.accountabilityForm : null)
   const formData = form?.formData
 
   if (!form || !formData) {
@@ -222,7 +218,7 @@ export default function FormDetailsPage({ params }: { params: Promise<{ id: stri
           {formType === "return" ? "Return Form Details" : "Accountability Form Details"}
         </h1>
         <p className="text-sm md:text-base text-muted-foreground">
-          View form details for {form.employeeUser.name}
+          View form details for {form.employeeUser?.name || 'Unknown'}
         </p>
       </div>
 
@@ -342,13 +338,13 @@ function ReturnFormDetails({ form, formData }: { form: ReturnForm; formData: For
                 <div>
                   <p className="text-xs font-medium mb-0.5 text-foreground print:text-black">NAME OF THE EMPLOYEE:</p>
                   <div className="border-b border-border dark:border-gray-600 print:border-black pb-0.5 text-xs text-foreground print:text-black min-h-[16px]">
-                    {form.employeeUser.name}
+                    {form.employeeUser?.name || 'Unknown'}
                   </div>
                 </div>
                 <div>
                   <p className="text-xs font-medium mb-0.5 text-foreground print:text-black">CLIENT / DEPARTMENT:</p>
                   <div className="border-b border-border dark:border-gray-600 print:border-black pb-0.5 text-xs text-foreground print:text-black min-h-[16px]">
-                    {form.department || form.employeeUser.department || ''}
+                    {form.department || form.employeeUser?.department || ''}
                   </div>
                 </div>
                 <div>
@@ -715,13 +711,13 @@ function ReturnFormDetails({ form, formData }: { form: ReturnForm; formData: For
                 <div>
                   <p className="text-xs font-medium mb-0.5 text-foreground print:text-black">NAME OF THE EMPLOYEE:</p>
                   <div className="border-b border-border dark:border-gray-600 print:border-black pb-0.5 text-xs text-foreground print:text-black min-h-[16px]">
-                    {form.employeeUser.name}
+                    {form.employeeUser?.name || 'Unknown'}
                   </div>
                 </div>
                 <div>
                   <p className="text-xs font-medium mb-0.5 text-foreground print:text-black">CLIENT / DEPARTMENT:</p>
                   <div className="border-b border-border dark:border-gray-600 print:border-black pb-0.5 text-xs text-foreground print:text-black min-h-[16px]">
-                    {form.department || form.employeeUser.department || ''}
+                    {form.department || form.employeeUser?.department || ''}
                   </div>
                 </div>
                 <div>
@@ -1120,13 +1116,13 @@ function AccountabilityFormDetails({ form, formData }: { form: AccountabilityFor
                   <div>
                     <p className="text-xs font-medium mb-0.5 text-foreground print:text-black">NAME OF THE EMPLOYEE:</p>
                     <div className="border-b border-border dark:border-gray-600 print:border-black pb-0.5 text-xs text-foreground print:text-black min-h-[16px]">
-                      {form.employeeUser.name}
+                      {form.employeeUser?.name || 'Unknown'}
                     </div>
                   </div>
                   <div>
                     <p className="text-xs font-medium mb-0.5 text-foreground print:text-black">CLIENT/DEPARTMENT:</p>
                     <div className="border-b border-border dark:border-gray-600 print:border-black pb-0.5 text-xs text-foreground print:text-black min-h-[16px]">
-                      {formData.clientDepartment || form.department || form.employeeUser.department || ''}
+                      {formData.clientDepartment || form.department || form.employeeUser?.department || ''}
                     </div>
                   </div>
                   <div>

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react'
-import { useQueryClient, useMutation } from '@tanstack/react-query'
-import { useRestoreInventoryItem, useDeleteInventoryItem, useInventoryItems, useBulkRestoreInventoryItems } from '@/hooks/use-inventory'
+import { useQueryClient } from '@tanstack/react-query'
+import { useRestoreInventoryItem, useDeleteInventoryItem, useInventoryItems, useBulkRestoreInventoryItems, useEmptyInventoryTrash, useBulkDeleteInventoryItems } from '@/hooks/use-inventory'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -44,6 +44,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { useMobileDock } from '@/components/mobile-dock-provider'
 import { useIsMobile } from '@/hooks/use-mobile'
 
@@ -144,7 +149,9 @@ function InventoryTrashPageContent() {
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
   const [sorting, setSorting] = useState<SortingState>([])
   const [isManualRefresh, setIsManualRefresh] = useState(false)
-  const [isEmptyTrashDialogOpen, setIsEmptyTrashDialogOpen] = useState(false)
+  const [isEmptyTrashPopoverOpen, setIsEmptyTrashPopoverOpen] = useState(false)
+  const [isEmptyingTrash, setIsEmptyingTrash] = useState(false)
+  const [emptyProgress, setEmptyProgress] = useState({ current: 0, total: 0 })
   const isInitialMount = useRef(true)
 
   // Update URL parameters
@@ -263,28 +270,43 @@ function InventoryTrashPageContent() {
   // Bulk restore mutation
   const bulkRestoreMutation = useBulkRestoreInventoryItems()
 
-  // Empty trash mutation
-  const emptyTrashMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch('/api/inventory/trash/empty', {
-        method: 'DELETE',
+  // Empty trash mutation (uses FastAPI backend)
+  const emptyTrashMutationHook = useEmptyInventoryTrash()
+  
+  // Handle empty trash with progress
+  const handleEmptyTrash = async () => {
+    const totalItems = pagination?.total || 0
+    setIsEmptyTrashPopoverOpen(false)
+    setIsEmptyingTrash(true)
+    setEmptyProgress({ current: 0, total: totalItems })
+
+    // Simulate progress during API call
+    const progressInterval = setInterval(() => {
+      setEmptyProgress(prev => {
+        if (prev.current < prev.total * 0.9) {
+          return { ...prev, current: Math.min(prev.current + Math.max(1, Math.floor(prev.total / 20)), Math.floor(prev.total * 0.9)) }
+        }
+        return prev
       })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to empty trash')
-      }
-      return response.json()
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['deletedInventoryItems'] })
-      toast.success(data.message || 'Trash emptied successfully')
-      setIsEmptyTrashDialogOpen(false)
-      setRowSelection({})
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to empty trash')
-    },
-  })
+    }, 100)
+
+    emptyTrashMutationHook.mutate(undefined, {
+      onSuccess: (data) => {
+        clearInterval(progressInterval)
+        setEmptyProgress({ current: totalItems, total: totalItems })
+        setTimeout(() => {
+          toast.success(data.message || 'Trash emptied successfully')
+          setIsEmptyingTrash(false)
+          setRowSelection({})
+        }, 300)
+      },
+      onError: (error: Error) => {
+        clearInterval(progressInterval)
+        toast.error(error.message || 'Failed to empty trash')
+        setIsEmptyingTrash(false)
+      },
+    })
+  }
 
   const handleRestore = useCallback((item: DeletedInventoryItem) => {
     if (!canManageTrash) {
@@ -569,40 +591,40 @@ function InventoryTrashPageContent() {
       cell: ({ row }) => {
         const isDisabled = hasSelectedItems
         return (
-          <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  className="h-8 w-8 p-0 rounded-full"
+        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="ghost" 
+                className="h-8 w-8 p-0 rounded-full"
                   disabled={isDisabled}
-                >
-                  <span className="sr-only">Open menu</span>
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => handleRestore(row.original)}
-                  className="cursor-pointer"
+              >
+                <span className="sr-only">Open menu</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => handleRestore(row.original)}
+                className="cursor-pointer"
                   disabled={isDisabled}
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Restore
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleDelete(row.original)}
-                  className="cursor-pointer text-destructive"
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Restore
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDelete(row.original)}
+                className="cursor-pointer text-destructive"
                   disabled={isDisabled}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Permanently
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Permanently
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         )
-      },
+    },
     },
   ], [handleRestore, handleDelete, hasSelectedItems])
 
@@ -644,18 +666,36 @@ function InventoryTrashPageContent() {
     return selected
   })()
 
-  // Bulk restore handler
+  // Bulk restore handler (with simulated progress during single API call)
   const handleBulkRestore = async () => {
     if (selectedItems.size === 0) return
     setIsBulkRestoring(true)
     const selectedArray = Array.from(selectedItems)
+    setBulkProgress({ current: 0, total: selectedArray.length })
+
+    // Simulate progress during API call
+    const progressInterval = setInterval(() => {
+      setBulkProgress(prev => {
+        if (prev.current < prev.total * 0.9) {
+          // Gradually increase to 90% while waiting for response
+          return { ...prev, current: Math.min(prev.current + Math.max(1, Math.floor(prev.total / 20)), Math.floor(prev.total * 0.9)) }
+        }
+        return prev
+      })
+    }, 100)
 
     try {
-      await bulkRestoreMutation.mutateAsync(selectedArray)
-      toast.success(`Successfully restored ${selectedArray.length} item(s)`)
+      const result = await bulkRestoreMutation.mutateAsync(selectedArray)
+      
+      clearInterval(progressInterval)
+      setBulkProgress({ current: selectedArray.length, total: selectedArray.length })
+      
+      toast.success(result.message || `Successfully restored ${selectedArray.length} item(s)`)
       setRowSelection({})
       setIsBulkRestoreDialogOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
     } catch (error) {
+      clearInterval(progressInterval)
       console.error('Bulk restore error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to restore items')
     } finally {
@@ -663,34 +703,45 @@ function InventoryTrashPageContent() {
     }
   }
 
-  // Bulk delete handler
+  // Bulk delete mutation (uses FastAPI backend)
+  const bulkDeleteMutation = useBulkDeleteInventoryItems()
+  
+  // Bulk delete handler (with simulated progress during single API call)
   const handleBulkDelete = async () => {
     if (selectedItems.size === 0) return
     setIsBulkDeleting(true)
     const selectedArray = Array.from(selectedItems)
     setBulkProgress({ current: 0, total: selectedArray.length })
 
-    try {
-      for (let i = 0; i < selectedArray.length; i++) {
-        const itemId = selectedArray[i]
-        const response = await fetch(`/api/inventory/${itemId}?permanent=true`, {
-          method: 'DELETE',
-        })
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || `Failed to permanently delete inventory item ${itemId}`)
+    // Simulate progress during API call
+    const progressInterval = setInterval(() => {
+      setBulkProgress(prev => {
+        if (prev.current < prev.total * 0.9) {
+          // Gradually increase to 90% while waiting for response
+          return { ...prev, current: Math.min(prev.current + Math.max(1, Math.floor(prev.total / 20)), Math.floor(prev.total * 0.9)) }
         }
-        setBulkProgress({ current: i + 1, total: selectedArray.length })
-      }
+        return prev
+      })
+    }, 100)
 
-      toast.success(`Successfully permanently deleted ${selectedArray.length} item(s)`)
+    try {
+      const result = await bulkDeleteMutation.mutateAsync({ 
+        ids: selectedArray, 
+        permanent: true 
+      })
+      
+      clearInterval(progressInterval)
+      setBulkProgress({ current: selectedArray.length, total: selectedArray.length })
+      
+      toast.success(result.message || `Successfully permanently deleted ${result.deletedCount} item(s)`)
       setRowSelection({})
       setIsBulkDeleteDialogOpen(false)
-      setIsBulkDeleting(false)
-      queryClient.invalidateQueries({ queryKey: ['deletedInventoryItems'] })
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
     } catch (error) {
+      clearInterval(progressInterval)
       console.error('Bulk delete error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to permanently delete items')
+    } finally {
       setIsBulkDeleting(false)
     }
   }
@@ -761,7 +812,7 @@ function InventoryTrashPageContent() {
                 if (selectedItems.size > 0) {
                   setIsBulkDeleteDialogOpen(true)
                 } else {
-                  setIsEmptyTrashDialogOpen(true)
+                  setIsEmptyTrashPopoverOpen(true)
                 }
               }}
               variant="outline"
@@ -781,7 +832,7 @@ function InventoryTrashPageContent() {
     return () => {
       setDockContent(null)
     }
-  }, [isMobile, setDockContent, selectedItems.size, canManageTrash, setIsBulkRestoreDialogOpen, setIsBulkDeleteDialogOpen, setIsEmptyTrashDialogOpen, deletedItems, pagination?.total, setRowSelection])
+  }, [isMobile, setDockContent, selectedItems.size, canManageTrash, setIsBulkRestoreDialogOpen, setIsBulkDeleteDialogOpen, setIsEmptyTrashPopoverOpen, deletedItems, pagination?.total, setRowSelection])
 
   return (
     <motion.div 
@@ -916,22 +967,47 @@ function InventoryTrashPageContent() {
                   </Button>
                 </>
               )}
-              {selectedItems.size === 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (!canManageTrash) {
-                      toast.error('You do not have permission to empty trash')
-                      return
-                    }
-                    setIsEmptyTrashDialogOpen(true)
-                  }}
-                  disabled={!pagination?.total || pagination.total === 0}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Empty
-                </Button>
+              {selectedItems.size === 0 && !isMobile && (
+                <Popover open={isEmptyTrashPopoverOpen} onOpenChange={setIsEmptyTrashPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (!canManageTrash) {
+                          toast.error('You do not have permission to empty trash')
+                          return
+                        }
+                      }}
+                      disabled={!pagination?.total || pagination.total === 0 || !canManageTrash}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Empty
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium leading-none flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
+                          Empty Trash
+                        </h4>
+                        <p className="text-sm text-muted-foreground">
+                          Permanently delete all {pagination?.total || 0} item(s)? This cannot be undone.
+                        </p>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleEmptyTrash}
+                        >
+                          Empty Trash
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
               <Button
                 variant="outline"
@@ -1128,18 +1204,53 @@ function InventoryTrashPageContent() {
         variant="delete"
       />
 
-      {/* Empty Trash Confirmation Dialog */}
-      <DeleteConfirmationDialog
-        open={isEmptyTrashDialogOpen}
-        onOpenChange={setIsEmptyTrashDialogOpen}
-        onConfirm={() => emptyTrashMutation.mutate()}
-        itemName={`all ${pagination?.total || 0} trash item(s)`}
-        isLoading={emptyTrashMutation.isPending}
-        title="Empty Trash"
-        description={`Are you sure you want to permanently delete all ${pagination?.total || 0} item(s) in trash? This action cannot be undone.`}
-        confirmLabel="Empty Trash"
-        loadingLabel="Emptying trash..."
+      {/* Empty Trash Loading Dialog */}
+      <BulkDeleteDialog
+        open={isEmptyingTrash}
+        onOpenChange={() => {}}
+        onConfirm={() => {}}
+        itemCount={emptyProgress.total}
+        itemName="Item"
+        isDeleting={true}
+        progress={{ current: emptyProgress.current, total: emptyProgress.total }}
+        title={undefined}
+        description={`Permanently deleting all items in trash...`}
+        confirmLabel=""
+        loadingLabel="Emptying trash, please wait..."
+        progressTitle={`Emptying Trash... ${emptyProgress.current}/${emptyProgress.total}`}
+        variant="delete"
       />
+
+      {/* Mobile Empty Trash Popover */}
+      {isMobile && (
+        <Popover open={isEmptyTrashPopoverOpen} onOpenChange={setIsEmptyTrashPopoverOpen}>
+          <PopoverTrigger asChild>
+            <span className="fixed bottom-16 right-4 w-0 h-0" />
+          </PopoverTrigger>
+          <PopoverContent className="w-80" side="top" align="end">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <h4 className="font-medium leading-none flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  Empty Trash
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Permanently delete all {pagination?.total || 0} item(s)? This cannot be undone.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleEmptyTrash}
+                >
+                  Empty Trash
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </motion.div>
   )
 }

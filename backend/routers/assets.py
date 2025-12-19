@@ -1754,6 +1754,65 @@ async def upload_document(
         raise HTTPException(status_code=500, detail="Failed to upload document")
 
 
+@router.get("/documents/bulk")
+async def get_bulk_asset_documents(
+    assetTagIds: str = Query(..., description="Comma-separated list of asset tag IDs"),
+    auth: dict = Depends(verify_auth)
+):
+    """Get documents for multiple asset tag IDs"""
+    try:
+        user_id = auth.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        has_permission = await check_permission(user_id, "canViewAssets")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied: canViewAssets required")
+
+        if not assetTagIds:
+            raise HTTPException(status_code=400, detail="assetTagIds parameter is required")
+
+        # Parse comma-separated asset tag IDs
+        asset_tag_ids = [id.strip() for id in assetTagIds.split(',') if id.strip()]
+
+        if len(asset_tag_ids) == 0:
+            return []
+
+        # Fetch documents for all assets
+        documents = await prisma.assetsdocument.find_many(
+            where={"assetTagId": {"in": asset_tag_ids}},
+            order={"createdAt": "desc"}
+        )
+
+        # Group documents by assetTagId
+        documents_by_asset_tag = {}
+        for doc in documents:
+            asset_tag_id = str(doc.assetTagId)
+            if asset_tag_id not in documents_by_asset_tag:
+                documents_by_asset_tag[asset_tag_id] = []
+            document_url = doc.documentUrl if doc.documentUrl else None
+            if document_url:
+                documents_by_asset_tag[asset_tag_id].append({
+                    "documentUrl": document_url
+                })
+
+        # Return array of { assetTagId, documents: [{ documentUrl }] }
+        result = [
+            {
+                "assetTagId": asset_tag_id,
+                "documents": documents_by_asset_tag.get(asset_tag_id, [])
+            }
+            for asset_tag_id in asset_tag_ids
+        ]
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching bulk asset documents: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch asset documents")
+
+
 @router.get("/documents/{asset_tag_id}")
 async def get_asset_documents(
     asset_tag_id: str,
@@ -2059,6 +2118,63 @@ async def bulk_delete_documents(
         raise HTTPException(status_code=500, detail="Failed to bulk delete documents")
 
 
+@router.get("/images/bulk")
+async def get_bulk_asset_images(
+    assetTagIds: str = Query(..., description="Comma-separated list of asset tag IDs"),
+    auth: dict = Depends(verify_auth)
+):
+    """Get images for multiple asset tag IDs"""
+    try:
+        user_id = auth.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        has_permission = await check_permission(user_id, "canViewAssets")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied: canViewAssets required")
+
+        if not assetTagIds:
+            raise HTTPException(status_code=400, detail="assetTagIds parameter is required")
+
+        # Parse comma-separated asset tag IDs
+        asset_tag_ids = [id.strip() for id in assetTagIds.split(',') if id.strip()]
+
+        if len(asset_tag_ids) == 0:
+            return []
+
+        # Fetch images for all assets
+        images = await prisma.assetsimage.find_many(
+            where={"assetTagId": {"in": asset_tag_ids}},
+            order={"createdAt": "desc"}
+        )
+
+        # Group images by assetTagId
+        images_by_asset_tag = {}
+        for img in images:
+            asset_tag_id = img.assetTagId
+            image_url = img.imageUrl
+            if asset_tag_id not in images_by_asset_tag:
+                images_by_asset_tag[asset_tag_id] = []
+            if image_url:
+                images_by_asset_tag[asset_tag_id].append(image_url)
+
+        # Return array of { assetTagId, images: [{ imageUrl }] }
+        result = [
+            {
+                "assetTagId": asset_tag_id,
+                "images": [{"imageUrl": image_url} for image_url in images_by_asset_tag.get(asset_tag_id, [])]
+            }
+            for asset_tag_id in asset_tag_ids
+        ]
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching bulk asset images: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch asset images")
+
+
 @router.get("/images/{asset_tag_id}")
 async def get_asset_images(
     asset_tag_id: str,
@@ -2087,61 +2203,6 @@ async def get_asset_images(
         raise
     except Exception as e:
         logger.error(f"Error fetching asset images: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch asset images")
-
-
-@router.get("/images/bulk")
-async def get_bulk_asset_images(
-    assetTagIds: str = Query(..., description="Comma-separated list of asset tag IDs"),
-    auth: dict = Depends(verify_auth)
-):
-    """Get images for multiple asset tag IDs"""
-    try:
-        user_id = auth.get("user_id")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-
-        has_permission = await check_permission(user_id, "canViewAssets")
-        if not has_permission:
-            raise HTTPException(status_code=403, detail="Permission denied: canViewAssets required")
-
-        if not assetTagIds:
-            raise HTTPException(status_code=400, detail="assetTagIds parameter is required")
-
-        # Parse comma-separated asset tag IDs
-        asset_tag_ids = [id.strip() for id in assetTagIds.split(',') if id.strip()]
-
-        if len(asset_tag_ids) == 0:
-            return []
-
-        # Fetch images for all assets
-        images = await prisma.assetsimage.find_many(
-            where={"assetTagId": {"in": asset_tag_ids}},
-            order={"createdAt": "desc"},
-            select={"assetTagId": True, "imageUrl": True}
-        )
-
-        # Group images by assetTagId
-        images_by_asset_tag = {}
-        for img in images:
-            if img["assetTagId"] not in images_by_asset_tag:
-                images_by_asset_tag[img["assetTagId"]] = []
-            images_by_asset_tag[img["assetTagId"]].append(img["imageUrl"])
-
-        # Return array of { assetTagId, images: [{ imageUrl }] }
-        result = [
-            {
-                "assetTagId": asset_tag_id,
-                "images": [{"imageUrl": image_url} for image_url in images_by_asset_tag.get(asset_tag_id, [])]
-            }
-            for asset_tag_id in asset_tag_ids
-        ]
-
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching bulk asset images: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch asset images")
 
 

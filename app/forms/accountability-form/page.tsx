@@ -10,7 +10,25 @@ import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { QRScannerDialog } from '@/components/dialogs/qr-scanner-dialog'
 import { toast } from 'sonner'
 import { useQuery } from "@tanstack/react-query"
+import { useCreateAccountabilityForm } from '@/hooks/use-forms'
 import { useEmployee } from '@/hooks/use-employees'
+import { createClient } from '@/lib/supabase-client'
+
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+const getAuthToken = async (): Promise<string | null> => {
+  try {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token || null
+  } catch {
+    return null
+  }
+}
 import { useCompanyInfo } from '@/hooks/use-company-info'
 import { motion, AnimatePresence } from "framer-motion"
 import { Input } from "@/components/ui/input"
@@ -125,12 +143,17 @@ export default function AccountabilityFormPage() {
 
   // Fetch company info for logos
   const { data: companyInfo } = useCompanyInfo(true)
+  
+  // Create accountability form mutation
+  const createAccountabilityForm = useCreateAccountabilityForm()
 
   const primaryLogoUrl = companyInfo?.primaryLogoUrl || '/ShoreAgents-Logo.png'
   const secondaryLogoUrl = companyInfo?.secondaryLogoUrl || '/ShoreAgents-Logo-only.png'
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionRef = useRef<HTMLDivElement>(null)
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [assetIdInput, setAssetIdInput] = useState("")
+  const [debouncedAssetIdInput, setDebouncedAssetIdInput] = useState("")
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const [selectedAssets, setSelectedAssets] = useState<AccountabilityAsset[]>([])
@@ -229,12 +252,41 @@ export default function AccountabilityFormPage() {
     }
   }, [selectedEmployee, selectedEmployeeId]) // Only trigger when employee changes
 
-  // Fetch asset suggestions
+  // Debounce input to reduce API calls
+  useEffect(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+    }
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      setDebouncedAssetIdInput(assetIdInput)
+    }, 300) // 300ms debounce
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+    }
+  }, [assetIdInput])
+
+  // Fetch asset suggestions using FastAPI
   const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ["asset-accountability-suggestions", assetIdInput, selectedAssets.length, showSuggestions],
+    queryKey: ["asset-accountability-suggestions", debouncedAssetIdInput, selectedAssets.length, showSuggestions],
     queryFn: async () => {
-      const searchTerm = assetIdInput.trim() || ''
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10000`)
+      const searchTerm = debouncedAssetIdInput.trim() || ''
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch assets')
       }
@@ -271,13 +323,29 @@ export default function AccountabilityFormPage() {
     }
   }, [])
 
-  // Asset lookup by ID
+  // Asset lookup by ID using FastAPI
   const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
     try {
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10000`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch assets')
+      }
       const data = await response.json()
       const assets = data.assets as Asset[]
       
+      // Find exact match by assetTagId (case-insensitive)
       const asset = assets.find(
         (a) => a.assetTagId.toLowerCase() === assetTagId.toLowerCase()
       )
@@ -853,26 +921,18 @@ export default function AccountabilityFormPage() {
                     financeDate,
                   }
 
-                  const saveResponse = await fetch('/api/forms/accountability-form', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
+                  try {
+                    await createAccountabilityForm.mutateAsync({
                       employeeUserId: selectedEmployeeId,
                       dateIssued,
                       department: clientDepartment || selectedEmployee?.department || null,
                       accountabilityFormNo: accountabilityFormNo || null,
                       formData,
-                    }),
-                  })
-
-                  if (!saveResponse.ok) {
-                    const error = await saveResponse.json()
-                    console.error('Failed to save accountability form:', error)
-                    toast.error('PDF downloaded but failed to save form history', { id: 'form-save' })
-                  } else {
+                    })
                     toast.success('Form saved successfully', { id: 'form-save' })
+                  } catch (saveError) {
+                    console.error('Error saving accountability form:', saveError)
+                    toast.error('PDF downloaded but failed to save form history', { id: 'form-save' })
                   }
                 } catch (saveError) {
                   console.error('Error saving accountability form:', saveError)

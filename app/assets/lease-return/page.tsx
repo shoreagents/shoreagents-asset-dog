@@ -273,11 +273,22 @@ function LeaseReturnPageContent() {
     }
   }, [])
 
-  // Find asset by ID without lease check (for error messages)
+  // Find asset by ID without lease check (for error messages) using FastAPI
   const findAssetById = async (assetTagId: string): Promise<Asset | null> => {
     try {
-      // Use larger pageSize to ensure we find the asset even if paginated
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=100`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch assets')
       }

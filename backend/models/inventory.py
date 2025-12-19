@@ -136,3 +136,57 @@ class BulkRestoreResponse(BaseModel):
     restoredCount: int
     message: str
 
+
+class BulkDeleteItemsRequest(BaseModel):
+    ids: List[str]
+    permanent: bool = True
+
+
+class BulkDeleteItemsResponse(BaseModel):
+    success: bool
+    deletedCount: int
+    message: str
+
+
+class GenerateCodeResponse(BaseModel):
+    itemCode: str
+
+
+class EmptyTrashResponse(BaseModel):
+    success: bool
+    message: str
+    deletedCount: int
+
+
+class InventoryExportSummary(BaseModel):
+    totalItems: int
+    totalStock: float
+    totalCost: float
+
+
+class InventoryCategoryGroup(BaseModel):
+    category: str
+    count: int
+    totalStock: float
+    totalCost: float
+
+
+class InventoryStatusGroup(BaseModel):
+    status: str
+    count: int
+    totalStock: float
+    totalCost: float
+
+
+class InventoryLowStockItem(BaseModel):
+    itemCode: str
+    name: str
+    currentStock: float
+    minStockLevel: Optional[float] = None
+
+class CheckItemCodesRequest(BaseModel):
+    itemCodes: List[str]
+
+class CheckItemCodesResponse(BaseModel):
+    existingCodes: List[str]
+

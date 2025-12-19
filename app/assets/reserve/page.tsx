@@ -279,11 +279,26 @@ function ReserveAssetPageContent() {
     }
   }, [])
 
-  // Find asset by ID without status check (for error messages)
+  // Find asset by ID without status check (for error messages) using FastAPI
   const findAssetById = async (assetTagId: string): Promise<Asset | null> => {
     try {
       // Use a cache-busting timestamp to ensure fresh data
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&_t=${Date.now()}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10&_t=${Date.now()}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch assets')
+      }
       const data = await response.json()
       const assets = data.assets as Asset[]
       

@@ -495,3 +495,172 @@ export const useBulkRestoreInventoryItems = () => {
   })
 }
 
+// Generate item code mutation
+export const useGenerateItemCode = () => {
+  return useMutation({
+    mutationFn: async () => {
+      const baseUrl = getApiBaseUrl()
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${baseUrl}/api/inventory/generate-code`, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.detail || error.error || "Failed to generate item code")
+      }
+      const data = await response.json()
+      return data.itemCode as string
+    },
+  })
+}
+
+// Export inventory parameters
+export interface ExportInventoryParams {
+  format?: 'excel'
+  search?: string
+  category?: string
+  lowStock?: boolean
+  includeSummary?: boolean
+  includeByCategory?: boolean
+  includeByStatus?: boolean
+  includeTotalCost?: boolean
+  includeLowStock?: boolean
+  includeItemList?: boolean
+  itemFields?: string[]
+}
+
+// Export inventory mutation
+export const useExportInventory = () => {
+  return useMutation({
+    mutationFn: async (params: ExportInventoryParams) => {
+      const baseUrl = getApiBaseUrl()
+      const queryParams = new URLSearchParams()
+      
+      if (params.format) queryParams.set('format', params.format)
+      if (params.search) queryParams.set('search', params.search)
+      if (params.category) queryParams.set('category', params.category)
+      if (params.lowStock) queryParams.set('lowStock', 'true')
+      if (params.includeSummary) queryParams.set('includeSummary', 'true')
+      if (params.includeByCategory) queryParams.set('includeByCategory', 'true')
+      if (params.includeByStatus) queryParams.set('includeByStatus', 'true')
+      if (params.includeTotalCost) queryParams.set('includeTotalCost', 'true')
+      if (params.includeLowStock) queryParams.set('includeLowStock', 'true')
+      if (params.includeItemList) queryParams.set('includeItemList', 'true')
+      if (params.itemFields && params.itemFields.length > 0) {
+        queryParams.set('itemFields', params.itemFields.join(','))
+      }
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${baseUrl}/api/inventory/export?${queryParams.toString()}`, {
+        credentials: 'include',
+        headers,
+      })
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Export failed' }))
+        throw new Error(error.detail || error.error || "Failed to export inventory")
+      }
+      
+      // Return blob for file download
+      return response.blob()
+    },
+  })
+}
+
+// Bulk delete items response
+export interface BulkDeleteItemsResponse {
+  success: boolean
+  deletedCount: number
+  message: string
+}
+
+// Bulk delete inventory items mutation
+export const useBulkDeleteInventoryItems = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async ({ ids, permanent = true }: { ids: string[]; permanent?: boolean }) => {
+      const baseUrl = getApiBaseUrl()
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = { 
+        "Content-Type": "application/json",
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${baseUrl}/api/inventory/bulk-delete`, {
+        method: "DELETE",
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ ids, permanent }),
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.detail || error.error || "Failed to delete items")
+      }
+      
+      return response.json() as Promise<BulkDeleteItemsResponse>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] })
+      queryClient.invalidateQueries({ queryKey: ["deletedInventoryItems"] })
+    },
+  })
+}
+
+// Empty inventory trash response
+export interface EmptyTrashResponse {
+  success: boolean
+  message: string
+  deletedCount: number
+}
+
+// Empty inventory trash mutation
+export const useEmptyInventoryTrash = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async () => {
+      const baseUrl = getApiBaseUrl()
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${baseUrl}/api/inventory/trash/empty`, {
+        method: "DELETE",
+        headers,
+        credentials: 'include',
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.detail || error.error || "Failed to empty trash")
+      }
+      
+      return response.json() as Promise<EmptyTrashResponse>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["inventory"] })
+      queryClient.invalidateQueries({ queryKey: ["deletedInventoryItems"] })
+    },
+  })
+}
+

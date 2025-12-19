@@ -182,6 +182,7 @@ const ALL_COLUMNS = [
   { key: 'lastAuditor', label: 'Last Auditor' },
   { key: 'auditCount', label: 'Audit Count' },
   { key: 'images', label: 'Images' },
+  { key: 'documents', label: 'Documents' },
 ]
 
 // Removed fetchAssets function - now using useAssets hook
@@ -2205,21 +2206,86 @@ function AssetsPageContent() {
             credentials: 'include',
           })
           if (imagesResponse.ok) {
-            const imagesData = await imagesResponse.json()
+            const responseData = await imagesResponse.json()
+            // Handle both array response and object with images property
+            const imagesData = Array.isArray(responseData) ? responseData : (responseData?.images || responseData || [])
             // Create a map of assetTagId to comma-separated image URLs
             const imageUrlMap = new Map<string, string>()
+            if (Array.isArray(imagesData) && imagesData.length > 0) {
             imagesData.forEach((item: { assetTagId: string; images: Array<{ imageUrl: string }> }) => {
-              const urls = item.images.map((img: { imageUrl: string }) => img.imageUrl).join(', ')
+                if (item && item.assetTagId && item.images && Array.isArray(item.images) && item.images.length > 0) {
+                  const urls = item.images
+                    .map((img: { imageUrl: string }) => img?.imageUrl)
+                    .filter((url: string | undefined): url is string => !!url)
+                    .join(', ')
+                  if (urls) {
               imageUrlMap.set(item.assetTagId, urls)
+                  }
+                }
             })
+            }
             // Add images to each asset
             assetsToExport = assetsToExport.map((asset: Asset) => ({
               ...asset,
-              images: imageUrlMap.get(asset.assetTagId) || '',
+              images: imageUrlMap.get(asset.assetTagId) ?? '',
             }))
           }
         } catch (error) {
           console.warn('Failed to fetch images for export:', error)
+        }
+      }
+
+      // If documents column is selected, fetch document URLs for all assets
+      if (selectedExportFields.has('documents')) {
+        const assetTagIds = assetsToExport.map((a: Asset) => a.assetTagId)
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+            ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+            : ''
+          const url = `${baseUrl}/api/assets/documents/bulk?assetTagIds=${assetTagIds.join(',')}`
+          
+          // Get auth token
+          const { createClient } = await import('@/lib/supabase-client')
+          const supabase = createClient()
+          const { data: { session } } = await supabase.auth.getSession()
+          const headers: HeadersInit = {
+            'Content-Type': 'application/json',
+          }
+          if (baseUrl && session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`
+          }
+          
+          const documentsResponse = await fetch(url, {
+            headers,
+            credentials: 'include',
+          })
+          if (documentsResponse.ok) {
+            const responseData = await documentsResponse.json()
+            // Handle both array response and object with documents property
+            const documentsData = Array.isArray(responseData) ? responseData : (responseData?.documents || responseData || [])
+            // Create a map of assetTagId to comma-separated document URLs
+            const documentUrlMap = new Map<string, string>()
+            if (Array.isArray(documentsData) && documentsData.length > 0) {
+              documentsData.forEach((item: { assetTagId: string; documents: Array<{ documentUrl?: string }> }) => {
+                if (item && item.assetTagId && item.documents && Array.isArray(item.documents) && item.documents.length > 0) {
+                  const urls = item.documents
+                    .map((doc: { documentUrl?: string }) => doc?.documentUrl)
+                    .filter((url: string | undefined): url is string => !!url)
+                    .join(', ')
+                  if (urls) {
+                    documentUrlMap.set(item.assetTagId, urls)
+                  }
+                }
+              })
+            }
+            // Add documents to each asset
+            assetsToExport = assetsToExport.map((asset: Asset & { images?: string }) => ({
+              ...asset,
+              documents: documentUrlMap.get(asset.assetTagId) ?? '',
+            }))
+          }
+        } catch (error) {
+          console.warn('Failed to fetch documents for export:', error)
         }
       }
       
@@ -2233,11 +2299,8 @@ function AssetsPageContent() {
       })
       
       // Create data rows
-      const rows = assetsToExport.map((asset: Asset) => 
-        fieldsToExport.map(key => {
-          const value = getCellValue(asset, key)
-          return value
-        })
+      const rows = assetsToExport.map((asset: Asset & { images?: string; documents?: string }) => 
+        fieldsToExport.map(key => getCellValue(asset, key))
       )
       
       // Create worksheet
@@ -2810,7 +2873,12 @@ function AssetsPageContent() {
         return (asset.auditHistory?.length || 0).toString()
       case 'images':
         // Images will be fetched separately and added to asset
-        return (asset as Asset & { images?: string }).images || '-'
+        const imageValue = (asset as Asset & { images?: string }).images
+        return imageValue !== undefined && imageValue !== null ? imageValue : '-'
+      case 'documents':
+        // Documents will be fetched separately and added to asset
+        const documentValue = (asset as Asset & { documents?: string }).documents
+        return documentValue !== undefined && documentValue !== null ? documentValue : '-'
       default:
         return '-'
     }

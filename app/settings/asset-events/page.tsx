@@ -1,6 +1,7 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAssetEvents, useDeleteAssetEvent, useBulkDeleteAssetEvents, type AssetEvent } from '@/hooks/use-asset-events'
 import { useState, useMemo, useCallback, useEffect, useRef, useTransition, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -15,6 +16,7 @@ import {
   HeaderGroup,
   Header,
   RowSelectionState,
+  VisibilityState,
 } from '@tanstack/react-table'
 import {
   Table,
@@ -43,7 +45,7 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { MoreHorizontal, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RefreshCw, X, History } from 'lucide-react'
 import { toast } from 'sonner'
-import { DeleteConfirmationDialog } from '@/components/dialogs/delete-confirmation-dialog'
+import { BulkDeleteDialog } from '@/components/dialogs/bulk-delete-dialog'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
@@ -52,88 +54,7 @@ import { useMobileDock } from '@/components/mobile-dock-provider'
 import { useMobilePagination } from '@/components/mobile-pagination-provider'
 import { useIsMobile } from '@/hooks/use-mobile'
 
-interface AssetEvent {
-  id: string
-  assetId: string
-  eventDate: string
-  eventType: string
-  field: string | null
-  changeFrom: string | null
-  changeTo: string | null
-  actionBy: string
-  createdAt: string
-  asset: {
-    id: string
-    assetTagId: string
-    description: string | null
-  }
-}
-
-interface PaginationInfo {
-  page: number
-  pageSize: number
-  total: number
-  totalPages: number
-  hasNextPage: boolean
-  hasPreviousPage: boolean
-}
-
-async function fetchAssetEvents(
-  search?: string,
-  searchType: string = 'unified',
-  eventType?: string,
-  field?: string,
-  page: number = 1,
-  pageSize: number = 50
-): Promise<{ logs: AssetEvent[], uniqueFields: string[], pagination: PaginationInfo }> {
-  const params = new URLSearchParams({
-    page: page.toString(),
-    pageSize: pageSize.toString(),
-  })
-  if (search) {
-    params.append('search', search)
-    params.append('searchType', searchType)
-  }
-  if (eventType && eventType !== 'all') {
-    params.append('eventType', eventType)
-  }
-  if (field && field !== 'all') {
-    params.append('field', field)
-  }
-  
-  const response = await fetch(`/api/settings/asset-events?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error('Failed to fetch asset events')
-  }
-  const data = await response.json()
-  return { logs: data.logs, uniqueFields: data.uniqueFields || [], pagination: data.pagination }
-}
-
-async function deleteAssetEvent(id: string) {
-  const response = await fetch(`/api/settings/asset-events/${id}`, {
-    method: 'DELETE',
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to delete event')
-  }
-  return response.json()
-}
-
-async function deleteAssetEvents(ids: string[]) {
-  const response = await fetch('/api/settings/asset-events', {
-    method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ ids }),
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to delete events')
-  }
-  return response.json()
-}
+// Note: AssetEvent, PaginationInfo, and API functions moved to hooks/use-asset-events.ts
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return '-'
@@ -209,7 +130,7 @@ const createColumns = (
       )
     },
     cell: ({ row }) => (
-      <div className="font-medium">{row.original.asset.assetTagId}</div>
+      <div className="font-medium">{row.original.asset?.assetTagId || '-'}</div>
     ),
     enableSorting: true,
   },
@@ -346,7 +267,7 @@ const createColumns = (
     enableSorting: true,
   },
   {
-    accessorKey: 'eventDate',
+    accessorKey: 'createdAt',
     header: ({ column }) => {
       return (
         <Button
@@ -365,7 +286,7 @@ const createColumns = (
         </Button>
       )
     },
-    cell: ({ row }) => formatDate(row.original.eventDate),
+    cell: ({ row }) => formatDate(row.original.createdAt),
     enableSorting: true,
   },
   {
@@ -414,10 +335,17 @@ function AssetEventsPageContent() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    select: true, // Will be updated based on isMobile in useEffect
+  })
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<AssetEvent | null>(null)
   const [isManualRefresh, setIsManualRefresh] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState({ current: 0, total: 1 })
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
   const [, startTransition] = useTransition()
   const isInitialMount = useRef(true)
   
@@ -462,7 +390,8 @@ function AssetEventsPageContent() {
     if (updates.search !== undefined) {
       if (updates.search === '') {
         params.delete('search')
-        params.delete('searchType')
+        // Preserve searchType when clearing search - don't delete it
+        // The user's selected search type should persist even after clearing
       } else {
         params.set('search', updates.search)
       }
@@ -501,10 +430,12 @@ function AssetEventsPageContent() {
     })
   }, [searchParams, router, startTransition])
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['asset-events', searchQuery, searchType, eventType, field, page, pageSize],
-    queryFn: () => fetchAssetEvents(searchQuery || undefined, searchType, eventType !== 'all' ? eventType : undefined, field !== 'all' ? field : undefined, page, pageSize),
-    placeholderData: (previousData) => previousData,
+  const { data, isLoading, isFetching } = useAssetEvents({
+    search: searchQuery || undefined,
+    eventType: eventType !== 'all' ? eventType : undefined,
+    field: field !== 'all' ? field : undefined,
+    page,
+    pageSize,
   })
 
   // Reset manual refresh flag after successful fetch
@@ -579,31 +510,8 @@ function AssetEventsPageContent() {
     }
   }, [searchParams, searchType, eventType, field])
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteAssetEvent,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['asset-events'] })
-      setIsDeleteDialogOpen(false)
-      setSelectedEvent(null)
-      toast.success('Event deleted successfully')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to delete event')
-    },
-  })
-
-  const bulkDeleteMutation = useMutation({
-    mutationFn: deleteAssetEvents,
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['asset-events'] })
-      setIsBulkDeleteDialogOpen(false)
-      setRowSelection({})
-      toast.success(`${variables.length} event${variables.length > 1 ? 's' : ''} deleted successfully`)
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to delete events')
-    },
-  })
+  const deleteMutation = useDeleteAssetEvent()
+  const bulkDeleteMutation = useBulkDeleteAssetEvents()
 
   const handleDelete = useCallback((event: AssetEvent) => {
     if (!isAdmin) {
@@ -632,14 +540,20 @@ function AssetEventsPageContent() {
   const handleToggleSelectionMode = useCallback(() => {
     setIsSelectionMode(prev => {
       if (!prev) {
-        // Entering selection mode - ensure select column is visible
+        // Entering selection mode - show select column (only on mobile)
+        if (isMobile) {
+          setColumnVisibility(prev => ({ ...prev, select: true }))
+        }
       } else {
-        // Exiting selection mode - clear selection
+        // Exiting selection mode - clear selection and hide select column (only on mobile)
         setRowSelection({})
+        if (isMobile) {
+          setColumnVisibility(prev => ({ ...prev, select: false }))
+        }
       }
       return !prev
     })
-  }, [])
+  }, [isMobile])
 
   // Handle select/deselect all - uses ref to avoid dependency issues
   const handleToggleSelectAll = useCallback(() => {
@@ -675,10 +589,12 @@ function AssetEventsPageContent() {
     getSortedRowModel: getSortedRowModel(),
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
+    onColumnVisibilityChange: setColumnVisibility,
     enableRowSelection: true,
     state: {
       sorting,
       rowSelection,
+      columnVisibility,
     },
     getRowId: (row) => row.id,
   })
@@ -693,6 +609,81 @@ function AssetEventsPageContent() {
   const selectedRows = table.getFilteredSelectedRowModel().rows
   const selectedCount = selectedRows.length
   const hasSelectedAssets = selectedCount > 0
+
+  // Handle single delete with progress
+  const handleDeleteConfirm = async () => {
+    if (!selectedEvent) return
+    setIsDeleting(true)
+    setDeleteProgress({ current: 0, total: 1 })
+
+    // Simulate progress during API call
+    const progressInterval = setInterval(() => {
+      setDeleteProgress(prev => {
+        if (prev.current < 0.9) {
+          return { ...prev, current: Math.min(prev.current + 0.1, 0.9) }
+        }
+        return prev
+      })
+    }, 100)
+
+    try {
+      await deleteMutation.mutateAsync(selectedEvent.id)
+      clearInterval(progressInterval)
+      setDeleteProgress({ current: 1, total: 1 })
+      setTimeout(() => {
+        setIsDeleteDialogOpen(false)
+        setSelectedEvent(null)
+        setIsDeleting(false)
+        toast.success('Event deleted successfully')
+      }, 300)
+    } catch (error) {
+      clearInterval(progressInterval)
+      setIsDeleting(false)
+      toast.error(error instanceof Error ? error.message : 'Failed to delete event')
+    }
+  }
+
+  // Handle bulk delete with progress
+  const handleBulkDeleteConfirm = async () => {
+    const selectedRows = table.getFilteredSelectedRowModel().rows
+    const selectedIds = selectedRows.map(row => row.original.id)
+    if (selectedIds.length === 0) return
+
+    setIsBulkDeleting(true)
+    setBulkProgress({ current: 0, total: selectedIds.length })
+
+    // Simulate progress during API call
+    const progressInterval = setInterval(() => {
+      setBulkProgress(prev => {
+        if (prev.current < prev.total * 0.9) {
+          return { ...prev, current: Math.min(prev.current + Math.max(1, Math.floor(prev.total / 20)), Math.floor(prev.total * 0.9)) }
+        }
+        return prev
+      })
+    }, 100)
+
+    try {
+      await bulkDeleteMutation.mutateAsync(selectedIds)
+      clearInterval(progressInterval)
+      setBulkProgress({ current: selectedIds.length, total: selectedIds.length })
+      setTimeout(() => {
+        setIsBulkDeleteDialogOpen(false)
+        setRowSelection({})
+        setIsBulkDeleting(false)
+        toast.success(`${selectedIds.length} event${selectedIds.length > 1 ? 's' : ''} deleted successfully`)
+      }, 300)
+    } catch (error) {
+      clearInterval(progressInterval)
+      setIsBulkDeleting(false)
+      toast.error(error instanceof Error ? error.message : 'Failed to delete events')
+    }
+  }
+
+  // Initialize column visibility based on mobile state
+  // On desktop, select column is always visible. On mobile, it's hidden by default
+  useEffect(() => {
+    setColumnVisibility(prev => ({ ...prev, select: !isMobile }))
+  }, [isMobile])
 
   // Automatically enable selection mode when user manually selects an event
   // Automatically disable selection mode when all events are unselected on desktop
@@ -1193,40 +1184,48 @@ function AssetEventsPageContent() {
         </div>
       </Card>
 
-      {/* Delete Confirmation Dialog */}
-      <DeleteConfirmationDialog
+      {/* Delete Confirmation Dialog with Progress */}
+      <BulkDeleteDialog
         open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        onConfirm={() => {
-          if (selectedEvent) {
-            deleteMutation.mutate(selectedEvent.id)
+        onOpenChange={(newOpen) => {
+          if (!newOpen && !isDeleting) {
+            setIsDeleteDialogOpen(false)
+            setSelectedEvent(null)
           }
         }}
-        title="Delete Event"
-        description={`Are you sure you want to delete this event? This action cannot be undone.`}
-        isLoading={deleteMutation.isPending}
+        onConfirm={handleDeleteConfirm}
+        itemCount={1}
+        itemName="Event"
+        isDeleting={isDeleting}
+        progress={isDeleting ? { current: deleteProgress.current, total: deleteProgress.total } : undefined}
+        title={isDeleting ? undefined : "Delete Event"}
+        description={isDeleting ? "Deleting event, please wait..." : "Are you sure you want to delete this event? This action cannot be undone."}
+        confirmLabel="Delete Event"
+        loadingLabel="Deleting event, please wait..."
+        progressTitle={isDeleting ? `Deleting Event... ${deleteProgress.current}/${deleteProgress.total}` : undefined}
+        variant="delete"
       />
 
-      {/* Bulk Delete Confirmation Dialog */}
-      <DeleteConfirmationDialog
+      {/* Bulk Delete Confirmation Dialog with Progress */}
+      <BulkDeleteDialog
         open={isBulkDeleteDialogOpen}
         onOpenChange={(newOpen) => {
-          setIsBulkDeleteDialogOpen(newOpen)
-          // Clear selection when dialog is closed (cancelled) and not currently deleting
-          if (!newOpen && !bulkDeleteMutation.isPending) {
+          if (!newOpen && !isBulkDeleting) {
+            setIsBulkDeleteDialogOpen(false)
             setRowSelection({})
           }
         }}
-        onConfirm={() => {
-          const selectedRows = table.getFilteredSelectedRowModel().rows
-          const selectedIds = selectedRows.map(row => row.original.id)
-          if (selectedIds.length > 0) {
-            bulkDeleteMutation.mutate(selectedIds)
-          }
-        }}
-        title="Delete Selected Events"
-        description={`Are you sure you want to delete ${selectedCount} event${selectedCount > 1 ? 's' : ''}? This action cannot be undone.`}
-        isLoading={bulkDeleteMutation.isPending}
+        onConfirm={handleBulkDeleteConfirm}
+        itemCount={selectedCount}
+        itemName="Event"
+        isDeleting={isBulkDeleting}
+        progress={isBulkDeleting ? { current: bulkProgress.current, total: bulkProgress.total } : undefined}
+        title={isBulkDeleting ? undefined : `Delete ${selectedCount} Event(s)?`}
+        description={isBulkDeleting ? "Deleting events, please wait..." : `Are you sure you want to delete ${selectedCount} event${selectedCount > 1 ? 's' : ''}? This action cannot be undone.`}
+        confirmLabel={`Delete ${selectedCount} Event(s)`}
+        loadingLabel="Deleting events, please wait..."
+        progressTitle={isBulkDeleting ? `Deleting Events... ${bulkProgress.current}/${bulkProgress.total}` : undefined}
+        variant="delete"
       />
     </motion.div>
   )

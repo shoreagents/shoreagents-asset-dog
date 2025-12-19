@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { QrCode, CheckCircle2, X, FileText, History, Trash2 } from 'lucide-react'
@@ -86,7 +86,7 @@ const getStatusBadge = (status: string | null) => {
   return <Badge variant={statusVariant} className={statusColor}>{status}</Badge>
 }
 
-export default function AuditPage() {
+function AuditPageContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -1390,6 +1390,18 @@ export default function AuditPage() {
         cancelLabel="Cancel"
       />
     </motion.div>
+  )
+}
+
+export default function AuditPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner className="h-8 w-8" />
+      </div>
+    }>
+      <AuditPageContent />
+    </Suspense>
   )
 }
 

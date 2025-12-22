@@ -27,6 +27,28 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
+import { createClient } from "@/lib/supabase-client"
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error || !session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch {
+    return null
+  }
+}
 
 export function NavUser({
   user,
@@ -51,7 +73,18 @@ export function NavUser({
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      const baseUrl = getApiBaseUrl()
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      await fetch(`${baseUrl}/api/auth/logout`, { 
+        method: 'POST',
+        headers,
+        credentials: 'include',
+      })
       window.location.href = '/login'
     } catch (error) {
       console.error('Logout failed:', error)

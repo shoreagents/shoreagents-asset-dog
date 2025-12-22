@@ -17,6 +17,28 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
+import { createClient } from '@/lib/supabase-client'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error || !session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch {
+    return null
+  }
+}
 
 interface QRCodeDisplayDialogProps {
   open: boolean
@@ -46,7 +68,17 @@ export function QRCodeDisplayDialog({
     queryFn: async () => {
       if (!assetTagId) return null
       try {
-        const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=1`)
+        const baseUrl = getApiBaseUrl()
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(
+          `${baseUrl}/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=1`,
+          { headers, credentials: 'include' }
+        )
         if (!response.ok) return null
         const data = await response.json()
         const assets = data.assets || []

@@ -3,6 +3,28 @@
 import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
+import { createClient } from '@/lib/supabase-client'
+
+// Get API base URL - use FastAPI if enabled
+const getApiBaseUrl = () => {
+  const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+  const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+  return useFastAPI ? fastApiUrl : ''
+}
+
+// Helper function to get auth token from Supabase session
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error || !session?.access_token) {
+      return null
+    }
+    return session.access_token
+  } catch {
+    return null
+  }
+}
 
 function HomeContent() {
   const router = useRouter()
@@ -22,7 +44,17 @@ function HomeContent() {
     // If not, redirect to login (handled by middleware)
     const checkAuth = async () => {
       try {
-        const response = await fetch('/api/auth/me')
+        const baseUrl = getApiBaseUrl()
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(`${baseUrl}/api/auth/me`, {
+          headers,
+          credentials: 'include',
+        })
         if (response.ok) {
           router.replace('/dashboard')
         } else {

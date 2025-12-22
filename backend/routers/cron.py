@@ -6,11 +6,11 @@ from typing import Dict, Any, List, Optional
 import logging
 import os
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import httpx
 
 from database import prisma
-from utils.report_schedule import calculate_next_run_at
+from utils.report_schedule import calculate_next_run_at, TIMEZONE_OFFSET_HOURS, LOCAL_TIMEZONE
 
 # Try to import Resend for email sending
 try:
@@ -203,13 +203,19 @@ async def send_scheduled_reports(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     
     try:
-        now = datetime.now()
+        # Use local timezone for comparison since nextRunAt is stored in local time
+        now_utc = datetime.now(timezone.utc)
+        now_local = now_utc.astimezone(LOCAL_TIMEZONE)
+        # Convert to naive datetime for Prisma comparison (strip timezone info)
+        now_naive = now_local.replace(tzinfo=None)
+        
+        logger.info(f"Checking for due schedules at local time: {now_naive}")
         
         # Find all active schedules that are due to run
         due_schedules = await prisma.automatedreportschedule.find_many(
             where={
                 "isActive": True,
-                "nextRunAt": {"lte": now}
+                "nextRunAt": {"lte": now_naive}
             }
         )
         
@@ -262,7 +268,7 @@ async def send_scheduled_reports(request: Request):
                     await prisma.automatedreportschedule.update(
                         where={"id": schedule.id},
                         data={
-                            "lastSentAt": now,
+                            "lastSentAt": now_naive,
                             "nextRunAt": next_run
                         }
                     )

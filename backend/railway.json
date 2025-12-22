@@ -11,7 +11,7 @@
   "crons": [
     {
       "schedule": "0 * * * *",
-      "command": "curl -X GET -H 'Authorization: Bearer $CRON_SECRET' $RAILWAY_PUBLIC_DOMAIN/api/cron/send-scheduled-reports"
+      "command": "curl -X GET -H \"Authorization: Bearer $CRON_SECRET\" $FASTAPI_BASE_URL/api/cron/send-scheduled-reports"
     }
   ]
 }

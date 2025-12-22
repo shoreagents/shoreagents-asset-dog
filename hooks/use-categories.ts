@@ -572,9 +572,17 @@ export const useCreateAsset = () => {
   
   return useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
-      const response = await fetch("/api/assets", {
+      const baseUrl = getApiBaseUrl()
+      const token = await getAuthToken()
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${baseUrl}/api/assets`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: 'include',
         body: JSON.stringify(data),
       })
       if (!response.ok) throw new Error("Failed to create asset")

@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ExportDialog } from '@/components/dialogs/export-dialog'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase-client'
 
 interface CheckoutReportData {
   summary: {
@@ -161,6 +162,28 @@ function CheckoutReportsPageContent() {
     }
   }, [page, updateURL])
 
+  // Helper functions for FastAPI
+  const getApiBaseUrl = () => {
+    const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+    return useFastAPI ? fastApiUrl : ''
+  }
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      const supabase = createClient()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Failed to get auth token:', error)
+        return null
+      }
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   // Build query string from filters and pagination
   const queryString = useMemo(() => {
     const params = new URLSearchParams()
@@ -182,9 +205,22 @@ function CheckoutReportsPageContent() {
   const { data: reportData, isLoading, isFetching, error, refetch } = useQuery<CheckoutReportData>({
     queryKey: ['checkout-report', queryString, page, pageSize],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/checkout?${queryString}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/checkout?${queryString}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
-        throw new Error('Failed to fetch checkout report data')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to fetch checkout report data')
       }
       return response.json()
     },
@@ -259,6 +295,7 @@ function CheckoutReportsPageContent() {
   }
 
   const handleDataExport = async (format: 'csv' | 'excel') => {
+    const baseUrl = getApiBaseUrl()
     const params = new URLSearchParams()
     params.set('format', format)
     if (filters.employeeId) params.set('employeeId', filters.employeeId)
@@ -272,20 +309,32 @@ function CheckoutReportsPageContent() {
     // Add includeCheckoutList parameter
     params.set('includeCheckoutList', includeCheckoutList.toString())
 
-    const response = await fetch(`/api/reports/checkout/export?${params.toString()}`)
+    const url = `${baseUrl}/api/reports/checkout/export?${params.toString()}`
+    
+    const token = await getAuthToken()
+    const headers: HeadersInit = {}
+    if (baseUrl && token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers,
+    })
     
     if (!response.ok) {
-      throw new Error('Export failed')
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.detail || error.error || 'Export failed')
     }
 
     const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
+    const downloadUrl = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = downloadUrl
     a.download = `checkout-report-${new Date().toISOString().split('T')[0]}.${format === 'csv' ? 'csv' : 'xlsx'}`
     document.body.appendChild(a)
     a.click()
-    window.URL.revokeObjectURL(url)
+    window.URL.revokeObjectURL(downloadUrl)
     document.body.removeChild(a)
 
     toast.success(`Report exported successfully as ${format.toUpperCase()}`)
@@ -301,6 +350,7 @@ function CheckoutReportsPageContent() {
     let allCheckouts: typeof reportData.checkouts | undefined = undefined
     if (includeCheckoutList) {
       try {
+        const baseUrl = getApiBaseUrl()
         const params = new URLSearchParams()
         // Remove pagination to get all results
         if (filters.employeeId) params.set('employeeId', filters.employeeId)
@@ -314,7 +364,18 @@ function CheckoutReportsPageContent() {
         // Set a large pageSize to get all results
         params.set('pageSize', '10000')
         
-        const response = await fetch(`/api/reports/checkout?${params.toString()}`)
+        const url = `${baseUrl}/api/reports/checkout?${params.toString()}`
+        
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (baseUrl && token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers,
+        })
         if (response.ok) {
           const data = await response.json()
           allCheckouts = data.checkouts || []

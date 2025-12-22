@@ -2,7 +2,7 @@
 Forms API router
 """
 from fastapi import APIRouter, HTTPException, Query, Depends, Path, Body
-from typing import Optional
+from typing import Optional, Union
 import logging
 import json
 from datetime import datetime
@@ -362,7 +362,7 @@ async def get_form_history(
         raise HTTPException(status_code=500, detail="Failed to fetch form history")
 
 
-@router.get("/history/{form_id}", response_model=AccountabilityFormResponse | ReturnFormResponse)
+@router.get("/history/{form_id}", response_model=Union[AccountabilityFormResponse, ReturnFormResponse])
 async def get_form_by_id(
     form_id: str = Path(..., description="Form ID"),
     formType: str = Query("accountability", description="Form type: accountability or return"),

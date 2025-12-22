@@ -6,6 +6,7 @@ from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from decimal import Decimal
 import logging
+import asyncio
 
 from models.dashboard import DashboardStatsResponse, AssetValueGroupedResponse, AssetValueGroupedItem
 from auth import verify_auth
@@ -171,34 +172,60 @@ async def get_dashboard_stats(
         expiring_threshold = now + timedelta(days=90)
         thirty_days_ago = now - timedelta(days=30)
         
-        # Execute all queries in parallel using transaction
-        async with prisma.tx() as transaction:
-            # Get asset value by category
-            assets_by_category_raw = await transaction.assets.group_by(
+        # Execute all queries in parallel (no transaction needed for read-only queries)
+        # Group queries that can run in parallel
+        (
+            assets_by_category_raw,
+            categories,
+            total_active_assets,
+            assets_for_sum,
+            checked_out_count,
+            available_count,
+            purchases_in_fiscal_year,
+            total_active_checkouts,
+            active_checkouts,
+            total_checkins,
+            recent_checkins,
+            total_assets_under_repair,
+            assets_under_repair,
+            leases_expiring,
+            maintenance_due,
+            total_moves,
+            recent_moves,
+            total_reserves,
+            recent_reserves,
+            total_leases,
+            recent_leases,
+            total_returns,
+            recent_returns,
+            total_disposes,
+            recent_disposes,
+            total_new_assets,
+            recent_assets,
+        ) = await asyncio.gather(
+            # Asset value by category
+            prisma.assets.group_by(
                 by=["categoryId"],
                 where={"isDeleted": False, "cost": {"not": None}},
                 sum={"cost": True}
-            )
-            
-            categories = await transaction.category.find_many()
-            
+            ),
+            # Categories
+            prisma.category.find_many(),
             # Summary statistics
-            total_active_assets = await transaction.assets.count(where={"isDeleted": False})
-            # Prisma Python doesn't support aggregate on transactions, so fetch and sum manually
-            assets_for_sum = await transaction.assets.find_many(
+            prisma.assets.count(where={"isDeleted": False}),
+            # Assets for sum
+            prisma.assets.find_many(
                 where={"isDeleted": False, "cost": {"not": None}}
-            )
-            total_value = sum(
-                float(asset.cost) if asset.cost is not None else 0.0
-                for asset in assets_for_sum
-            )
-            checked_out_count = await transaction.assets.count(
+            ),
+            # Status counts
+            prisma.assets.count(
                 where={"isDeleted": False, "status": {"equals": "Checked out", "mode": "insensitive"}}
-            )
-            available_count = await transaction.assets.count(
+            ),
+            prisma.assets.count(
                 where={"isDeleted": False, "status": {"equals": "Available", "mode": "insensitive"}}
-            )
-            purchases_in_fiscal_year = await transaction.assets.count(
+            ),
+            # Fiscal year purchases
+            prisma.assets.count(
                 where={
                     "isDeleted": False,
                     "OR": [
@@ -206,99 +233,102 @@ async def get_dashboard_stats(
                         {"dateAcquired": {"gte": fiscal_year_start, "lt": fiscal_year_end}}
                     ]
                 }
-            )
-            
-            # Feed data
-            total_active_checkouts = await transaction.assetscheckout.count(
+            ),
+            # Checkout data
+            prisma.assetscheckout.count(
                 where={"checkins": {"none": {}}}
-            )
-            active_checkouts = await transaction.assetscheckout.find_many(
+            ),
+            prisma.assetscheckout.find_many(
                 where={"checkins": {"none": {}}},
                 include={"asset": True, "employeeUser": True},
                 order={"checkoutDate": "desc"},
                 take=10
-            )
-            
-            total_checkins = await transaction.assetscheckin.count()
-            recent_checkins = await transaction.assetscheckin.find_many(
+            ),
+            # Checkin data
+            prisma.assetscheckin.count(),
+            prisma.assetscheckin.find_many(
                 include={"asset": True, "checkout": {"include": {"employeeUser": True}}},
                 order={"checkinDate": "desc"},
                 take=10
-            )
-            
-            total_assets_under_repair = await transaction.assetsmaintenance.count(
+            ),
+            # Maintenance data
+            prisma.assetsmaintenance.count(
                 where={"status": {"in": ["Scheduled", "In progress"]}}
-            )
-            assets_under_repair = await transaction.assetsmaintenance.find_many(
+            ),
+            prisma.assetsmaintenance.find_many(
                 where={"status": {"in": ["Scheduled", "In progress"]}},
                 include={"asset": True},
                 order={"createdAt": "desc"},
                 take=10
-            )
-            
+            ),
             # Calendar data
-            leases_expiring = await transaction.assetslease.find_many(
+            prisma.assetslease.find_many(
                 where={
                     "leaseEndDate": {"gte": now, "lte": expiring_threshold},
                     "returns": {"none": {}}
                 },
                 include={"asset": True},
                 order={"leaseEndDate": "asc"}
-            )
-            
-            maintenance_due = await transaction.assetsmaintenance.find_many(
+            ),
+            prisma.assetsmaintenance.find_many(
                 where={
                     "status": {"in": ["Scheduled", "In progress"]},
                     "dueDate": {"not": None}
                 },
                 include={"asset": True},
                 order={"dueDate": "asc"}
-            )
-            
-            # Feed data - Move, Reserve, Lease, Return, Dispose
-            total_moves = await transaction.assetsmove.count()
-            recent_moves = await transaction.assetsmove.find_many(
+            ),
+            # Move data
+            prisma.assetsmove.count(),
+            prisma.assetsmove.find_many(
                 include={"asset": True, "employeeUser": True},
                 order={"createdAt": "desc"},
                 take=10
-            )
-            
-            total_reserves = await transaction.assetsreserve.count()
-            recent_reserves = await transaction.assetsreserve.find_many(
+            ),
+            # Reserve data
+            prisma.assetsreserve.count(),
+            prisma.assetsreserve.find_many(
                 include={"asset": True, "employeeUser": True},
                 order={"createdAt": "desc"},
                 take=10
-            )
-            
-            total_leases = await transaction.assetslease.count()
-            recent_leases = await transaction.assetslease.find_many(
+            ),
+            # Lease data
+            prisma.assetslease.count(),
+            prisma.assetslease.find_many(
                 include={"asset": True},
                 order={"createdAt": "desc"},
                 take=10
-            )
-            
-            total_returns = await transaction.assetsleasereturn.count()
-            recent_returns = await transaction.assetsleasereturn.find_many(
+            ),
+            # Return data
+            prisma.assetsleasereturn.count(),
+            prisma.assetsleasereturn.find_many(
                 include={"asset": True, "lease": True},
                 order={"createdAt": "desc"},
                 take=10
-            )
-            
-            total_disposes = await transaction.assetsdispose.count()
-            recent_disposes = await transaction.assetsdispose.find_many(
+            ),
+            # Dispose data
+            prisma.assetsdispose.count(),
+            prisma.assetsdispose.find_many(
                 include={"asset": True},
                 order={"createdAt": "desc"},
                 take=10
-            )
-            
-            total_new_assets = await transaction.assets.count(
+            ),
+            # New assets
+            prisma.assets.count(
                 where={"isDeleted": False, "createdAt": {"gte": thirty_days_ago}}
-            )
-            recent_assets = await transaction.assets.find_many(
+            ),
+            prisma.assets.find_many(
                 where={"isDeleted": False, "createdAt": {"gte": thirty_days_ago}},
                 order={"createdAt": "desc"},
                 take=10
-            )
+            ),
+        )
+        
+        # Calculate total value from fetched assets
+        total_value = sum(
+            float(asset.cost) if asset.cost is not None else 0.0
+            for asset in assets_for_sum
+        )
         
         # Process asset value by category
         category_map = {cat.id: cat.name for cat in categories}

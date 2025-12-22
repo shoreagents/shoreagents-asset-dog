@@ -20,12 +20,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Wrench, Clock, Plus, CheckCircle2, XCircle, List, MoreVertical, Eye } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Wrench, Clock, Plus, CheckCircle2, XCircle, List, MoreVertical, Eye, Trash2 } from 'lucide-react'
 import { DashboardStats } from '@/types/dashboard'
 import { motion } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { ScheduleDialog, scheduleTypeLabels } from '@/components/dialogs/schedule-dialog'
+import { DeleteConfirmationDialog } from '@/components/dialogs/delete-confirmation-dialog'
 import { type ScheduleFormData } from '@/lib/validations/schedule'
 import { cn } from '@/lib/utils'
 
@@ -139,6 +140,28 @@ async function createSchedule(data: ScheduleFormData): Promise<Schedule> {
   return result.schedule
 }
 
+async function deleteSchedule(scheduleId: string): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const url = `${baseUrl}/api/assets/schedules/${scheduleId}`
+  
+  const token = await getAuthToken()
+  const headers: HeadersInit = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers,
+    credentials: 'include',
+  })
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || error.detail || 'Failed to delete schedule')
+  }
+}
+
 export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
   const { resolvedTheme } = useTheme()
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date())
@@ -146,6 +169,8 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false)
   const [scheduleDate, setScheduleDate] = useState<Date | null>(null)
   const [eventsPopoverOpen, setEventsPopoverOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const monthStart = startOfMonth(currentMonth)
@@ -204,6 +229,31 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
       toast.error(error.message || 'Failed to update schedule')
     },
   })
+
+  // Delete schedule mutation
+  const deleteScheduleMutation = useMutation({
+    mutationFn: deleteSchedule,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['schedules'] })
+      toast.success('Schedule deleted successfully')
+      setIsDeleteDialogOpen(false)
+      setScheduleToDelete(null)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to delete schedule')
+    },
+  })
+
+  const handleDeleteClick = (scheduleId: string) => {
+    setScheduleToDelete(scheduleId)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = () => {
+    if (scheduleToDelete) {
+      deleteScheduleMutation.mutate(scheduleToDelete)
+    }
+  }
 
   const handleDateClick = (date: Date) => {
     setSelectedDate(date)
@@ -522,6 +572,22 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                                   </DropdownMenuItem>
                                 </>
                               )}
+                              {event.type === 'schedule' && event.scheduleId && (
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    if (event.scheduleId) {
+                                      handleDeleteClick(event.scheduleId)
+                                    }
+                                  }}
+                                  disabled={deleteScheduleMutation.isPending}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem asChild>
                                 <Link
                                   href={`/assets?search=${encodeURIComponent(event.assetTagId)}`}
@@ -569,6 +635,23 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
           onSubmit={handleSubmitSchedule}
           isLoading={createScheduleMutation.isPending}
           defaultDate={scheduleDate}
+        />
+
+        {/* Delete Confirmation Dialog */}
+        <DeleteConfirmationDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={(open) => {
+            setIsDeleteDialogOpen(open)
+            if (!open) {
+              setScheduleToDelete(null)
+            }
+          }}
+          onConfirm={handleConfirmDelete}
+          title="Delete Schedule"
+          description="Are you sure you want to delete this schedule? This action cannot be undone."
+          isLoading={deleteScheduleMutation.isPending}
+          confirmLabel="Delete Schedule"
+          cancelLabel="Cancel"
         />
       </>
     )
@@ -736,12 +819,15 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                               </div>
                               <div className="space-y-1">
                                 {item.events.map((event, idx) => (
-                                  <Link
+                                  <div
                                     key={`${item.date}-${idx}`}
-                                    href={`/assets?search=${encodeURIComponent(event.assetTagId)}`}
-                                    onClick={() => setEventsPopoverOpen(false)}
+                                    className="flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 transition-colors group"
                                   >
-                                    <div className="flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 transition-colors cursor-pointer">
+                                    <Link
+                                      href={`/assets?search=${encodeURIComponent(event.assetTagId)}`}
+                                      onClick={() => setEventsPopoverOpen(false)}
+                                      className="flex items-center gap-2 flex-1 min-w-0"
+                                    >
                                       <div className={cn(
                                         "p-1.5 rounded-full",
                                         event.type === 'maintenance'
@@ -797,8 +883,26 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
                                           </p>
                                         )}
                                       </div>
-                                    </div>
-                                  </Link>
+                                    </Link>
+                                    {event.type === 'schedule' && event.scheduleId && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          if (event.scheduleId) {
+                                            handleDeleteClick(event.scheduleId)
+                                            setEventsPopoverOpen(false)
+                                          }
+                                        }}
+                                        disabled={deleteScheduleMutation.isPending}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                      </Button>
+                                    )}
+                                  </div>
                                 ))}
                               </div>
                             </div>
@@ -934,6 +1038,23 @@ export function CalendarWidget({ data, isLoading }: CalendarWidgetProps) {
         onSubmit={handleSubmitSchedule}
         isLoading={createScheduleMutation.isPending}
         defaultDate={scheduleDate}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setIsDeleteDialogOpen(open)
+          if (!open) {
+            setScheduleToDelete(null)
+          }
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Schedule"
+        description="Are you sure you want to delete this schedule? This action cannot be undone."
+        isLoading={deleteScheduleMutation.isPending}
+        confirmLabel="Delete Schedule"
+        cancelLabel="Cancel"
       />
     </>
   )

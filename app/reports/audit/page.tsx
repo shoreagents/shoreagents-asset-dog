@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase-client'
 
 interface AuditReportData {
   audits: Array<{
@@ -131,6 +132,28 @@ function AuditReportsPageContent() {
     }
   }, [page, updateURL])
 
+  // Helper functions for FastAPI
+  const getApiBaseUrl = () => {
+    const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+    return useFastAPI ? fastApiUrl : ''
+  }
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      const supabase = createClient()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Failed to get auth token:', error)
+        return null
+      }
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   // Build query string from filters and pagination
   const queryString = useMemo(() => {
     const params = new URLSearchParams()
@@ -150,9 +173,22 @@ function AuditReportsPageContent() {
   const { data, isLoading, isFetching, error, refetch } = useQuery<AuditReportData>({
     queryKey: ['audit-reports', queryString, page, pageSize],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/audit?${queryString}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/audit?${queryString}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
-        throw new Error('Failed to fetch audit reports')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to fetch audit reports')
       }
       return response.json()
     },
@@ -192,6 +228,7 @@ function AuditReportsPageContent() {
   }
 
   const handleDataExport = async (format: 'csv' | 'excel') => {
+    const baseUrl = getApiBaseUrl()
     const params = new URLSearchParams()
     params.set('format', format)
     if (filters.category) params.set('category', filters.category)
@@ -203,20 +240,32 @@ function AuditReportsPageContent() {
     if (filters.endDate) params.set('endDate', filters.endDate)
     if (includeAuditList) params.set('includeAuditList', 'true')
 
-    const response = await fetch(`/api/reports/audit/export?${params.toString()}`)
+    const url = `${baseUrl}/api/reports/audit/export?${params.toString()}`
+    
+    const token = await getAuthToken()
+    const headers: HeadersInit = {}
+    if (baseUrl && token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers,
+    })
     
     if (!response.ok) {
-      throw new Error('Export failed')
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.detail || error.error || 'Export failed')
     }
 
     const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
+    const downloadUrl = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = downloadUrl
     a.download = `audit-report-${new Date().toISOString().split('T')[0]}.${format === 'csv' ? 'csv' : 'xlsx'}`
     document.body.appendChild(a)
     a.click()
-    window.URL.revokeObjectURL(url)
+    window.URL.revokeObjectURL(downloadUrl)
     document.body.removeChild(a)
 
     toast.success(`Report exported successfully as ${format.toUpperCase()}`)
@@ -232,6 +281,7 @@ function AuditReportsPageContent() {
     let allAudits: typeof audits | undefined = undefined
     if (includeAuditList) {
       try {
+        const baseUrl = getApiBaseUrl()
         const params = new URLSearchParams()
         if (filters.category) params.set('category', filters.category)
         if (filters.auditType) params.set('auditType', filters.auditType)
@@ -242,7 +292,18 @@ function AuditReportsPageContent() {
         if (filters.endDate) params.set('endDate', filters.endDate)
         params.set('pageSize', '10000')
         
-        const response = await fetch(`/api/reports/audit?${params.toString()}`)
+        const url = `${baseUrl}/api/reports/audit?${params.toString()}`
+        
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (baseUrl && token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers,
+        })
         if (response.ok) {
           const responseData = await response.json()
           allAudits = responseData.audits || []

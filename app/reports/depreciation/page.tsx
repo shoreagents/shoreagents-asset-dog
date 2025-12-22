@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase-client'
 
 interface DepreciationReportData {
   assets: Array<{
@@ -142,6 +143,28 @@ function DepreciationReportsPageContent() {
     }
   }, [page, updateURL])
 
+  // Helper functions for FastAPI
+  const getApiBaseUrl = () => {
+    const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+    return useFastAPI ? fastApiUrl : ''
+  }
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      const supabase = createClient()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Failed to get auth token:', error)
+        return null
+      }
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   // Build query string from filters and pagination
   const queryString = useMemo(() => {
     const params = new URLSearchParams()
@@ -161,9 +184,22 @@ function DepreciationReportsPageContent() {
   const { data, isLoading, isFetching, error, refetch } = useQuery<DepreciationReportData>({
     queryKey: ['depreciation-reports', queryString, page, pageSize],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/depreciation?${queryString}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/depreciation?${queryString}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
-        throw new Error('Failed to fetch depreciation reports')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to fetch depreciation reports')
       }
       return response.json()
     },
@@ -214,6 +250,7 @@ function DepreciationReportsPageContent() {
   }
 
   const handleDataExport = async (format: 'csv' | 'excel') => {
+    const baseUrl = getApiBaseUrl()
     const params = new URLSearchParams()
     params.set('format', format)
     if (filters.category) params.set('category', filters.category)
@@ -225,20 +262,32 @@ function DepreciationReportsPageContent() {
     if (filters.endDate) params.set('endDate', filters.endDate)
     if (includeAssetList) params.set('includeAssetList', 'true')
 
-    const response = await fetch(`/api/reports/depreciation/export?${params.toString()}`)
+    const url = `${baseUrl}/api/reports/depreciation/export?${params.toString()}`
+    
+    const token = await getAuthToken()
+    const headers: HeadersInit = {}
+    if (baseUrl && token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers,
+    })
     
     if (!response.ok) {
-      throw new Error('Export failed')
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.detail || error.error || 'Export failed')
     }
 
     const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
+    const downloadUrl = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = downloadUrl
     a.download = `depreciation-report-${new Date().toISOString().split('T')[0]}.${format === 'csv' ? 'csv' : 'xlsx'}`
     document.body.appendChild(a)
     a.click()
-    window.URL.revokeObjectURL(url)
+    window.URL.revokeObjectURL(downloadUrl)
     document.body.removeChild(a)
 
     toast.success(`Report exported successfully as ${format.toUpperCase()}`)
@@ -254,6 +303,7 @@ function DepreciationReportsPageContent() {
     let allAssets: typeof assets | undefined = undefined
     if (includeAssetList) {
       try {
+        const baseUrl = getApiBaseUrl()
         const params = new URLSearchParams()
         if (filters.category) params.set('category', filters.category)
         if (filters.depreciationMethod) params.set('depreciationMethod', filters.depreciationMethod)
@@ -264,7 +314,18 @@ function DepreciationReportsPageContent() {
         if (filters.endDate) params.set('endDate', filters.endDate)
         params.set('pageSize', '10000')
         
-        const response = await fetch(`/api/reports/depreciation?${params.toString()}`)
+        const url = `${baseUrl}/api/reports/depreciation?${params.toString()}`
+        
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (baseUrl && token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers,
+        })
         if (response.ok) {
           const responseData = await response.json()
           allAssets = responseData.assets || []

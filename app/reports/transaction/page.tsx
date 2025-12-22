@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ExportDialog } from '@/components/dialogs/export-dialog'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase-client'
 
 interface TransactionReportData {
   transactions: Array<{
@@ -456,6 +457,28 @@ function TransactionReportsPageContent() {
     return getTableColumns(reportType)
   }, [reportType])
 
+  // Helper functions for FastAPI
+  const getApiBaseUrl = () => {
+    const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+    return useFastAPI ? fastApiUrl : ''
+  }
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      const supabase = createClient()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Failed to get auth token:', error)
+        return null
+      }
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   // Build query string from filters and pagination
   const queryString = useMemo(() => {
     const params = new URLSearchParams()
@@ -489,9 +512,22 @@ function TransactionReportsPageContent() {
   const { data, isLoading, isFetching, error, refetch } = useQuery<TransactionReportData>({
     queryKey: ['transaction-reports', reportType, queryString, page, pageSize],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/transaction?${queryString}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/transaction?${queryString}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
-        throw new Error('Failed to fetch transaction reports')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to fetch transaction reports')
       }
       return response.json()
     },
@@ -545,6 +581,7 @@ function TransactionReportsPageContent() {
   const handleDataExport = async (format: 'csv' | 'excel') => {
     setIsExporting(true)
     try {
+      const baseUrl = getApiBaseUrl()
       const params = new URLSearchParams()
       params.set('format', format)
       
@@ -562,20 +599,32 @@ function TransactionReportsPageContent() {
       if (filters.endDate) params.set('endDate', filters.endDate)
       if (includeTransactionList) params.set('includeTransactionList', 'true')
 
-      const response = await fetch(`/api/reports/transaction/export?${params.toString()}`)
+      const url = `${baseUrl}/api/reports/transaction/export?${params.toString()}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       
       if (!response.ok) {
-        throw new Error('Export failed')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Export failed')
       }
 
       const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
+      const downloadUrl = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
+      a.href = downloadUrl
       a.download = `transaction-report-${new Date().toISOString().split('T')[0]}.${format === 'csv' ? 'csv' : 'xlsx'}`
       document.body.appendChild(a)
       a.click()
-      window.URL.revokeObjectURL(url)
+      window.URL.revokeObjectURL(downloadUrl)
       document.body.removeChild(a)
 
       toast.success(`Report exported successfully as ${format.toUpperCase()}`)
@@ -598,6 +647,7 @@ function TransactionReportsPageContent() {
     let allTransactions: typeof transactions | undefined = undefined
     if (includeTransactionList) {
       try {
+        const baseUrl = getApiBaseUrl()
         const params = new URLSearchParams()
         // Apply report type filter
         if (reportType !== 'all') {
@@ -614,7 +664,18 @@ function TransactionReportsPageContent() {
         // Set a large pageSize to get all results
         params.set('pageSize', '10000')
         
-        const response = await fetch(`/api/reports/transaction?${params.toString()}`)
+        const url = `${baseUrl}/api/reports/transaction?${params.toString()}`
+        
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (baseUrl && token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers,
+        })
         if (response.ok) {
           const responseData = await response.json()
           allTransactions = responseData.transactions || []

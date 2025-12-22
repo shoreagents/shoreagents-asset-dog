@@ -165,6 +165,84 @@ async def list_maintenances(
         raise HTTPException(status_code=500, detail="Failed to fetch maintenances")
 
 
+@router.get("/stats", response_model=MaintenanceStatsResponse)
+async def get_maintenance_stats(
+    auth: dict = Depends(verify_auth)
+):
+    """Get maintenance statistics"""
+    try:
+        # Count scheduled maintenances today
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow = datetime(today.year, today.month, today.day + 1)
+        
+        scheduled_today_count = await prisma.assetsmaintenance.count(
+            where={
+                "status": "Scheduled",
+                "dueDate": {
+                    "gte": today,
+                    "lt": tomorrow
+                }
+            }
+        )
+
+        # Count in progress maintenances
+        in_progress_count = await prisma.assetsmaintenance.count(
+            where={"status": "In progress"}
+        )
+
+        # Get recent maintenances (last 10)
+        recent_maintenances_data = await prisma.assetsmaintenance.find_many(
+            take=10,
+            include={
+                "asset": {
+                    "include": {
+                        "category": True,
+                        "subCategory": True
+                    }
+                }
+            },
+            order={"createdAt": "desc"}
+        )
+
+        # Format the response
+        recent_maintenances = []
+        for maintenance in recent_maintenances_data:
+            maintenance_dict = {
+                "id": str(maintenance.id),
+                "title": maintenance.title,
+                "details": maintenance.details,
+                "dueDate": maintenance.dueDate.isoformat() if maintenance.dueDate and hasattr(maintenance.dueDate, 'isoformat') else (str(maintenance.dueDate) if maintenance.dueDate else None),
+                "maintenanceBy": maintenance.maintenanceBy,
+                "status": maintenance.status,
+                "dateCompleted": maintenance.dateCompleted.isoformat() if maintenance.dateCompleted and hasattr(maintenance.dateCompleted, 'isoformat') else (str(maintenance.dateCompleted) if maintenance.dateCompleted else None),
+                "createdAt": maintenance.createdAt.isoformat() if hasattr(maintenance.createdAt, 'isoformat') else str(maintenance.createdAt),
+                "asset": {
+                    "id": str(maintenance.asset.id),
+                    "assetTagId": str(maintenance.asset.assetTagId),
+                    "description": str(maintenance.asset.description),
+                    "category": {
+                        "id": str(maintenance.asset.category.id),
+                        "name": str(maintenance.asset.category.name)
+                    } if maintenance.asset.category else None,
+                    "subCategory": {
+                        "id": str(maintenance.asset.subCategory.id),
+                        "name": str(maintenance.asset.subCategory.name)
+                    } if maintenance.asset.subCategory else None
+                } if maintenance.asset else None
+            }
+            recent_maintenances.append(maintenance_dict)
+
+        return MaintenanceStatsResponse(
+            scheduledTodayCount=scheduled_today_count,
+            inProgressCount=in_progress_count,
+            recentMaintenances=recent_maintenances
+        )
+
+    except Exception as e:
+        logger.error(f"Error fetching maintenance statistics: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch maintenance statistics")
+
+
 @router.delete("/{maintenance_id}", response_model=MaintenanceDeleteResponse)
 async def delete_maintenance(
     maintenance_id: str,
@@ -599,81 +677,4 @@ async def create_maintenance(
     except Exception as e:
         logger.error(f"Error creating maintenance: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create maintenance: {str(e)}")
-
-@router.get("/stats", response_model=MaintenanceStatsResponse)
-async def get_maintenance_stats(
-    auth: dict = Depends(verify_auth)
-):
-    """Get maintenance statistics"""
-    try:
-        # Count scheduled maintenances today
-        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        tomorrow = datetime(today.year, today.month, today.day + 1)
-        
-        scheduled_today_count = await prisma.assetsmaintenance.count(
-            where={
-                "status": "Scheduled",
-                "dueDate": {
-                    "gte": today,
-                    "lt": tomorrow
-                }
-            }
-        )
-
-        # Count in progress maintenances
-        in_progress_count = await prisma.assetsmaintenance.count(
-            where={"status": "In progress"}
-        )
-
-        # Get recent maintenances (last 10)
-        recent_maintenances_data = await prisma.assetsmaintenance.find_many(
-            take=10,
-            include={
-                "asset": {
-                    "include": {
-                        "category": True,
-                        "subCategory": True
-                    }
-                }
-            },
-            order={"createdAt": "desc"}
-        )
-
-        # Format the response
-        recent_maintenances = []
-        for maintenance in recent_maintenances_data:
-            maintenance_dict = {
-                "id": str(maintenance.id),
-                "title": maintenance.title,
-                "details": maintenance.details,
-                "dueDate": maintenance.dueDate.isoformat() if maintenance.dueDate and hasattr(maintenance.dueDate, 'isoformat') else (str(maintenance.dueDate) if maintenance.dueDate else None),
-                "maintenanceBy": maintenance.maintenanceBy,
-                "status": maintenance.status,
-                "dateCompleted": maintenance.dateCompleted.isoformat() if maintenance.dateCompleted and hasattr(maintenance.dateCompleted, 'isoformat') else (str(maintenance.dateCompleted) if maintenance.dateCompleted else None),
-                "createdAt": maintenance.createdAt.isoformat() if hasattr(maintenance.createdAt, 'isoformat') else str(maintenance.createdAt),
-                "asset": {
-                    "id": str(maintenance.asset.id),
-                    "assetTagId": str(maintenance.asset.assetTagId),
-                    "description": str(maintenance.asset.description),
-                    "category": {
-                        "id": str(maintenance.asset.category.id),
-                        "name": str(maintenance.asset.category.name)
-                    } if maintenance.asset.category else None,
-                    "subCategory": {
-                        "id": str(maintenance.asset.subCategory.id),
-                        "name": str(maintenance.asset.subCategory.name)
-                    } if maintenance.asset.subCategory else None
-                } if maintenance.asset else None
-            }
-            recent_maintenances.append(maintenance_dict)
-
-        return MaintenanceStatsResponse(
-            scheduledTodayCount=scheduled_today_count,
-            inProgressCount=in_progress_count,
-            recentMaintenances=recent_maintenances
-        )
-
-    except Exception as e:
-        logger.error(f"Error fetching maintenance statistics: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch maintenance statistics")
 

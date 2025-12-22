@@ -51,7 +51,6 @@ import {
   Calendar,
   ToggleLeft,
   ToggleRight,
-  Play,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -62,6 +61,7 @@ import { formatFrequencyDescription } from '@/lib/report-schedule-utils'
 import { Suspense } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { AutomatedReportFilters } from '@/components/reports/automated-report-filters'
+import { createClient } from '@/lib/supabase-client'
 
 interface AutomatedReportSchedule {
   id: string
@@ -143,11 +143,48 @@ function AutomatedReportsPageContent() {
   const [emailInput, setEmailInput] = useState('')
   const [reportFilters, setReportFilters] = useState<Record<string, unknown>>({})
 
+  // Helper functions for FastAPI
+  const getApiBaseUrl = () => {
+    const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+    return useFastAPI ? fastApiUrl : ''
+  }
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      const supabase = createClient()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Failed to get auth token:', error)
+        return null
+      }
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   const { data: schedules, isLoading, error } = useQuery<{ schedules: AutomatedReportSchedule[] }>({
     queryKey: ['automated-reports'],
     queryFn: async () => {
-      const response = await fetch('/api/reports/automated')
-      if (!response.ok) throw new Error('Failed to fetch schedules')
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/automated`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to fetch schedules')
+      }
       return response.json()
     },
     enabled: canManageReports, // Only fetch if user has permission
@@ -182,16 +219,28 @@ function AutomatedReportsPageContent() {
 
   const createMutation = useMutation({
     mutationFn: async (data: AutomatedReportScheduleFormData) => {
-      const response = await fetch('/api/reports/automated', {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/automated`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({
           ...data,
         }),
       })
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to create schedule')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to create schedule')
       }
       return response.json()
     },
@@ -212,17 +261,29 @@ function AutomatedReportsPageContent() {
       id: string
       data: Partial<AutomatedReportScheduleFormData> & { isActive?: boolean }
     }) => {
-      const response = await fetch(`/api/reports/automated/${id}`, {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/automated/${id}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({
           ...data,
           filters: reportFilters,
         }),
       })
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to update schedule')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to update schedule')
       }
       return response.json()
     },
@@ -241,10 +302,24 @@ function AutomatedReportsPageContent() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`/api/reports/automated/${id}`, {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/automated/${id}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'DELETE',
+        credentials: 'include',
+        headers,
       })
-      if (!response.ok) throw new Error('Failed to delete schedule')
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to delete schedule')
+      }
       return response.json()
     },
     onSuccess: () => {
@@ -259,12 +334,27 @@ function AutomatedReportsPageContent() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const response = await fetch(`/api/reports/automated/${id}`, {
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/automated/${id}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({ isActive }),
       })
-      if (!response.ok) throw new Error('Failed to update schedule')
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to update schedule')
+      }
       return response.json()
     },
     onSuccess: () => {
@@ -273,25 +363,6 @@ function AutomatedReportsPageContent() {
     },
     onError: () => {
       toast.error('Failed to update schedule')
-    },
-  })
-
-  const testEmailMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/reports/automated/${id}/test`, {
-        method: 'POST',
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to send test email')
-      }
-      return response.json()
-    },
-    onSuccess: () => {
-      toast.success('Test email sent successfully')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message)
     },
   })
 
@@ -321,8 +392,20 @@ function AutomatedReportsPageContent() {
   const handleCloseDialog = useCallback(() => {
     setIsDialogOpen(false)
     setEditingSchedule(null)
-    reset(undefined, { keepErrors: false }) // Clear errors when closing dialog
+    // Reset form to default values when closing
+    reset({
+      reportName: '',
+      reportType: '' as AutomatedReportScheduleFormData['reportType'],
+      frequency: '' as AutomatedReportScheduleFormData['frequency'],
+      frequencyDay: null,
+      frequencyMonth: null,
+      scheduledTime: '02:00',
+      format: 'pdf' as AutomatedReportScheduleFormData['format'],
+      includeList: true,
+      emailRecipients: [],
+    }, { keepErrors: false, keepDefaultValues: false })
     setReportFilters({})
+    setEmailInput('')
   }, [reset])
 
   const onSubmit: SubmitHandler<AutomatedReportScheduleFormData> = useCallback((data) => {
@@ -548,7 +631,7 @@ function AutomatedReportsPageContent() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={schedule.isActive ? 'default' : 'secondary'}>
+                          <Badge variant={schedule.isActive ? 'default' : 'destructive'}>
                             {schedule.isActive ? 'Active' : 'Inactive'}
                           </Badge>
                         </TableCell>
@@ -566,16 +649,6 @@ function AutomatedReportsPageContent() {
                                 ) : (
                                   <ToggleLeft className="h-4 w-4" />
                                 )}
-                              </Button>
-                            </motion.div>
-                            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => testEmailMutation.mutate(schedule.id)}
-                                disabled={testEmailMutation.isPending}
-                              >
-                                <Play className="h-4 w-4" />
                               </Button>
                             </motion.div>
                             <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
@@ -611,7 +684,13 @@ function AutomatedReportsPageContent() {
         </AnimatePresence>
 
         {/* Create/Edit Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            handleCloseDialog()
+          } else {
+            setIsDialogOpen(true)
+          }
+        }}>
           <DialogContent className="max-w-2xl! max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>

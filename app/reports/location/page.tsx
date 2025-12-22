@@ -44,6 +44,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase-client'
 
 interface LocationReportData {
   summary: {
@@ -164,6 +165,28 @@ function LocationReportsPageContent() {
     }
   }, [page, updateURL])
 
+  // Helper functions for FastAPI
+  const getApiBaseUrl = () => {
+    const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+    return useFastAPI ? fastApiUrl : ''
+  }
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      const supabase = createClient()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Failed to get auth token:', error)
+        return null
+      }
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   // Build query string from filters and pagination
   const queryString = useMemo(() => {
     const params = new URLSearchParams()
@@ -183,9 +206,22 @@ function LocationReportsPageContent() {
   const { data: reportData, isLoading, isFetching, error, refetch } = useQuery<LocationReportData>({
     queryKey: ['location-report', queryString, page, pageSize],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/location?${queryString}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/location?${queryString}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
-        throw new Error('Failed to fetch location report data')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to fetch location report data')
       }
       return response.json()
     },
@@ -255,6 +291,7 @@ function LocationReportsPageContent() {
   }
 
   const handleDataExport = async (format: 'csv' | 'excel') => {
+    const baseUrl = getApiBaseUrl()
     const params = new URLSearchParams()
     params.set('format', format)
     if (filters.location) params.set('location', filters.location)
@@ -265,20 +302,32 @@ function LocationReportsPageContent() {
     if (filters.endDate) params.set('endDate', filters.endDate)
     if (includeAssetList) params.set('includeAssetList', 'true')
 
-    const response = await fetch(`/api/reports/location/export?${params.toString()}`)
+    const url = `${baseUrl}/api/reports/location/export?${params.toString()}`
+    
+    const token = await getAuthToken()
+    const headers: HeadersInit = {}
+    if (baseUrl && token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers,
+    })
     
     if (!response.ok) {
-      throw new Error('Export failed')
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.detail || error.error || 'Export failed')
     }
 
     const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
+    const downloadUrl = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = downloadUrl
     a.download = `location-report-${new Date().toISOString().split('T')[0]}.${format === 'csv' ? 'csv' : 'xlsx'}`
     document.body.appendChild(a)
     a.click()
-    window.URL.revokeObjectURL(url)
+    window.URL.revokeObjectURL(downloadUrl)
     document.body.removeChild(a)
 
     toast.success(`Report exported successfully as ${format.toUpperCase()}`)
@@ -294,6 +343,7 @@ function LocationReportsPageContent() {
     let allAssets: typeof reportData.assets | undefined = undefined
     if (includeAssetList) {
       try {
+        const baseUrl = getApiBaseUrl()
         const params = new URLSearchParams()
         if (filters.location) params.set('location', filters.location)
         if (filters.site) params.set('site', filters.site)
@@ -304,7 +354,18 @@ function LocationReportsPageContent() {
         // Set a large pageSize to get all results
         params.set('pageSize', '10000')
         
-        const response = await fetch(`/api/reports/location?${params.toString()}`)
+        const url = `${baseUrl}/api/reports/location?${params.toString()}`
+        
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (baseUrl && token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers,
+        })
         if (response.ok) {
           const data = await response.json()
           allAssets = data.assets || []

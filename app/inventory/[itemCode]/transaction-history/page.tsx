@@ -133,7 +133,7 @@ export default function InventoryTransactionHistoryPage() {
   // Fetch inventory item
   const { data: item, isLoading: isLoadingItem } = useInventoryItem(itemCode, !!itemCode)
 
-  // Fetch transactions
+  // Fetch transactions (enable when we have itemCode, don't wait for item to load)
   const { data: transactionHistory, isLoading: isLoadingHistory, isFetching: isFetchingHistory } = useInventoryTransactions(
     itemCode,
     {
@@ -142,7 +142,7 @@ export default function InventoryTransactionHistoryPage() {
       type: transactionTypeFilter !== 'all' ? transactionTypeFilter : undefined,
       search: searchQuery || undefined,
     },
-    !!itemCode && !!item
+    !!itemCode
   )
 
 
@@ -178,6 +178,9 @@ export default function InventoryTransactionHistoryPage() {
   const pagination = transactionHistory?.pagination
   const isLoading = isLoadingHistory
   const isFetching = isFetchingHistory
+  
+  // Combined loading state - show layout immediately
+  const isLoadingData = isLoadingItem || (isLoading && !transactionHistory)
 
   // Update ref when transactions change
   useEffect(() => {
@@ -527,9 +530,9 @@ export default function InventoryTransactionHistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, setDockContent, isSelectionMode, rowSelection])
 
-  // Set mobile pagination content
+  // Set mobile pagination content (show even during loading)
   useEffect(() => {
-    if (isMobile && pagination && pagination.totalPages > 0) {
+    if (isMobile) {
       setPaginationContent(
         <>
           <div className="flex items-center gap-2">
@@ -541,7 +544,7 @@ export default function InventoryTransactionHistoryPage() {
                   handlePageChange(page - 1)
                 }
               }}
-              disabled={!pagination?.hasPreviousPage || isLoading}
+              disabled={!pagination?.hasPreviousPage || isLoadingData}
               className="h-8 px-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -549,10 +552,10 @@ export default function InventoryTransactionHistoryPage() {
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground">Page</span>
               <div className="px-1.5 py-1 rounded-md bg-primary/10 text-primary font-medium text-xs">
-                {isLoading ? '...' : (pagination?.page || page)}
+                {isLoadingData ? '...' : (pagination?.page || page)}
               </div>
               <span className="text-muted-foreground">of</span>
-              <span className="text-muted-foreground">{isLoading ? '...' : (pagination?.totalPages || 1)}</span>
+              <span className="text-muted-foreground">{isLoadingData ? '...' : (pagination?.totalPages || 1)}</span>
             </div>
             <Button
               variant="outline"
@@ -562,14 +565,14 @@ export default function InventoryTransactionHistoryPage() {
                   handlePageChange(page + 1)
                 }
               }}
-              disabled={!pagination?.hasNextPage || isLoading}
+              disabled={!pagination?.hasNextPage || isLoadingData}
               className="h-8 px-2"
             >
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading}>
+            <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoadingData}>
               <SelectTrigger className="h-8 w-auto min-w-[90px] text-xs border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
                 <SelectValue />
               </SelectTrigger>
@@ -581,7 +584,7 @@ export default function InventoryTransactionHistoryPage() {
               </SelectContent>
             </Select>
             <div className="text-xs text-muted-foreground whitespace-nowrap">
-              {isLoading ? (
+              {isLoadingData ? (
                 <Spinner className="h-4 w-4" />
               ) : (
                 <span>{pagination?.total || 0}</span>
@@ -597,20 +600,10 @@ export default function InventoryTransactionHistoryPage() {
     return () => {
       setPaginationContent(null)
     }
-  }, [isMobile, setPaginationContent, pagination, page, pageSize, isLoading, handlePageChange, handlePageSizeChange])
+  }, [isMobile, setPaginationContent, pagination, page, pageSize, isLoadingData, handlePageChange, handlePageSizeChange])
 
-  // Show loading state while item is being fetched
-  if (isLoadingItem) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <Spinner className="h-6 w-6" />
-        <p className="text-sm text-muted-foreground">Loading transaction history...</p>
-      </div>
-    )
-  }
-
-  // Show error state
-  if (!item) {
+  // Show error state only if item failed to load (not just loading)
+  if (!isLoadingItem && !item) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="flex flex-col items-center gap-4 max-w-md">
@@ -643,9 +636,13 @@ export default function InventoryTransactionHistoryPage() {
         <div>
           <h1 className="text-3xl font-bold">Transaction History</h1>
           <p className="text-muted-foreground">
-            History for <strong>{item.name}</strong>
-            {' • '}
-            Current stock: <strong>{Math.floor(parseFloat(item.currentStock.toString()))} {item.unit || 'pcs'}</strong>
+            History for <strong>{isLoadingItem ? '...' : (item?.name || 'Unknown Item')}</strong>
+            {!isLoadingItem && item && (
+              <>
+                {' • '}
+                Current stock: <strong>{Math.floor(parseFloat(item.currentStock.toString()))} {item.unit || 'pcs'}</strong>
+              </>
+            )}
           </p>
         </div>
         <Button
@@ -744,12 +741,12 @@ export default function InventoryTransactionHistoryPage() {
         </CardHeader>
         <CardContent className="flex-1 px-0 relative">
           {isFetching && (transactionHistory || transactions.length > 0) && (
-            <div className={cn("absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-20 flex items-center justify-center", isMobile && "right-0 rounded-b-2xl")}>
+            <div className={cn("absolute left-0 right-[10px] top-[33px] bottom-0 bg-background/50 backdrop-blur-sm z-40 flex items-center justify-center", isMobile && "right-0 rounded-b-2xl")}>
               <Spinner variant="default" size={24} className="text-muted-foreground" />
             </div>
           )}
           <div className={cn("h-140 pt-6", isMobile && "max-h-136")}>
-            {isLoading && !transactionHistory ? (
+            {isLoadingData ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
                   <Spinner className="h-8 w-8" />
@@ -849,80 +846,78 @@ export default function InventoryTransactionHistoryPage() {
         </CardContent>
         
         {/* Pagination Bar - Fixed at Bottom */}
-        {pagination && pagination.totalPages > 0 && (
-          <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl hidden md:block">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
-              {/* Left Side - Navigation */}
-              <div className="flex items-center justify-center sm:justify-start gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (pagination?.hasPreviousPage) {
-                      handlePageChange(page - 1)
-                    }
-                  }}
-                  disabled={!pagination?.hasPreviousPage || isLoading}
-                  className="h-8 px-2 sm:px-3"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                
-                {/* Page Info */}
-                <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
-                  <span className="text-muted-foreground">Page</span>
-                  <div className="px-1.5 sm:px-2 py-1 rounded-md bg-primary/10 text-primary font-medium text-xs sm:text-sm">
-                    {isLoading ? '...' : (pagination?.page || page)}
-                  </div>
-                  <span className="text-muted-foreground">of</span>
-                  <span className="text-muted-foreground">{isLoading ? '...' : (pagination?.totalPages || 1)}</span>
+        <div className="sticky bottom-0 border-t bg-card z-10 shadow-sm mt-auto rounded-b-2xl hidden md:block">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3">
+            {/* Left Side - Navigation */}
+            <div className="flex items-center justify-center sm:justify-start gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (pagination?.hasPreviousPage) {
+                    handlePageChange(page - 1)
+                  }
+                }}
+                disabled={!pagination?.hasPreviousPage || isLoadingData}
+                className="h-8 px-2 sm:px-3"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              
+              {/* Page Info */}
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
+                <span className="text-muted-foreground">Page</span>
+                <div className="px-1.5 sm:px-2 py-1 rounded-md bg-primary/10 text-primary font-medium text-xs sm:text-sm">
+                  {isLoadingData ? '...' : (pagination?.page || page)}
                 </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (pagination?.hasNextPage) {
-                      handlePageChange(page + 1)
-                    }
-                  }}
-                  disabled={!pagination?.hasNextPage || isLoading}
-                  className="h-8 px-2 sm:px-3"
-                >
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
+                <span className="text-muted-foreground">of</span>
+                <span className="text-muted-foreground">{isLoadingData ? '...' : (pagination?.totalPages || 1)}</span>
               </div>
               
-              {/* Right Side - Rows and Records */}
-              <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-4">
-                {/* Row Selection - Clickable */}
-                <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading}>
-                  <SelectTrigger className="h-8 w-auto min-w-[90px] sm:min-w-[100px] text-xs sm:text-sm border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="20">20 rows</SelectItem>
-                    <SelectItem value="50">50 rows</SelectItem>
-                    <SelectItem value="100">100 rows</SelectItem>
-                    <SelectItem value="200">200 rows</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                {/* Total Records */}
-                <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-                  {isLoading ? (
-                    <Spinner className="h-4 w-4" />
-                  ) : (
-                    <>
-                      <span className="hidden sm:inline">{pagination?.total || 0} records</span>
-                      <span className="sm:hidden">{pagination?.total || 0}</span>
-                    </>
-                  )}
-                </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (pagination?.hasNextPage) {
+                    handlePageChange(page + 1)
+                  }
+                }}
+                disabled={!pagination?.hasNextPage || isLoadingData}
+                className="h-8 px-2 sm:px-3"
+              >
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Right Side - Rows and Records */}
+            <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-4">
+              {/* Row Selection - Clickable */}
+              <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoadingData}>
+                <SelectTrigger className="h-8 w-auto min-w-[90px] sm:min-w-[100px] text-xs sm:text-sm border-primary/20 bg-primary/10 text-primary font-medium hover:bg-primary/20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="20">20 rows</SelectItem>
+                  <SelectItem value="50">50 rows</SelectItem>
+                  <SelectItem value="100">100 rows</SelectItem>
+                  <SelectItem value="200">200 rows</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Total Records */}
+              <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+                {isLoadingData ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <>
+                    <span className="hidden sm:inline">{pagination?.total || 0} records</span>
+                    <span className="sm:hidden">{pagination?.total || 0}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
-        )}
+        </div>
       </Card>
 
       {/* Bulk Delete Dialog */}

@@ -1016,14 +1016,16 @@ function MaintenancePageContent() {
                   className="mt-2 p-3 border rounded-md bg-muted/50"
                 >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{selectedAsset.assetTagId}</Badge>
-                    <span className="text-sm font-medium">
-                      {selectedAsset.category?.name || 'No Category'}
-                      {selectedAsset.subCategory?.name && ` - ${selectedAsset.subCategory.name}`}
-                    </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{selectedAsset.assetTagId}</Badge>
+                      <span className="text-sm font-medium truncate">
+                        {selectedAsset.category?.name || 'No Category'}
+                        {selectedAsset.subCategory?.name && ` - ${selectedAsset.subCategory.name}`}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     {getStatusBadge(selectedAsset.status || 'Available')}
                     <Button
                       type="button"

@@ -1,0 +1,7 @@
+Requirement already satisfied: resend in c:\users\lenovo\appdata\local\programs\python\python39\lib\site-packages (2.19.0)
+Requirement already satisfied: requests>=2.31.0 in c:\users\lenovo\appdata\local\programs\python\python39\lib\site-packages (from resend) (2.32.3)
+Requirement already satisfied: typing-extensions>=4.4.0 in c:\users\lenovo\appdata\local\programs\python\python39\lib\site-packages (from resend) (4.15.0)
+Requirement already satisfied: charset-normalizer<4,>=2 in c:\users\lenovo\appdata\local\programs\python\python39\lib\site-packages (from requests>=2.31.0->resend) (3.4.1)
+Requirement already satisfied: idna<4,>=2.5 in c:\users\lenovo\appdata\local\programs\python\python39\lib\site-packages (from requests>=2.31.0->resend) (3.7)
+Requirement already satisfied: urllib3<3,>=1.21.1 in c:\users\lenovo\appdata\local\programs\python\python39\lib\site-packages (from requests>=2.31.0->resend) (2.3.0)
+Requirement already satisfied: certifi>=2017.4.17 in c:\users\lenovo\appdata\local\programs\python\python39\lib\site-packages (from requests>=2.31.0->resend) (2024.12.14)

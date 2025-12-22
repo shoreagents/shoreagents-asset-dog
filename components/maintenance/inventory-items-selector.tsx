@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X, Plus, Package, AlertTriangle, TrendingDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -127,6 +128,7 @@ export function InventoryItemsSelector({
   disabled = false,
   showStockWarnings = true,
 }: InventoryItemsSelectorProps) {
+  const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedItems, setSelectedItems] = useState<SelectedInventoryItem[]>(value)
@@ -207,8 +209,8 @@ export function InventoryItemsSelector({
     <div className="space-y-4">
       <Card className="border-dashed">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex-1">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <Package className="h-4 w-4 text-muted-foreground" />
                 Inventory Items Used
@@ -217,20 +219,21 @@ export function InventoryItemsSelector({
                 Add parts, consumables, or supplies used in this maintenance
               </CardDescription>
             </div>
-            <Popover open={open} onOpenChange={setOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={disabled}
-                  className="h-9 gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Item
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[450px] p-0" align="end">
+            <div className="shrink-0">
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={disabled}
+                    className="h-9 gap-2 w-full md:w-auto"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Item
+                  </Button>
+                </PopoverTrigger>
+              <PopoverContent className="w-[calc(100vw-2rem)] md:w-[450px] p-0" align={isMobile ? "center" : "end"}>
                 <Command>
                   <div className="flex items-center border-b px-3">
                     <Package className="mr-2 h-4 w-4 shrink-0 opacity-50" />
@@ -309,13 +312,15 @@ export function InventoryItemsSelector({
                 </Command>
               </PopoverContent>
             </Popover>
+            </div>
           </div>
         </CardHeader>
 
         <CardContent className="pt-0">
           {selectedItems.length > 0 ? (
             <div className="space-y-4">
-              <div className="rounded-lg border bg-card">
+              {/* Desktop Table View */}
+              <div className="hidden md:block rounded-lg border bg-card">
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
@@ -438,6 +443,114 @@ export function InventoryItemsSelector({
                     })}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {selectedItems.map((item, index) => {
+                  const warning = getStockWarning(item)
+                  const total = item.unitCost ? item.unitCost * item.quantity : 0
+                  const stockPercentage = item.availableStock > 0 
+                    ? (item.quantity / item.availableStock) * 100 
+                    : 0
+                  
+                  return (
+                    <Card
+                      key={item.inventoryItemId}
+                      className={cn(
+                        warning?.type === 'error' && "bg-destructive/5 border-destructive/20"
+                      )}
+                    >
+                      <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <div className="min-w-0">
+                              <div className="font-mono font-semibold text-sm">{item.itemCode}</div>
+                              <div className="text-sm text-muted-foreground truncate">{item.name}</div>
+                            </div>
+                          </div>
+                          {warning && (
+                            <div className={cn(
+                              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md mt-2",
+                              warning.type === 'error' 
+                                ? "bg-destructive/10 text-destructive border border-destructive/20" 
+                                : "bg-yellow-500/10 text-yellow-700 dark:text-yellow-500 border border-yellow-500/20"
+                            )}>
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              <span className="font-medium">{warning.message}</span>
+                            </div>
+                          )}
+                          {!warning && item.availableStock > 0 && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className={cn(
+                                    "h-full transition-all",
+                                    stockPercentage > 80 ? "bg-destructive" :
+                                    stockPercentage > 50 ? "bg-yellow-500" :
+                                    "bg-green-500"
+                                  )}
+                                  style={{ width: `${Math.min(stockPercentage, 100)}%` }}
+                                />
+                              </div>
+                              <span className="shrink-0">
+                                {item.availableStock} {item.unit || 'available'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveItem(item.inventoryItemId)}
+                          disabled={disabled}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-3 pt-2 border-t">
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Quantity</div>
+                          <div className="space-y-1">
+                            <Input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={item.quantity || ''}
+                              onChange={(e) => handleQuantityChange(item.inventoryItemId, e.target.value)}
+                              disabled={disabled}
+                              className={cn(
+                                "h-9 font-medium",
+                                warning?.type === 'error' && "border-destructive focus-visible:ring-destructive"
+                              )}
+                            />
+                            {item.unit && (
+                              <div className="text-xs text-muted-foreground">{item.unit}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Unit Cost</div>
+                          <div className="text-sm font-medium">
+                            {item.unitCost ? `₱${formatCurrency(item.unitCost)}` : '-'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Line Total</div>
+                          <div className="text-sm font-semibold">
+                            {total > 0 ? `₱${formatCurrency(total)}` : '-'}
+                          </div>
+                        </div>
+                      </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
               
               {calculateTotal() > 0 && (

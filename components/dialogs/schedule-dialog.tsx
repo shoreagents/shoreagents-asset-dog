@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { format } from 'date-fns'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery } from '@tanstack/react-query'
 import { Plus, Clock, QrCode, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -35,6 +34,8 @@ import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { scheduleSchema, type ScheduleFormData } from '@/lib/validations/schedule'
+import { useAssets, useAsset } from '@/hooks/use-assets'
+import type { Asset } from '@/hooks/use-assets'
 
 export const scheduleTypeLabels: Record<string, string> = {
   maintenance: 'Maintenance',
@@ -47,20 +48,56 @@ export const scheduleTypeLabels: Record<string, string> = {
   checkout: 'Check Out',
 }
 
-interface Asset {
-  id: string
-  assetTagId: string
-  description: string
-  status?: string
-  category?: {
-    id: string
-    name: string
-  } | null
-  subCategory?: {
-    id: string
-    name: string
-  } | null
+// Helper function to get status badge with colors (matching the pattern used in assets pages)
+const getStatusBadge = (status: string | null | undefined) => {
+  if (!status) return null
+  const statusLC = status.toLowerCase()
+  let statusVariant: 'default' | 'secondary' | 'destructive' | 'outline' = 'outline'
+  let statusColor = ''
+  
+  if (statusLC === 'active' || statusLC === 'available') {
+    statusVariant = 'default'
+    statusColor = 'bg-green-500'
+  } else if (statusLC === 'checked out' || statusLC === 'in use') {
+    statusVariant = 'destructive'
+    statusColor = ''
+  } else if (statusLC === 'leased') {
+    statusVariant = 'secondary'
+    statusColor = 'bg-yellow-500'
+  } else if (statusLC === 'inactive' || statusLC === 'unavailable') {
+    statusVariant = 'secondary'
+    statusColor = 'bg-gray-500'
+  } else if (statusLC === 'maintenance' || statusLC === 'repair') {
+    statusColor = 'bg-red-600 text-white'
+  } else if (statusLC === 'lost' || statusLC === 'missing') {
+    statusVariant = 'destructive'
+    statusColor = 'bg-orange-500'
+  } else if (statusLC === 'disposed' || statusLC === 'disposal') {
+    statusVariant = 'secondary'
+    statusColor = 'bg-purple-500'
+  } else if (statusLC === 'reserved') {
+    statusVariant = 'secondary'
+    statusColor = 'bg-yellow-500'
+  } else if (statusLC === 'sold') {
+    statusVariant = 'default'
+    statusColor = 'bg-teal-500 text-white border-0'
+  } else if (statusLC === 'donated') {
+    statusVariant = 'default'
+    statusColor = 'bg-blue-500 text-white border-0'
+  } else if (statusLC === 'scrapped') {
+    statusVariant = 'default'
+    statusColor = 'bg-orange-500 text-white border-0'
+  } else if (statusLC === 'lost/missing' || statusLC.replace(/\s+/g, '').replace('/', '').toLowerCase() === 'lostmissing') {
+    statusVariant = 'default'
+    statusColor = 'bg-yellow-500 text-white border-0'
+  } else if (statusLC === 'destroyed') {
+    statusVariant = 'default'
+    statusColor = 'bg-red-500 text-white border-0'
+  }
+  
+  return <Badge variant={statusVariant} className={statusColor}>{status}</Badge>
 }
+
 
 interface ScheduleDialogProps {
   open: boolean
@@ -125,46 +162,46 @@ export function ScheduleDialog({
     }
   }, [assetIdInput])
 
-  // Fetch asset suggestions based on debounced input
-  const { data: assetSuggestions = [], isLoading: isLoadingSuggestions } = useQuery<Asset[]>({
-    queryKey: ['asset-suggestions-schedule', debouncedAssetIdInput.trim(), selectedAsset?.id],
-    queryFn: async () => {
-      const searchTerm = debouncedAssetIdInput.trim()
-      
-      // Only fetch 10 items since we only show 10
-      // Use pageSize=10 to reduce data transfer
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(searchTerm)}&pageSize=10`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch assets')
-      }
-      const data = await response.json()
-      const assets = data.assets as Asset[]
-      
-      // Filter out already selected asset
-      const filtered = selectedAsset
-        ? assets.filter(a => a.id.toLowerCase() !== selectedAsset.id.toLowerCase())
-        : assets
-      
-      return filtered
-    },
-    enabled: showSuggestions && debouncedAssetIdInput.trim().length >= 0, // Allow empty search to show recent assets
-    staleTime: 1000, // Cache for 1 second
-    placeholderData: (previousData) => previousData, // Show previous results while loading
-  })
+  // Fetch asset suggestions using the useAssets hook
+  const searchTerm = debouncedAssetIdInput.trim()
+  const { data: assetsData, isLoading: isLoadingSuggestions } = useAssets(
+    showSuggestions, // enabled
+    searchTerm || undefined, // search
+    undefined, // category
+    undefined, // status
+    1, // page
+    10, // pageSize
+    false, // withMaintenance
+    false, // includeDeleted
+    undefined, // searchFields
+    false, // statusesOnly
+    false // summaryOnly
+  )
 
-  // Asset lookup by ID - optimized to fetch only 10 items
+  // Filter out already selected asset and extract assets array
+  const assetSuggestions = useMemo(() => {
+    const assets = assetsData?.assets || []
+    return selectedAsset
+      ? assets.filter((a: Asset) => a.id.toLowerCase() !== selectedAsset.id.toLowerCase())
+      : assets
+  }, [assetsData?.assets, selectedAsset])
+
+  // Asset lookup by assetTagId - check in suggestions first, then search if needed
   const lookupAsset = async (assetTagId: string): Promise<Asset | null> => {
     try {
-      const response = await fetch(`/api/assets?search=${encodeURIComponent(assetTagId)}&pageSize=10`)
-      const data = await response.json()
-      const assets = data.assets as Asset[]
-      
-      // Find exact match by assetTagId (case-insensitive)
-      const asset = assets.find(
-        (a) => a.assetTagId.toLowerCase() === assetTagId.toLowerCase()
+      // First check if it's in the current suggestions
+      const asset = assetSuggestions.find(
+        (a: Asset) => a.assetTagId.toLowerCase() === assetTagId.toLowerCase()
       )
       
-      return asset || null
+      if (asset) {
+        return asset
+      }
+      
+      // If not in suggestions, the asset might not exist or might be on a different page
+      // The useAssets hook will handle fetching, but we need to search specifically
+      // For now, return null and let the error handling show a message
+      return null
     } catch (error) {
       console.error('Error looking up asset:', error)
       return null
@@ -328,6 +365,7 @@ export function ScheduleDialog({
           setSelectedAsset(null)
         }
       } else {
+        // Reset to default values when creating (no initialData)
         form.reset({
           assetId: defaultAssetId || '',
           scheduleType: 'maintenance',
@@ -338,7 +376,7 @@ export function ScheduleDialog({
           assignedTo: '',
           location: '',
           employeeId: '',
-        })
+        }, { keepDefaultValues: false })
         
         // If defaultAssetId is provided, lookup and set the asset
         if (defaultAssetId) {
@@ -357,11 +395,25 @@ export function ScheduleDialog({
       setShowSuggestions(false)
       setSelectedSuggestionIndex(-1)
     } else {
+      // Reset everything when dialog closes
+      form.reset({
+        assetId: '',
+        scheduleType: 'maintenance',
+        scheduledDate: new Date(),
+        scheduledTime: '',
+        title: '',
+        notes: '',
+        assignedTo: '',
+        location: '',
+        employeeId: '',
+      }, { keepDefaultValues: false })
       setSelectedAsset(null)
       setAssetIdInput('')
       setShowSuggestions(false)
+      setSelectedSuggestionIndex(-1)
     }
-  }, [open, initialData, defaultDate, defaultAssetId, form])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialData, defaultDate, defaultAssetId])
 
   const handleSubmit = async (data: ScheduleFormData) => {
     // Zod validation will handle assetId validation
@@ -385,7 +437,22 @@ export function ScheduleDialog({
     if (!isLoading) {
       onOpenChange(newOpen)
       if (!newOpen) {
-        form.reset()
+        // Reset form to default values when closing
+        form.reset({
+          assetId: '',
+          scheduleType: 'maintenance',
+          scheduledDate: new Date(),
+          scheduledTime: '',
+          title: '',
+          notes: '',
+          assignedTo: '',
+          location: '',
+          employeeId: '',
+        }, { keepDefaultValues: false })
+        setSelectedAsset(null)
+        setAssetIdInput('')
+        setShowSuggestions(false)
+        setSelectedSuggestionIndex(-1)
       }
     }
   }
@@ -444,14 +511,14 @@ export function ScheduleDialog({
                       {showSuggestions && (
                         <div
                           ref={suggestionRef}
-                          className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto"
+                          className="absolute z-50 w-full mt-1 bg-popover/80 dark:bg-popover/80 bg-clip-padding! backdrop-filter! backdrop-blur-md! border shadow-2xl rounded-md max-h-60 overflow-auto"
                         >
                           {isLoadingSuggestions ? (
                             <div className="flex items-center justify-center py-4">
                               <Spinner className="h-4 w-4" />
                             </div>
                           ) : assetSuggestions.length > 0 ? (
-                            assetSuggestions.map((asset, index) => (
+                            assetSuggestions.map((asset: Asset, index: number) => (
                               <motion.div
                                 key={asset.id}
                                 initial={{ opacity: 0, x: -10 }}
@@ -461,8 +528,8 @@ export function ScheduleDialog({
                                 onMouseEnter={() => setSelectedSuggestionIndex(index)}
                                 className={cn(
                                   'px-4 py-3 cursor-pointer transition-colors',
-                                  'hover:bg-accent',
-                                  selectedSuggestionIndex === index && 'bg-accent'
+                                  'hover:bg-gray-400/20 hover:bg-clip-padding hover:backdrop-filter hover:backdrop-blur-sm',
+                                  selectedSuggestionIndex === index && 'bg-gray-400/20 bg-clip-padding backdrop-filter backdrop-blur-sm'
                                 )}
                               >
                                 <div className="flex items-center justify-between">
@@ -473,11 +540,7 @@ export function ScheduleDialog({
                                       {asset.subCategory?.name && ` - ${asset.subCategory.name}`}
                                     </div>
                                   </div>
-                                  {asset.status && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {asset.status}
-                                    </Badge>
-                                  )}
+                                  {getStatusBadge(asset.status)}
                                 </div>
                               </motion.div>
                             ))
@@ -513,11 +576,7 @@ export function ScheduleDialog({
                           <span className="font-mono font-semibold text-sm">
                             {selectedAsset.assetTagId}
                           </span>
-                          {selectedAsset.status && (
-                            <Badge variant="outline" className="text-xs">
-                              {selectedAsset.status}
-                            </Badge>
-                          )}
+                          {getStatusBadge(selectedAsset.status)}
                         </div>
                         <p className="text-xs text-muted-foreground truncate max-w-[300px]">
                           {selectedAsset.description || 'No description'}

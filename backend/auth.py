@@ -8,6 +8,7 @@ import json
 import base64
 import logging
 from urllib.parse import unquote
+from typing import Optional
 import httpx
 from dotenv import load_dotenv
 
@@ -133,7 +134,7 @@ async def verify_auth(request: Request) -> dict:
         )
 
 
-def _extract_token_from_cookie(auth_token_cookie: str) -> str | None:
+def _extract_token_from_cookie(auth_token_cookie: str) -> Optional[str]:
     """Extract access token from Supabase cookie"""
     access_token = None
     

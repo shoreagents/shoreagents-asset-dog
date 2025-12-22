@@ -27,14 +27,14 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 | Sites | 3 | 2 | 1 |
 | Setup | 4 | 1 | 3 |
 | Inventory | 9 | 0 | 9 |
-| Reports | 21 | 0 | 21 |
+| Reports | 21 | 20 | 1 |
 | Forms | 4 | 0 | 4 |
 | Users | 3 | 0 | 3 |
 | Settings | 2 | 0 | 2 |
 | Cron Jobs | 3 | 0 | 3 |
-| File History | 4 | 0 | 4 |
+| File History | 4 | 4 | 0 |
 | Other | 3 | 0 | 3 |
-| **TOTAL** | **113** | **38** | **75** |
+| **TOTAL** | **113** | **62** | **51** |
 
 ---
 
@@ -48,6 +48,7 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 | `use-employees.ts` | ✅ Yes | Employees page, Checkout |
 | `use-locations.ts` | ✅ Yes | Setup Locations, Asset forms |
 | `use-sites.ts` | ✅ Yes | Setup Sites, Asset forms |
+| `use-file-history.ts` | ✅ Yes | Import page, Export page |
 | `use-company-info.ts` | ✅ Yes | Setup Company Info |
 | `use-user-profile.ts` | ✅ Yes | Account, Settings |
 | `use-permissions.ts` | ❌ No (uses /api/auth/me) | All protected pages |
@@ -273,27 +274,27 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 
 | Route | Method(s) | Status | FastAPI Router | Pages/Components Using | Integration |
 |-------|-----------|--------|----------------|----------------------|-------------|
-| `/api/reports/assets/summary` | GET | ❌ | - | `app/reports/assets/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/assets/export` | GET | ❌ | - | `app/reports/assets/page.tsx` | 📄 Direct (Next.js API) |
+| `/api/reports/assets/summary` | GET | ✅ | `routers/reports.py` | `app/reports/assets/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/assets/export` | GET | ✅ | `routers/reports.py` | `app/reports/assets/page.tsx` | 🔄 Proxy (FastAPI) |
 | `/api/reports/assets/pdf` | GET | ❌ | - | `app/reports/reservation/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/audit` | GET | ❌ | - | `app/reports/audit/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/audit/export` | GET | ❌ | - | `app/reports/audit/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/checkout` | GET | ❌ | - | `app/reports/checkout/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/checkout/export` | GET | ❌ | - | `app/reports/checkout/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/depreciation` | GET | ❌ | - | `app/reports/depreciation/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/depreciation/export` | GET | ❌ | - | `app/reports/depreciation/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/lease` | GET | ❌ | - | `app/reports/lease/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/lease/export` | GET | ❌ | - | `app/reports/lease/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/location` | GET | ❌ | - | `app/reports/location/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/location/export` | GET | ❌ | - | `app/reports/location/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/maintenance` | GET | ❌ | - | `app/reports/maintenance/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/maintenance/export` | GET | ❌ | - | `app/reports/maintenance/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/reservation` | GET | ❌ | - | `app/reports/reservation/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/reservation/export` | GET | ❌ | - | `app/reports/reservation/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/transaction` | GET | ❌ | - | `app/reports/transaction/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/transaction/export` | GET | ❌ | - | `app/reports/transaction/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/automated` | GET, POST | ❌ | - | `app/reports/automated-reports/page.tsx` | 📄 Direct (Next.js API) |
-| `/api/reports/automated/[id]` | GET, PUT, DELETE | ❌ | - | `app/reports/automated-reports/page.tsx` | 📄 Direct (Next.js API) |
+| `/api/reports/audit` | GET | ✅ | `routers/reports_audit.py` | `app/reports/audit/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/audit/export` | GET | ✅ | `routers/reports_audit.py` | `app/reports/audit/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/checkout` | GET | ✅ | `routers/reports_checkout.py` | `app/reports/checkout/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/checkout/export` | GET | ✅ | `routers/reports_checkout.py` | `app/reports/checkout/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/depreciation` | GET | ✅ | `routers/reports_depreciation.py` | `app/reports/depreciation/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/depreciation/export` | GET | ✅ | `routers/reports_depreciation.py` | `app/reports/depreciation/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/lease` | GET | ✅ | `routers/reports_lease.py` | `app/reports/lease/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/lease/export` | GET | ✅ | `routers/reports_lease.py` | `app/reports/lease/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/location` | GET | ✅ | `routers/reports_location.py` | `app/reports/location/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/location/export` | GET | ✅ | `routers/reports_location.py` | `app/reports/location/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/maintenance` | GET | ✅ | `routers/reports_maintenance.py` | `app/reports/maintenance/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/maintenance/export` | GET | ✅ | `routers/reports_maintenance.py` | `app/reports/maintenance/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/reservation` | GET | ✅ | `routers/reports_reservation.py` | `app/reports/reservation/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/reservation/export` | GET | ✅ | `routers/reports_reservation.py` | `app/reports/reservation/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/transaction` | GET | ✅ | `routers/reports_transaction.py` | `app/reports/transaction/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/transaction/export` | GET | ✅ | `routers/reports_transaction.py` | `app/reports/transaction/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/automated` | GET, POST | ✅ | `routers/reports_automated.py` | `app/reports/automated-reports/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/reports/automated/[id]` | GET, PUT, DELETE | ✅ | `routers/reports_automated.py` | `app/reports/automated-reports/page.tsx` | 🔄 Proxy (FastAPI) |
 
 ---
 
@@ -332,10 +333,10 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 
 | Route | Method(s) | Status | FastAPI Router | Pages/Components Using | Integration |
 |-------|-----------|--------|----------------|----------------------|-------------|
-| `/api/file-history` | GET | ❌ | - | File history management | 📄 Direct (Next.js API) |
-| `/api/file-history/upload` | POST | ❌ | - | File history management | 📄 Direct (Next.js API) |
-| `/api/file-history/[id]` | GET, DELETE | ❌ | - | File history management | 📄 Direct (Next.js API) |
-| `/api/file-history/[id]/download` | GET | ❌ | - | File history management | 📄 Direct (Next.js API) |
+| `/api/file-history` | GET, POST | ✅ | `routers/file_history.py` | `app/tools/import/page.tsx`, `app/tools/export/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/file-history/upload` | POST | ✅ | `routers/file_history.py` | `app/tools/import/page.tsx`, `app/tools/export/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/file-history/[id]` | GET, DELETE | ✅ | `routers/file_history.py` | `app/tools/import/page.tsx`, `app/tools/export/page.tsx` | 🔄 Proxy (FastAPI) |
+| `/api/file-history/[id]/download` | GET | ✅ | `routers/file_history.py` | `app/tools/export/page.tsx` | 🔄 Proxy (FastAPI) |
 
 ---
 
@@ -353,7 +354,7 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 
 | Route | Method(s) | Status | FastAPI Router | Pages/Components Using | Integration |
 |-------|-----------|--------|----------------|----------------------|-------------|
-| `/api/activities` | GET | ❌ | - | `components/dashboard/activity-feed.tsx` | 📄 Direct (Next.js API) |
+| `/api/activities` | GET | ❌ | - | Not used (activities come from `/api/dashboard/stats`) | N/A (Unused endpoint) |
 | `/api/countries` | GET | ❌ | - | `components/fields/country-select-field.tsx` | 📄 Direct (Next.js API) |
 | `/api/health` | GET | ❌ | - | Health checks | 📄 Direct (Next.js API) |
 
@@ -389,7 +390,7 @@ This document tracks the conversion status of Next.js API routes to FastAPI endp
 | Page | APIs Used |
 |------|----------|
 | `app/inventory/*` | All inventory APIs |
-| `app/reports/*` | All report APIs |
+| `app/reports/*` | Most report APIs (assets/summary, assets/export, audit, audit/export, checkout, checkout/export, depreciation, depreciation/export, lease, lease/export, location, location/export, maintenance, maintenance/export, reservation, reservation/export, transaction, transaction/export, automated, and automated/[id] converted) |
 | `app/forms/*` | All form APIs |
 | `app/settings/users/page.tsx` | /api/users |
 | `app/settings/asset-events/page.tsx` | /api/settings/asset-events |

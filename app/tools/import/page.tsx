@@ -1,9 +1,17 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { usePermissions } from '@/hooks/use-permissions'
+import { 
+  useFileHistory, 
+  useUploadFile, 
+  useCreateFileHistory, 
+  useDeleteFileHistory,
+  downloadFileHistory,
+  type FileHistory 
+} from '@/hooks/use-file-history'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Upload, History, Download, MoreHorizontal, Trash2, RefreshCw, CheckCircle2, XCircle, AlertCircle, FileUp, FileType, Info, Package } from 'lucide-react'
@@ -27,31 +35,6 @@ import { cn } from '@/lib/utils'
 import { useMobileDock } from '@/components/mobile-dock-provider'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { is } from 'date-fns/locale'
-
-interface FileHistory {
-  id: string
-  operationType: 'import' | 'export'
-  fileName: string
-  fileSize: number | null
-  recordsProcessed: number | null
-  recordsCreated: number | null
-  recordsSkipped: number | null
-  recordsFailed: number | null
-  status: 'success' | 'failed' | 'partial'
-  userId: string
-  userEmail: string | null
-  createdAt: string
-}
-
-interface ImportHistoryResponse {
-  fileHistory: FileHistory[]
-  pagination: {
-    page: number
-    pageSize: number
-    total: number
-    totalPages: number
-  }
-}
 
 const ALL_COLUMNS = [
   { key: 'assetTag', label: 'Asset Tag ID' },
@@ -97,8 +80,28 @@ const ALL_COLUMNS = [
 ]
 
 async function fetchImportHistory(page: number = 1) {
-  const response = await fetch(`/api/file-history?operationType=import&page=${page}&pageSize=10`)
-  if (!response.ok) throw new Error('Failed to fetch history')
+  const baseUrl = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true' 
+    ? (process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000')
+    : ''
+  const url = `${baseUrl}/api/file-history?operationType=import&page=${page}&pageSize=10`
+  
+  // Get auth token
+  const { createClient } = await import('@/lib/supabase-client')
+  const supabase = createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {}
+  if (baseUrl && session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers,
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.detail || error.error || 'Failed to fetch history')
+  }
   return response.json()
 }
 
@@ -125,16 +128,18 @@ export default function ImportPage() {
     isInitialMount.current = false
   }, [])
 
-  // Fetch import history
-  const { data: historyData, isLoading: historyLoading, isFetching: isHistoryFetching, refetch: refetchHistory } = useQuery<ImportHistoryResponse>({
-    queryKey: ['importHistory', historyPage],
-    queryFn: () => fetchImportHistory(historyPage),
-    enabled: !permissionsLoading && canViewAssets,
-    staleTime: 30000, // Cache for 30 seconds
-    refetchOnWindowFocus: false, // Don't refetch on window focus
-    refetchOnMount: false, // Don't refetch on mount if data exists
-    placeholderData: (previousData) => previousData,
-  })
+  // Fetch import history using hook
+  const { 
+    data: historyData, 
+    isLoading: historyLoading, 
+    isFetching: isHistoryFetching, 
+    refetch: refetchHistory 
+  } = useFileHistory('import', historyPage, 10, !permissionsLoading && canViewAssets)
+  
+  // File history mutations
+  const uploadFileMutation = useUploadFile()
+  const createFileHistoryMutation = useCreateFileHistory()
+  const deleteFileHistoryMutation = useDeleteFileHistory()
 
   // Set mobile dock content
   useEffect(() => {
@@ -181,26 +186,6 @@ export default function ImportPage() {
     }
   }, [isMobile, setDockContent, canManageImport, permissionsLoading, canViewAssets, isHistoryFetching, historyLoading, refetchHistory])
 
-  // Delete file history mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (historyId: string) => {
-      const response = await fetch(`/api/file-history/${historyId}`, {
-        method: 'DELETE',
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to delete import record')
-      }
-      return response.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['importHistory'] })
-      toast.success('Import record deleted successfully')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to delete import record')
-    },
-  })
 
   const handleDelete = (history: FileHistory) => {
     if (!canManageImport) {
@@ -213,7 +198,10 @@ export default function ImportPage() {
 
   const confirmDelete = () => {
     if (selectedHistory) {
-      deleteMutation.mutate(selectedHistory.id)
+      deleteFileHistoryMutation.mutate({ 
+        historyId: selectedHistory.id, 
+        operationType: 'import' 
+      })
       setIsDeleteDialogOpen(false)
     }
   }
@@ -390,20 +378,14 @@ export default function ImportPage() {
     
     try {
       // Upload file to Supabase storage first
-      const uploadFormData = new FormData()
-      uploadFormData.append('file', file)
-      uploadFormData.append('operationType', 'import')
-      
-      const uploadResponse = await fetch('/api/file-history/upload', {
-        method: 'POST',
-        body: uploadFormData,
-      })
-      
-      if (uploadResponse.ok) {
-        const uploadData = await uploadResponse.json()
-        filePath = uploadData.filePath
-      } else {
-        console.warn('Failed to upload file to storage, continuing with import...')
+      try {
+        const uploadResult = await uploadFileMutation.mutateAsync({ 
+          file, 
+          operationType: 'import' 
+        })
+        filePath = uploadResult.filePath
+      } catch (uploadError) {
+        console.warn('Failed to upload file to storage, continuing with import...', uploadError)
       }
       
       // Read file for processing
@@ -641,28 +623,22 @@ export default function ImportPage() {
       
       // Save file history
       try {
-        await fetch('/api/file-history', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        await createFileHistoryMutation.mutateAsync({
+          operationType: 'import',
+          fileName: file.name,
+          filePath: filePath,
+          fileSize: file.size,
+          mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          recordsProcessed: totalAssets,
+          recordsCreated: createdCount,
+          recordsSkipped: skippedCount,
+          recordsFailed: failedCount,
+          status: failedCount > 0 ? 'partial' : (createdCount > 0 ? 'success' : 'failed'),
+          errorMessage: failedCount > 0 ? `${failedCount} record(s) failed to import` : null,
+          metadata: {
+            duplicateRowsInFile: duplicateTags?.length || 0,
+            totalBatches: batches.length,
           },
-          body: JSON.stringify({
-            operationType: 'import',
-            fileName: file.name,
-            filePath: filePath,
-            fileSize: file.size,
-            mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            recordsProcessed: totalAssets,
-            recordsCreated: createdCount,
-            recordsSkipped: skippedCount,
-            recordsFailed: failedCount,
-            status: failedCount > 0 ? 'partial' : (createdCount > 0 ? 'success' : 'failed'),
-            errorMessage: failedCount > 0 ? `${failedCount} record(s) failed to import` : null,
-            metadata: JSON.stringify({
-              duplicateRowsInFile: duplicateTags?.length || 0,
-              totalBatches: batches.length,
-            }),
-          }),
         })
       } catch {
         // Silently fail history save, don't show toast for this
@@ -728,7 +704,7 @@ export default function ImportPage() {
       
       // Refresh assets and history
       queryClient.invalidateQueries({ queryKey: ['assets'] })
-      queryClient.invalidateQueries({ queryKey: ['importHistory'] })
+      queryClient.invalidateQueries({ queryKey: ['fileHistory', 'import'] })
       
       // Reset file input
       if (fileInputRef.current) {
@@ -742,20 +718,14 @@ export default function ImportPage() {
       
       // Save failed file history
       try {
-        await fetch('/api/file-history', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            operationType: 'import',
-            fileName: file.name,
-            filePath: filePath,
-            fileSize: file.size,
-            mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            status: 'failed',
-            errorMessage: errorMessage,
-          }),
+        await createFileHistoryMutation.mutateAsync({
+          operationType: 'import',
+          fileName: file.name,
+          filePath: filePath,
+          fileSize: file.size,
+          mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          status: 'failed',
+          errorMessage: errorMessage,
         })
       } catch {
         // Silently fail history save, don't show toast for this
@@ -989,8 +959,8 @@ export default function ImportPage() {
 
               {permissionsLoading || (historyLoading && !historyData) ? (
                 <div className="flex flex-col items-center justify-center h-[400px] text-center gap-3">
-                  <Spinner className="h-8 w-8 text-primary" />
-                  <p className="text-sm text-muted-foreground animate-pulse">Loading history...</p>
+                  <Spinner className="h-5 w-5 " />
+                  <p className="text-sm text-muted-foreground">Loading history...</p>
                 </div>
               ) : !historyData?.fileHistory || historyData.fileHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-[400px] text-center text-muted-foreground gap-2 p-6">
@@ -1095,7 +1065,7 @@ export default function ImportPage() {
                                     <DropdownMenuContent align="end">
                                       <DropdownMenuItem
                                         onClick={() => handleDelete(history)}
-                                        disabled={deleteMutation.isPending}
+                                        disabled={deleteFileHistoryMutation.isPending}
                                         className="text-destructive focus:text-destructive cursor-pointer"
                                       >
                                         <Trash2 className="mr-2 h-4 w-4" />
@@ -1174,7 +1144,7 @@ export default function ImportPage() {
             ? `Are you sure you want to delete "${selectedHistory.fileName}"? This will permanently remove this import. This action cannot be undone.`
             : 'Are you sure you want to delete this import? This will permanently remove it. This action cannot be undone.'
         }
-        isLoading={deleteMutation.isPending}
+        isLoading={deleteFileHistoryMutation.isPending}
       />
     </motion.div>
   )

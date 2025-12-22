@@ -1,9 +1,17 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useAssets, Asset } from '@/hooks/use-assets'
+import { 
+  useFileHistory, 
+  useUploadFile, 
+  useCreateFileHistory, 
+  useDeleteFileHistory,
+  downloadFileHistory,
+  type FileHistory 
+} from '@/hooks/use-file-history'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Download, History, FileDown, Trash2, MoreHorizontal, Package, RefreshCw, FileSpreadsheet, Layers, Database, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
@@ -209,36 +217,18 @@ export default function ExportPage() {
   const [isManualRefresh, setIsManualRefresh] = useState(false)
   const isInitialMount = useRef(true)
 
-  interface FileHistory {
-    id: string
-    operationType: 'import' | 'export'
-    fileName: string
-    filePath: string | null
-    fileSize: number | null
-    recordsExported: number | null
-    fieldsExported: number | null
-    status: 'success' | 'failed' | 'partial'
-    userId: string
-    userEmail: string | null
-    createdAt: string
-  }
-
-  async function fetchExportHistory(page: number = 1) {
-    const response = await fetch(`/api/file-history?operationType=export&page=${page}&pageSize=10`)
-    if (!response.ok) throw new Error('Failed to fetch history')
-    return response.json()
-  }
-
-  // Fetch export history
-  const { data: historyData, isLoading: historyLoading, isFetching: isHistoryFetching, refetch: refetchHistory } = useQuery({
-    queryKey: ['exportHistory', historyPage],
-    queryFn: () => fetchExportHistory(historyPage),
-    enabled: !permissionsLoading && canViewAssets,
-    staleTime: 30000, // Cache for 30 seconds
-    refetchOnWindowFocus: false, // Don't refetch on window focus
-    refetchOnMount: false, // Don't refetch on mount if data exists
-    placeholderData: (previousData: { fileHistory: FileHistory[], pagination: { total: number, page: number, pageSize: number, totalPages: number } } | undefined) => previousData,
-  })
+  // Fetch export history using hook
+  const { 
+    data: historyData, 
+    isLoading: historyLoading, 
+    isFetching: isHistoryFetching, 
+    refetch: refetchHistory 
+  } = useFileHistory('export', historyPage, 10, !permissionsLoading && canViewAssets)
+  
+  // File history mutations
+  const uploadFileMutation = useUploadFile()
+  const createFileHistoryMutation = useCreateFileHistory()
+  const deleteFileHistoryMutation = useDeleteFileHistory()
 
   // Reset manual refresh flag after successful fetch
   useEffect(() => {
@@ -259,26 +249,6 @@ export default function ExportPage() {
 
   const queryClient = useQueryClient()
 
-  // Delete file history mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (historyId: string) => {
-      const response = await fetch(`/api/file-history/${historyId}`, {
-        method: 'DELETE',
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to delete export record')
-      }
-      return response.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['exportHistory'] })
-      toast.success('Export record deleted successfully')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to delete export record')
-    },
-  })
 
   const handleDelete = (history: FileHistory) => {
     setSelectedHistory(history)
@@ -287,7 +257,10 @@ export default function ExportPage() {
 
   const confirmDelete = () => {
     if (selectedHistory) {
-      deleteMutation.mutate(selectedHistory.id)
+      deleteFileHistoryMutation.mutate({ 
+        historyId: selectedHistory.id, 
+        operationType: 'export' 
+      })
       setIsDeleteDialogOpen(false)
     }
   }
@@ -537,20 +510,14 @@ export default function ExportPage() {
       // Upload file to Supabase storage
       let filePath: string | null = null
       try {
-        const uploadFormData = new FormData()
-        uploadFormData.append('file', file)
-        uploadFormData.append('operationType', 'export')
-        
-        const uploadResponse = await fetch('/api/file-history/upload', {
-          method: 'POST',
-          body: uploadFormData,
-        })
-        
-        if (uploadResponse.ok) {
-          const uploadData = await uploadResponse.json()
-          filePath = uploadData.filePath
-        } else {
-          console.warn('Failed to upload file to storage, continuing...')
+        try {
+          const uploadResult = await uploadFileMutation.mutateAsync({ 
+            file, 
+            operationType: 'export' 
+          })
+          filePath = uploadResult.filePath
+        } catch (uploadError) {
+          console.warn('Failed to upload file to storage, continuing...', uploadError)
         }
       } catch (uploadError) {
         console.error('Upload error:', uploadError)
@@ -558,28 +525,22 @@ export default function ExportPage() {
       
       // Save file history
       try {
-        await fetch('/api/file-history', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            operationType: 'export',
-            fileName: fileName,
-            filePath: filePath,
-            fileSize: excelBuffer.length,
-            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            recordsExported: assetsToExport.length,
-            fieldsExported: fieldsToExport.length,
-            status: 'success',
-          }),
+        await createFileHistoryMutation.mutateAsync({
+          operationType: 'export',
+          fileName: fileName,
+          filePath: filePath,
+          fileSize: excelBuffer.length,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          recordsExported: assetsToExport.length,
+          fieldsExported: fieldsToExport.length,
+          status: 'success',
         })
       } catch (historyError) {
         console.error('Failed to save file history:', historyError)
       }
       
       // Refresh history
-      queryClient.invalidateQueries({ queryKey: ['exportHistory'] })
+      queryClient.invalidateQueries({ queryKey: ['fileHistory', 'export'] })
       
       toast.success(`Successfully exported ${assetsToExport.length} asset(s) with ${selectedExportFields.size} field(s)`)
       setIsExportDialogOpen(false)
@@ -588,17 +549,11 @@ export default function ExportPage() {
       
       // Save failed file history
       try {
-        await fetch('/api/file-history', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            operationType: 'export',
-            fileName: `assets-${new Date().toISOString().split('T')[0]}.xlsx`,
-            status: 'failed',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error occurred',
-          }),
+        await createFileHistoryMutation.mutateAsync({
+          operationType: 'export',
+          fileName: `assets-${new Date().toISOString().split('T')[0]}.xlsx`,
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error occurred',
         })
       } catch (historyError) {
         console.error('Failed to save file history:', historyError)
@@ -852,17 +807,16 @@ export default function ExportPage() {
                               <DropdownMenuContent align="end">
                                 {history.status === 'success' && (
                                   <DropdownMenuItem
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (!canManageExport) {
                                         toast.error('You do not have permission to download export files')
                                         return
                                       }
-                                      const link = document.createElement('a')
-                                      link.href = `/api/file-history/${history.id}/download`
-                                      link.download = history.fileName
-                                      document.body.appendChild(link)
-                                      link.click()
-                                      document.body.removeChild(link)
+                                      try {
+                                        await downloadFileHistory(history.id, history.fileName)
+                                      } catch (error) {
+                                        // Error already handled in downloadFileHistory
+                                      }
                                     }}
                                     className="cursor-pointer"
                                   >
@@ -878,7 +832,7 @@ export default function ExportPage() {
                                     }
                                     handleDelete(history)
                                   }}
-                                  disabled={deleteMutation.isPending}
+                                        disabled={deleteFileHistoryMutation.isPending}
                                   className="text-destructive focus:text-destructive cursor-pointer"
                                 >
                                   <Trash2 className="mr-2 h-4 w-4" />
@@ -943,7 +897,7 @@ export default function ExportPage() {
             ? `Are you sure you want to delete "${selectedHistory.fileName}"? This will permanently remove this export. This action cannot be undone.`
             : 'Are you sure you want to delete this export? This will permanently remove it. This action cannot be undone.'
         }
-        isLoading={deleteMutation.isPending}
+        isLoading={deleteFileHistoryMutation.isPending}
       />
     </motion.div>
   )

@@ -44,6 +44,7 @@ import {
 import { ExportDialog } from '@/components/dialogs/export-dialog'
 import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
+import { createClient } from '@/lib/supabase-client'
 
 type ReportType = 'summary' | 'status' | 'category'
 
@@ -109,6 +110,28 @@ export default function AssetReportsPage() {
     return new Map(categoriesData.map((cat: { id: string; name: string }) => [cat.id, cat.name]))
   }, [categoriesData])
 
+  // Helper functions for FastAPI
+  const getApiBaseUrl = () => {
+    const useFastAPI = process.env.NEXT_PUBLIC_USE_FASTAPI === 'true'
+    const fastApiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'
+    return useFastAPI ? fastApiUrl : ''
+  }
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      const supabase = createClient()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Failed to get auth token:', error)
+        return null
+      }
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   // Build query string from filters
   const queryString = useMemo(() => {
     const params = new URLSearchParams()
@@ -126,9 +149,22 @@ export default function AssetReportsPage() {
   const { data: reportData, isLoading, isFetching, error, refetch } = useQuery<ReportData>({
     queryKey: ['asset-report', 'summary', queryString],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/assets/summary?${queryString}`)
+      const baseUrl = getApiBaseUrl()
+      const url = `${baseUrl}/api/reports/assets/summary?${queryString}`
+      
+      const token = await getAuthToken()
+      const headers: HeadersInit = {}
+      if (baseUrl && token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers,
+      })
       if (!response.ok) {
-        throw new Error('Failed to fetch report data')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || error.error || 'Failed to fetch report data')
       }
       return response.json()
     },
@@ -189,6 +225,7 @@ export default function AssetReportsPage() {
   }
 
   const handleDataExport = async (format: 'csv' | 'excel') => {
+    const baseUrl = getApiBaseUrl()
     const params = new URLSearchParams()
     params.set('format', format)
     params.set('reportType', reportType)
@@ -204,20 +241,32 @@ export default function AssetReportsPage() {
       params.set('includeAssetList', includeAssetList.toString())
     }
 
-    const response = await fetch(`/api/reports/assets/export?${params.toString()}`)
+    const url = `${baseUrl}/api/reports/assets/export?${params.toString()}`
+    
+    const token = await getAuthToken()
+    const headers: HeadersInit = {}
+    if (baseUrl && token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers,
+    })
     
     if (!response.ok) {
-      throw new Error('Export failed')
+      const error = await response.json().catch(() => ({}))
+      throw new Error(error.detail || error.error || 'Export failed')
     }
 
     const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
+    const downloadUrl = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = downloadUrl
     a.download = `asset-report-${reportType}-${new Date().toISOString().split('T')[0]}.${format === 'csv' ? 'csv' : 'xlsx'}`
     document.body.appendChild(a)
     a.click()
-    window.URL.revokeObjectURL(url)
+    window.URL.revokeObjectURL(downloadUrl)
     document.body.removeChild(a)
 
     toast.success(`Report exported successfully as ${format.toUpperCase()}`)
@@ -233,6 +282,7 @@ export default function AssetReportsPage() {
     let allAssets: typeof reportData.recentAssets | undefined = undefined
     if (reportType === 'summary' && includeAssetList) {
       try {
+        const baseUrl = getApiBaseUrl()
         const params = new URLSearchParams()
         params.set('includeAllAssets', 'true') // Fetch all assets instead of just 10
         if (filters.status) params.set('status', filters.status)
@@ -243,8 +293,19 @@ export default function AssetReportsPage() {
         if (filters.startDate) params.set('startDate', filters.startDate)
         if (filters.endDate) params.set('endDate', filters.endDate)
         
+        const url = `${baseUrl}/api/reports/assets/summary?${params.toString()}`
+        
+        const token = await getAuthToken()
+        const headers: HeadersInit = {}
+        if (baseUrl && token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
         // Fetch all assets from summary API
-        const response = await fetch(`/api/reports/assets/summary?${params.toString()}`)
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers,
+        })
         if (response.ok) {
           const data = await response.json()
           allAssets = data.recentAssets || []

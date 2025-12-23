@@ -973,38 +973,32 @@ export default function ReturnFormPage() {
                 }
                 
                 // Now handle the download
+                const url = window.URL.createObjectURL(blob)
+                
                 if (isSafari) {
-                  // Safari: Convert blob to data URL and open in new tab
-                  // Safari doesn't handle blob URLs well, but data URLs render the PDF properly
-                  const reader = new FileReader()
-                  reader.onload = () => {
-                    const dataUrl = reader.result as string
-                    const newWindow = window.open(dataUrl, '_blank')
-                    if (!newWindow) {
-                      // Popup blocked - fallback to download link
-                      const link = document.createElement('a')
-                      link.href = dataUrl
-                      link.download = fileName
-                      document.body.appendChild(link)
-                      link.click()
-                      document.body.removeChild(link)
-                    }
-                  }
-                  reader.onerror = () => {
-                    // Fallback to blob URL if data URL conversion fails
-                    const url = window.URL.createObjectURL(blob)
+                  // Safari: Open in new tab and let user save manually
+                  // Safari doesn't respect download attribute well
+                  const newWindow = window.open(url, '_blank')
+                  if (newWindow) {
+                    // Give Safari time to load the PDF before showing success
+                    setTimeout(() => {
+                      window.URL.revokeObjectURL(url)
+                    }, 10000) // Delay revocation for Safari
+                  } else {
+                    // Popup blocked - fallback to link click
                     const link = document.createElement('a')
                     link.href = url
                     link.download = fileName
+                    link.target = '_blank'
                     document.body.appendChild(link)
                     link.click()
                     document.body.removeChild(link)
-                    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+                    setTimeout(() => {
+                      window.URL.revokeObjectURL(url)
+                    }, 10000)
                   }
-                  reader.readAsDataURL(blob)
                 } else {
-                  // Chrome/Firefox: Standard download approach with blob URL
-                  const url = window.URL.createObjectURL(blob)
+                  // Chrome/Firefox: Standard download approach
                   const link = document.createElement('a')
                   link.href = url
                   link.download = fileName

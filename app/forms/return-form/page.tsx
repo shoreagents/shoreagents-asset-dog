@@ -165,7 +165,7 @@ export default function ReturnFormPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("")
   const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0])
   const [position, setPosition] = useState("")
-  const [returnToOffice, setReturnToOffice] = useState(false)
+  const [returnToOffice, setReturnToOffice] = useState(true) // Default to checked
   const [resignedStaff, setResignedStaff] = useState(false)
   const [controlNumber, setControlNumber] = useState("")
   const [returnerSignature, setReturnerSignature] = useState("")
@@ -1288,7 +1288,13 @@ export default function ReturnFormPage() {
                     <Checkbox
                       id="returnToOffice"
                       checked={returnToOffice}
-                      onCheckedChange={(checked) => setReturnToOffice(checked === true)}
+                      onCheckedChange={(checked) => {
+                        if (checked === false && !resignedStaff) {
+                          // Unchecking last one - switch to the other
+                          setResignedStaff(true)
+                        }
+                        setReturnToOffice(checked === true)
+                      }}
                     />
                     <label htmlFor="returnToOffice" className="text-sm font-medium cursor-pointer">
                       Return to Office
@@ -1298,7 +1304,13 @@ export default function ReturnFormPage() {
                     <Checkbox
                       id="resignedStaff"
                       checked={resignedStaff}
-                      onCheckedChange={(checked) => setResignedStaff(checked === true)}
+                      onCheckedChange={(checked) => {
+                        if (checked === false && !returnToOffice) {
+                          // Unchecking last one - switch to the other
+                          setReturnToOffice(true)
+                        }
+                        setResignedStaff(checked === true)
+                      }}
                     />
                     <label htmlFor="resignedStaff" className="text-sm font-medium cursor-pointer">
                       Resigned Staff

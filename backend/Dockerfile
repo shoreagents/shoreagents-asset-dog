@@ -8,12 +8,17 @@ RUN apt-get update && apt-get install -y \
     openssl \
     curl \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y nodejs
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright browsers and their system dependencies
+# Note: install-deps runs apt-get internally, so we keep apt lists available
+RUN playwright install chromium \
+    && playwright install-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy application code (including prisma_client which has schema.prisma)
 COPY . .

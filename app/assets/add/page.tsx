@@ -722,7 +722,7 @@ export default function AddAssetPage() {
                           variant="outline"
                           onClick={handleGenerateAssetTag}
                           title="Auto-generate asset tag"
-                          className="shrink-0 bg-card"
+                          className="shrink-0 bg-card!"
                           disabled={isGeneratingTag}
                         >
                           {isGeneratingTag ? (

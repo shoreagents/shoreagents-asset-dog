@@ -120,7 +120,7 @@ export function DatePicker({
             type="button"
             variant="outline"
             className={cn(
-              "w-full justify-start text-left font-normal bg-card",
+              "w-full justify-start text-left font-normal bg-card!",
               !dateValue && "text-muted-foreground",
               error && "border-destructive focus-visible:ring-destructive"
             )}

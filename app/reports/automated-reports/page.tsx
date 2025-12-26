@@ -1129,7 +1129,7 @@ function AutomatedReportsPageContent() {
                     placeholder="Enter email address"
                     className={errors.emailRecipients ? 'border-destructive' : ''}
                   />
-                  <Button type="button" onClick={handleAddEmail} variant="outline">
+                  <Button type="button" className='bg-transparent dark:bg-input/30' onClick={handleAddEmail} variant="outline">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1193,7 +1193,7 @@ function AutomatedReportsPageContent() {
               </div>
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={handleCloseDialog}>
+                <Button type="button" variant="outline" className='btn-glass' onClick={handleCloseDialog}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>

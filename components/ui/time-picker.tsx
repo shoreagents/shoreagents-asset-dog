@@ -65,7 +65,7 @@ export function TimePicker({
   }
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
+    <div className={cn("flex flex-col gap-2", className)}>
       {label && (
         <Label htmlFor={id} className={cn("px-1", labelClassName)}>
           {label}
@@ -84,7 +84,7 @@ export function TimePicker({
           disabled={disabled}
           placeholder={placeholder}
           className={cn(
-            "bg-background appearance-none pl-9",
+            "bg-transparent dark:bg-input/30 appearance-none pl-9",
             "[&::-webkit-calendar-picker-indicator]:hidden",
             "[&::-webkit-calendar-picker-indicator]:appearance-none",
             error && "border-destructive focus-visible:ring-destructive"

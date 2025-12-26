@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import type React from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -108,6 +109,12 @@ export function SubCategoryDialog({
     })
   }
 
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await form.handleSubmit(handleSubmit)(e)
+  }
+
   const handleOpenChange = (newOpen: boolean) => {
     if (!isLoading) {
       onOpenChange(newOpen)
@@ -129,7 +136,7 @@ export function SubCategoryDialog({
               : 'Create a new subcategory for the selected category'}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={form.handleSubmit(handleSubmit)}>
+        <form onSubmit={handleFormSubmit}>
           <div className="space-y-4">
             <Field>
               <FieldLabel htmlFor="subcategory-category">

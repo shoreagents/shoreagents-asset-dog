@@ -797,6 +797,9 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
         ...data,
         categoryId: selectedCategory,
       })
+      // Invalidate and refetch subcategories for the selected category
+      await queryClient.invalidateQueries({ queryKey: ["subcategories", selectedCategory] })
+      await queryClient.refetchQueries({ queryKey: ["subcategories", selectedCategory] })
       setSubCategoryDialogOpen(false)
       toast.success('Sub category created successfully')
     } catch (error) {
@@ -1967,7 +1970,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
                     </FieldLabel>
                     <FieldContent>
                       <div className="flex gap-2">
-                        <div className="flex items-center border border-input rounded-md bg-background overflow-hidden flex-1">
+                        <div className="flex items-center border border-input rounded-md overflow-hidden flex-1">
                           <Controller
                             name="assetTagId"
                             control={form.control}
@@ -2101,13 +2104,6 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
                           >
                             <PlusIcon className="h-3.5 w-3.5" />
                           </Button>
-                          <CategoryDialog
-                            open={categoryDialogOpen}
-                            onOpenChange={setCategoryDialogOpen}
-                            onSubmit={handleCreateCategory}
-                            mode="create"
-                            isLoading={createCategoryMutation.isPending}
-                          />
                         </>
                       )}
                     </div>
@@ -2170,15 +2166,6 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
                           >
                             <PlusIcon className="h-3.5 w-3.5" />
                           </Button>
-                          <SubCategoryDialog
-                            open={subCategoryDialogOpen}
-                            onOpenChange={setSubCategoryDialogOpen}
-                            onSubmit={handleCreateSubCategory}
-                            mode="create"
-                            categories={categories}
-                            selectedCategoryName={categories.find(c => c.id === selectedCategory)?.name}
-                            isLoading={createSubCategoryMutation.isPending}
-                          />
                         </>
                       )}
                     </div>
@@ -3877,6 +3864,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
         mode="create"
         categories={categories}
         selectedCategoryName={categories.find(c => c.id === selectedCategory)?.name}
+        initialData={selectedCategory ? { categoryId: selectedCategory, name: '', description: '' } : undefined}
         isLoading={createSubCategoryMutation.isPending}
       />
     </motion.div>

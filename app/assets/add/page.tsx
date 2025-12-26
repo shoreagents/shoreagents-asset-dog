@@ -1289,7 +1289,7 @@ export default function AddAssetPage() {
                           />
                           
                           {/* Single button with dropdown and count */}
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-4 flex-wrap">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
@@ -1362,13 +1362,14 @@ export default function AddAssetPage() {
                               <TooltipContent 
                                 side="top"
                                 onEscapeKeyDown={() => setDocumentTooltipOpen(false)}
+                                className="max-w-[calc(100vw-2rem)] md:max-w-sm"
                               >
                                 {documentValidationError ? (
                                   <>
-                                    <p className="text-xs text-red-500">{documentValidationError}</p>
+                                    <p className="text-xs text-red-500 break-words whitespace-normal">{documentValidationError}</p>
                                   </>
                                 ) : (
-                                  <p className="text-xs">Supported formats: PDF, DOC, DOCX, XLS, XLSX, TXT, CSV, RTF, JPEG, PNG, GIF, WebP (Max 5MB per document)</p>
+                                  <p className="text-xs break-words whitespace-normal">Supported formats: PDF, DOC, DOCX, XLS, XLSX, TXT, CSV, RTF, JPEG, PNG, GIF, WebP (Max 5MB per document)</p>
                                 )}
                               </TooltipContent>
                             </Tooltip>

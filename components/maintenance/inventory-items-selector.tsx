@@ -227,7 +227,7 @@ export function InventoryItemsSelector({
                     variant="outline"
                     size="sm"
                     disabled={disabled}
-                    className="h-9 gap-2 w-full md:w-auto"
+                    className="h-9 gap-2 w-full md:w-auto bg-transparent dark:bg-input/30"
                   >
                     <Plus className="h-4 w-4" />
                     Add Item
@@ -577,7 +577,7 @@ export function InventoryItemsSelector({
                 size="sm"
                 onClick={() => setOpen(true)}
                 disabled={disabled}
-                className="gap-2"
+                className="gap-2 bg-transparent dark:bg-input/30"
               >
                 <Plus className="h-4 w-4" />
                 Add Your First Item

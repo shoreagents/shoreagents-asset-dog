@@ -435,6 +435,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
   const [previewSource, setPreviewSource] = useState<'images' | 'documents'>('images')
   const [isCheckingAssetTag, setIsCheckingAssetTag] = useState(false)
   const [isGeneratingTag, setIsGeneratingTag] = useState(false)
+  const [companySuffix, setCompanySuffix] = useState<string>("") // Store the company suffix (e.g., "SA")
   const imageInputRef = useRef<HTMLInputElement>(null)
   const documentInputRef = useRef<HTMLInputElement>(null)
   const assetTagIdInputRef = useRef<HTMLInputElement>(null)
@@ -486,7 +487,59 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
     }
   }, [isMobile, setDockContent, router, handleRefresh])
 
-  // Format asset tag as user types
+  // Extract suffix from full tag (e.g., "25-579811C-SA" -> "SA")
+  const extractSuffix = (fullTag: string): string => {
+    const parts = fullTag.split('-')
+    if (parts.length >= 3) {
+      return parts[parts.length - 1] // Last part is the suffix
+    }
+    return ""
+  }
+
+  // Extract main part from full tag (e.g., "25-579811C-SA" -> "25-579811C")
+  const extractMainPart = (fullTag: string): string => {
+    const parts = fullTag.split('-')
+    if (parts.length >= 3) {
+      return parts.slice(0, -1).join('-') // Everything except last part
+    }
+    return fullTag
+  }
+
+  // Format asset tag main part only (without suffix) as user types
+  const formatAssetTagMainPart = (value: string): string => {
+    // Remove all non-alphanumeric characters except hyphens
+    let cleaned = value.replace(/[^A-Za-z0-9-]/g, '').toUpperCase()
+    
+    // Remove existing hyphens to rebuild format
+    const parts = cleaned.split('-').filter(p => p.length > 0)
+    cleaned = parts.join('')
+    
+    // Format: YY-XXXXXX[S] (main part only, no suffix)
+    // Max length: 2 (year) + 6 (random) + 1 (subcategory) = 9 chars + 1 hyphen = 10
+    if (cleaned.length === 0) return ''
+    
+    let formatted = ''
+    
+    // Year (first 2 digits)
+    if (cleaned.length > 0) {
+      formatted = cleaned.substring(0, 2)
+      if (cleaned.length > 2) {
+        formatted += '-'
+        // Random number (next 6 digits)
+        const randomPart = cleaned.substring(2, 8)
+        formatted += randomPart
+        if (cleaned.length > 8) {
+          // Subcategory letter (next 1 character)
+          const subcatPart = cleaned.substring(8, 9)
+          formatted += subcatPart
+        }
+      }
+    }
+    
+    return formatted
+  }
+
+  // Format asset tag as user types (legacy function, kept for compatibility)
   const formatAssetTag = (value: string): string => {
     // Remove all non-alphanumeric characters except hyphens
     let cleaned = value.replace(/[^A-Za-z0-9-]/g, '').toUpperCase()
@@ -526,6 +579,14 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
     return formatted
   }
 
+  // Initialize companySuffix when asset loads
+  useEffect(() => {
+    if (asset?.assetTagId) {
+      const suffix = extractSuffix(asset.assetTagId)
+      setCompanySuffix(suffix)
+    }
+  }, [asset?.assetTagId])
+
   const handleGenerateAssetTag = async () => {
     setIsGeneratingTag(true)
     try {
@@ -557,12 +618,18 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
       // Format: YY-XXXXXX[S]-SA
       const generatedTag = `${year}-${randomNum}${subCategoryLetter}-SA`
 
+      // Extract and store the company suffix
+      const suffix = extractSuffix(generatedTag)
+      setCompanySuffix(suffix)
+
       // Check if tag already exists
       const exists = await checkAssetTagExists(generatedTag)
       if (exists) {
         // Retry once
         const retryRandomNum = Math.floor(100000 + Math.random() * 900000).toString()
         const retryTag = `${year}-${retryRandomNum}${subCategoryLetter}-SA`
+        const retrySuffix = extractSuffix(retryTag)
+        setCompanySuffix(retrySuffix)
         const retryExists = await checkAssetTagExists(retryTag)
         if (retryExists) {
           toast.error('Failed to generate unique tag. Please try again.')
@@ -1900,70 +1967,88 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
                     </FieldLabel>
                     <FieldContent>
                       <div className="flex gap-2">
-                        <Input
-                          id="assetTagId"
-                          {...(() => {
-                            const { ref, onChange, ...rest } = form.register("assetTagId", {
-                              onChange: (e) => {
-                                const input = e.target as HTMLInputElement
-                                const cursorPosition = input.selectionStart || 0
-                                const oldValue = form.getValues("assetTagId") || ""
-                                const newValue = e.target.value
-                                
-                                const formatted = formatAssetTag(newValue)
-                                
-                                // Calculate new cursor position
-                                const beforeCursor = oldValue.substring(0, cursorPosition)
-                                const nonFormattingBefore = beforeCursor.replace(/-/g, '').length
-                                
-                                let newCursorPosition = 0
-                                let nonFormattingCount = 0
-                                for (let i = 0; i < formatted.length; i++) {
-                                  if (formatted[i] !== '-') {
-                                    nonFormattingCount++
-                                    if (nonFormattingCount > nonFormattingBefore) {
-                                      newCursorPosition = i
-                                      break
+                        <div className="flex items-center border border-input rounded-md bg-background overflow-hidden flex-1">
+                          <Controller
+                            name="assetTagId"
+                            control={form.control}
+                            render={({ field }) => {
+                              const displayValue = extractMainPart(field.value || "")
+                              return (
+                                <Input
+                                  id="assetTagId"
+                                  value={displayValue}
+                                  onChange={(e) => {
+                                    const input = e.target as HTMLInputElement
+                                    const cursorPosition = input.selectionStart || 0
+                                    const currentMainPart = displayValue
+                                    const newValue = e.target.value
+                                    
+                                    // Format only the main part
+                                    const formattedMainPart = formatAssetTagMainPart(newValue)
+                                    
+                                    // Calculate new cursor position
+                                    const beforeCursor = currentMainPart.substring(0, cursorPosition)
+                                    const nonFormattingBefore = beforeCursor.replace(/-/g, '').length
+                                    
+                                    let newCursorPosition = 0
+                                    let nonFormattingCount = 0
+                                    for (let i = 0; i < formattedMainPart.length; i++) {
+                                      if (formattedMainPart[i] !== '-') {
+                                        nonFormattingCount++
+                                        if (nonFormattingCount > nonFormattingBefore) {
+                                          newCursorPosition = i
+                                          break
+                                        }
+                                      }
+                                      if (nonFormattingCount === nonFormattingBefore) {
+                                        newCursorPosition = i + 1
+                                        break
+                                      }
                                     }
-                                  }
-                                  if (nonFormattingCount === nonFormattingBefore) {
-                                    newCursorPosition = i + 1
-                                    break
-                                  }
-                                }
-                                
-                                form.setValue("assetTagId", formatted, { shouldValidate: false })
-                                
-                                setTimeout(() => {
-                                  if (assetTagIdInputRef.current) {
-                                    assetTagIdInputRef.current.setSelectionRange(
-                                      Math.min(newCursorPosition, formatted.length),
-                                      Math.min(newCursorPosition, formatted.length)
-                                    )
-                                  }
-                                }, 0)
-                              }
-                            })
-                            return {
-                              ...rest,
-                              onChange,
-                              ref: (e: HTMLInputElement | null) => {
-                                assetTagIdInputRef.current = e
-                                ref(e)
-                              }
-                            }
-                          })()}
-                          aria-invalid={form.formState.errors.assetTagId ? "true" : "false"}
-                          placeholder="e.g., 25-016011U-SA"
-                          className="flex-1"
-                          maxLength={13}
-                        />
+                                    
+                                    // Combine main part with suffix for form value
+                                    const fullTag = companySuffix 
+                                      ? `${formattedMainPart}-${companySuffix}`
+                                      : formattedMainPart
+                                    
+                                    // Set the full tag in the form
+                                    field.onChange(fullTag)
+                                    
+                                    // Restore cursor position
+                                    setTimeout(() => {
+                                      if (assetTagIdInputRef.current) {
+                                        assetTagIdInputRef.current.setSelectionRange(
+                                          Math.min(newCursorPosition, formattedMainPart.length),
+                                          Math.min(newCursorPosition, formattedMainPart.length)
+                                        )
+                                      }
+                                    }, 0)
+                                  }}
+                                  onBlur={field.onBlur}
+                                  ref={(e) => {
+                                    assetTagIdInputRef.current = e
+                                    field.ref(e)
+                                  }}
+                                  aria-invalid={form.formState.errors.assetTagId ? "true" : "false"}
+                                  placeholder="e.g., 25-016011C"
+                                  className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none rounded-r-none"
+                                  maxLength={10}
+                                />
+                              )
+                            }}
+                          />
+                          {companySuffix && (
+                            <span className="px-2 py-2 text-sm font-medium text-muted-foreground border-l border-input bg-muted/50 whitespace-nowrap">
+                              -{companySuffix}
+                            </span>
+                          )}
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
                           onClick={handleGenerateAssetTag}
                           title="Auto-generate asset tag"
-                          className="shrink-0"
+                          className="shrink-0 bg-transparent dark:bg-input/30"
                           disabled={isGeneratingTag}
                         >
                           {isGeneratingTag ? (
@@ -2010,7 +2095,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
                             type="button"
                             size="icon"
                             variant="outline"
-                            className="h-6 w-6"
+                            className="h-6 w-6 bg-transparent dark:bg-input/30"
                             onClick={() => setCategoryDialogOpen(true)}
                           >
                             <PlusIcon className="h-3.5 w-3.5" />
@@ -2079,7 +2164,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
                             size="icon"
                             variant="outline"
                             disabled={!selectedCategory}
-                            className="h-6 w-6"
+                            className="h-6 w-6 bg-transparent dark:bg-input/30"
                             onClick={() => setSubCategoryDialogOpen(true)}
                           >
                             <PlusIcon className="h-3.5 w-3.5" />

@@ -1485,7 +1485,7 @@ function UsersPageContent() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate}>
-            <ScrollArea className='h-[70vh]'>
+            <ScrollArea className='h-[50vh]'>
             <div className="grid gap-4 py-4">
               <Field>
                 <FieldLabel htmlFor="name">
@@ -1603,6 +1603,7 @@ function UsersPageContent() {
                           <Button
                             type="button"
                             variant="outline"
+                            className='bg-transparent dark:bg-input/30'
                             onClick={() => {
                               // Generate random password
                               const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?/~`'
@@ -1671,6 +1672,7 @@ function UsersPageContent() {
                     variant="outline"
                     size="sm"
                     onClick={handleToggleAllPermissionsCreate}
+                    className='bg-transparent dark:bg-input/30'
                   >
                     {(() => {
                       const permissions = createForm.watch('permissions')
@@ -1739,7 +1741,7 @@ function UsersPageContent() {
             </div>
             </ScrollArea>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              <Button type="button" variant="outline" className='btn-glass' onClick={() => setIsCreateDialogOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>

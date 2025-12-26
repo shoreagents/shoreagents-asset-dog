@@ -83,7 +83,7 @@ export function ExportFieldsDialog({
                 <div className="flex items-center justify-between border-b pb-2">
                   <span className="text-sm font-semibold">Summary Fields</span>
                   {onSelectAllSummary && onDeselectAllSummary && (
-                    <Button variant="outline" size="sm" className='btn-glass' onClick={toggleSelectAllSummary}>
+                    <Button variant="outline" size="sm" className='bg-transparent dark:bg-input/30' onClick={toggleSelectAllSummary}>
                       {allSummarySelected ? 'Deselect All' : 'Select All'}
                     </Button>
                   )}
@@ -113,7 +113,7 @@ export function ExportFieldsDialog({
               <span className="text-sm font-semibold">
                 Item Fields ({selectedFields.size} of {fields.length} selected)
               </span>
-              <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+              <Button variant="outline" size="sm" className='bg-transparent dark:bg-input/30' onClick={toggleSelectAll}>
                 {allSelected ? 'Deselect All' : 'Select All'}
               </Button>
             </div>

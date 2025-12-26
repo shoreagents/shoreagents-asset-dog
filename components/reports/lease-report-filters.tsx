@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Filter, X } from 'lucide-react'
 import {
   Popover,
@@ -178,12 +179,13 @@ export function LeaseReportFilters({ filters, onFiltersChange, disabled = false,
         <div className="space-y-2 min-w-0">
           <Label htmlFor="start-date-filter">Lease Start From</Label>
           <div className="w-full overflow-hidden">
-            <Input
+            <DatePicker
               id="start-date-filter"
-              type="date"
               value={localFilters.startDate || ''}
-              onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
-              className="w-full"
+              onChange={(value) => handleFilterChange('startDate', value || undefined)}
+              placeholder="Select start date"
+              className="gap-2 w-full"
+              labelClassName="hidden"
             />
           </div>
         </div>
@@ -192,12 +194,13 @@ export function LeaseReportFilters({ filters, onFiltersChange, disabled = false,
         <div className="space-y-2 min-w-0">
           <Label htmlFor="end-date-filter">Lease Start To</Label>
           <div className="w-full overflow-hidden">
-            <Input
+            <DatePicker
               id="end-date-filter"
-              type="date"
               value={localFilters.endDate || ''}
-              onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
-              className="w-full"
+              onChange={(value) => handleFilterChange('endDate', value || undefined)}
+              placeholder="Select end date"
+              className="gap-2 w-full"
+              labelClassName="hidden"
             />
           </div>
         </div>

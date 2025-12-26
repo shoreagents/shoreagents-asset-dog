@@ -696,7 +696,7 @@ export default function ExportPage() {
                 refetchHistory()
               }}
               disabled={isHistoryFetching || historyLoading}
-              className="h-8 w-8"
+              className="h-8 w-8 bg-transparent dark:bg-input/30"
               title="Refresh history"
             >
               <RefreshCw className={`h-4 w-4 ${isHistoryFetching ? 'animate-spin' : ''}`} />

@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { Field, FieldLabel, FieldContent, FieldError } from '@/components/ui/field'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Select,
   SelectContent,
@@ -180,15 +181,24 @@ export function AuditDialog({
                       Audit Date <span className="text-destructive">*</span>
                     </FieldLabel>
                     <FieldContent>
-                      <Input
-                        id="auditDate"
-                        type="date"
-                        {...form.register('auditDate')}
-                        disabled={isLoading}
-                        aria-invalid={form.formState.errors.auditDate ? 'true' : 'false'}
+                      <Controller
+                        name="auditDate"
+                        control={form.control}
+                        render={({ field, fieldState }) => (
+                          <DatePicker
+                            id="auditDate"
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            disabled={isLoading}
+                            placeholder="Select audit date"
+                            error={fieldState.error?.message}
+                            className="gap-2"
+                            labelClassName="hidden"
+                          />
+                        )}
                       />
                     </FieldContent>
-                    <FieldError>{form.formState.errors.auditDate?.message}</FieldError>
                   </Field>
                 </div>
 

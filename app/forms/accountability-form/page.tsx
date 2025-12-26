@@ -1234,6 +1234,7 @@ export default function AccountabilityFormPage() {
                         size="icon"
                         onClick={handleGenerateAccountabilityFormNo}
                         title="Generate AF Number"
+                        className="bg-transparent dark:bg-input/30"
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
@@ -1406,7 +1407,7 @@ export default function AccountabilityFormPage() {
           {/* Replacement Items Card */}
           <Card className="mb-6">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">Replacement Items</CardTitle>
                   <CardDescription className="text-xs">
@@ -1419,6 +1420,7 @@ export default function AccountabilityFormPage() {
                   size="sm"
                   onClick={handleAddReplacement}
                   disabled={isLoadingEmployee}
+                  className="bg-transparent dark:bg-input/30 w-full md:w-auto"
                 >
                   Add Replacement
                 </Button>
@@ -1586,6 +1588,7 @@ export default function AccountabilityFormPage() {
                     size="icon"
                     onClick={() => setQrDialogOpen(true)}
                     title="QR Code"
+                    className="bg-transparent dark:bg-input/30"
                   >
                     <QrCode className="h-4 w-4" />
                   </Button>

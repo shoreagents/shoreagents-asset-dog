@@ -33,6 +33,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldLabel, FieldContent, FieldError } from "@/components/ui/field"
+import { DatePicker } from "@/components/ui/date-picker"
 import { EmployeeSelectField } from "@/components/fields/employee-select-field"
 import { LocationSelectField } from "@/components/fields/location-select-field"
 import { DepartmentSelectField } from "@/components/fields/department-select-field"
@@ -1234,19 +1235,17 @@ function MoveAssetPageContent() {
                       name="moveDate"
                       control={form.control}
                       render={({ field, fieldState }) => (
-                        <>
-                          <Input
-                            id="moveDate"
-                            type="date"
-                            {...field}
-                            disabled={!canViewAssets || !canMove || !selectedAsset}
-                            aria-invalid={fieldState.error ? 'true' : 'false'}
-                            aria-required="true"
-                          />
-                          {fieldState.error && (
-                            <FieldError>{fieldState.error.message}</FieldError>
-                          )}
-                        </>
+                        <DatePicker
+                          id="moveDate"
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          disabled={!canViewAssets || !canMove || !selectedAsset}
+                          placeholder="Select move date"
+                          error={fieldState.error?.message}
+                          className="gap-2"
+                          labelClassName="hidden"
+                        />
                       )}
                     />
                   </FieldContent>

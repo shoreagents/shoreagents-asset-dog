@@ -20,6 +20,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { Badge } from '@/components/ui/badge'
 import { Field, FieldLabel, FieldContent, FieldError } from '@/components/ui/field'
+import { DatePicker } from '@/components/ui/date-picker'
+import { TimePicker } from '@/components/ui/time-picker'
 import {
   Select,
   SelectContent,
@@ -640,12 +642,23 @@ export function ScheduleDialog({
               <Field>
                 <FieldLabel htmlFor="scheduledTime">Time (Optional)</FieldLabel>
                 <FieldContent>
-                  <Input
-                    id="scheduledTime"
-                    type="time"
-                    {...form.register('scheduledTime')}
-                    disabled={isLoading}
-                    placeholder="HH:mm"
+                  <Controller
+                    name="scheduledTime"
+                    control={form.control}
+                    render={({ field, fieldState }) => (
+                      <TimePicker
+                        id="scheduledTime"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        disabled={isLoading}
+                        placeholder="HH:mm"
+                        error={fieldState.error?.message}
+                        className="gap-2"
+                        labelClassName="hidden"
+                        showSeconds={false}
+                      />
+                    )}
                   />
                 </FieldContent>
               </Field>
@@ -659,24 +672,28 @@ export function ScheduleDialog({
                 <Controller
                   name="scheduledDate"
                   control={form.control}
-                  render={({ field }) => (
-                    <Input
-                      id="scheduledDate"
-                      type="date"
-                      value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
-                      onChange={(e) => {
-                        const dateValue = e.target.value ? new Date(e.target.value) : null
-                        field.onChange(dateValue)
-                      }}
-                      disabled={isLoading}
-                      min={new Date().toISOString().split('T')[0]}
-                      aria-invalid={form.formState.errors.scheduledDate ? 'true' : 'false'}
-                    />
-                  )}
+                  render={({ field, fieldState }) => {
+                    // Convert Date object to ISO string for DatePicker
+                    const dateValue = field.value ? format(field.value, 'yyyy-MM-dd') : ''
+                    return (
+                      <DatePicker
+                        id="scheduledDate"
+                        value={dateValue}
+                        onChange={(value) => {
+                          // Convert ISO string back to Date object
+                          const dateObj = value ? new Date(value) : null
+                          field.onChange(dateObj)
+                        }}
+                        onBlur={field.onBlur}
+                        disabled={isLoading}
+                        placeholder="Select scheduled date"
+                        error={fieldState.error?.message}
+                        className="gap-2"
+                        labelClassName="hidden"
+                      />
+                    )
+                  }}
                 />
-                {form.formState.errors.scheduledDate && (
-                  <FieldError>{form.formState.errors.scheduledDate.message}</FieldError>
-                )}
               </FieldContent>
             </Field>
 

@@ -42,6 +42,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldLabel, FieldContent, FieldError } from "@/components/ui/field"
+import { DatePicker } from "@/components/ui/date-picker"
 import { LocationSelectField } from "@/components/fields/location-select-field"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -1126,6 +1127,7 @@ function CheckinPageContent() {
                   size="icon"
                   onClick={() => setQrDialogOpen(true)}
                   title="QR Code"
+                  className="bg-transparent dark:bg-input/30"
                 >
                   <QrCode className="h-4 w-4" />
                 </Button>
@@ -1398,19 +1400,17 @@ function CheckinPageContent() {
                   name="checkinDate"
                   control={form.control}
                   render={({ field, fieldState }) => (
-                    <>
-                      <Input
-                        id="checkinDate"
-                        type="date"
-                        {...field}
-                        disabled={!canViewAssets || !canCheckin || selectedAssets.length === 0}
-                        aria-invalid={fieldState.error ? 'true' : 'false'}
-                        aria-required="true"
-                      />
-                      {fieldState.error && (
-                        <FieldError>{fieldState.error.message}</FieldError>
-                      )}
-                    </>
+                    <DatePicker
+                      id="checkinDate"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      disabled={!canViewAssets || !canCheckin || selectedAssets.length === 0}
+                      placeholder="Select check-in date"
+                      error={fieldState.error?.message}
+                      className="gap-2"
+                      labelClassName="hidden"
+                    />
                   )}
                 />
               </FieldContent>

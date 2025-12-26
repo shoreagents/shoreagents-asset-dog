@@ -36,6 +36,7 @@ import { Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Package
 import { Spinner } from '@/components/ui/shadcn-io/spinner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldLabel, FieldContent } from '@/components/ui/field'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Badge } from '@/components/ui/badge'
 import { useQueryClient } from '@tanstack/react-query'
 import { useUpdateMaintenance, useDeleteMaintenance } from '@/hooks/use-assets'
@@ -1343,7 +1344,7 @@ function ListOfMaintenancesPageContent() {
               </div>
             ) : (
               <div className="min-w-full ">
-                <ScrollArea className={cn('h-132 relative', isMobile && "h-128")}>
+                <ScrollArea className={cn('h-132 relative', isMobile && "h-130")}>
                 <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
                 <div className="pr-2.5">
                 <Table>
@@ -1538,12 +1539,14 @@ function ListOfMaintenancesPageContent() {
                 <Field>
                   <FieldLabel>Date Completed <span className="text-destructive">*</span></FieldLabel>
                   <FieldContent>
-                    <Input
-                      type="date"
+                    <DatePicker
+                      id="editDateCompleted"
                       value={editDateCompleted}
-                      onChange={(e) => setEditDateCompleted(e.target.value)}
-                      required
+                      onChange={setEditDateCompleted}
                       disabled={!canManageMaintenance}
+                      placeholder="Select completion date"
+                      className="gap-2"
+                      labelClassName="hidden"
                     />
                   </FieldContent>
                 </Field>
@@ -1553,12 +1556,14 @@ function ListOfMaintenancesPageContent() {
                 <Field>
                   <FieldLabel>Date Cancelled <span className="text-destructive">*</span></FieldLabel>
                   <FieldContent>
-                    <Input
-                      type="date"
+                    <DatePicker
+                      id="editDateCancelled"
                       value={editDateCancelled}
-                      onChange={(e) => setEditDateCancelled(e.target.value)}
-                      required
+                      onChange={setEditDateCancelled}
                       disabled={!canManageMaintenance}
+                      placeholder="Select cancellation date"
+                      className="gap-2"
+                      labelClassName="hidden"
                     />
                   </FieldContent>
                 </Field>
@@ -1575,6 +1580,7 @@ function ListOfMaintenancesPageContent() {
                   setEditDateCompleted("")
                   setEditDateCancelled("")
                 }}
+                className='btn-glass'
               >
                 Cancel
               </Button>

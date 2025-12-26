@@ -1012,6 +1012,7 @@ function AuditPageContent() {
             size="icon"
             onClick={() => setIsScannerOpen(true)}
             title="Scan QR Code"
+            className="bg-transparent dark:bg-input/30"
           >
             <QrCode className="h-4 w-4" />
           </Button>

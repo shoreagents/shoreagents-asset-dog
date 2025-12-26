@@ -60,6 +60,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TimePicker } from '@/components/ui/time-picker'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
@@ -531,6 +532,7 @@ function AutomatedReportsPageContent() {
                 className="gap-2 bg-gray-400 bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-10 border shadow-sm"
                 disabled={!canManageReports}
                 variant="outline"
+                size="sm"
               >
                 <Plus className="h-4 w-4" />
                 Create Schedule
@@ -994,16 +996,22 @@ function AutomatedReportsPageContent() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="scheduledTime">Time (24-hour) *</Label>
-                  <Input
-                    id="scheduledTime"
-                    type="time"
-                    {...register('scheduledTime')}
-                    className={errors.scheduledTime ? 'border-destructive' : ''}
+                  <Controller
+                    name="scheduledTime"
+                    control={control}
+                    render={({ field, fieldState }) => (
+                      <TimePicker
+                        id="scheduledTime"
+                        label="Time (24-hour) *"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        placeholder="Select time"
+                        error={fieldState.error?.message}
+                        showSeconds={false}
+                      />
+                    )}
                   />
-                  {errors.scheduledTime && (
-                    <p className="text-sm text-destructive">{errors.scheduledTime.message}</p>
-                  )}
                 </div>
               </div>
 

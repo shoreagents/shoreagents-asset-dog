@@ -32,6 +32,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldLabel, FieldContent, FieldError } from "@/components/ui/field"
+import { DatePicker } from "@/components/ui/date-picker"
 import { EmployeeSelectField } from "@/components/fields/employee-select-field"
 import { DepartmentSelectField } from "@/components/fields/department-select-field"
 import { Textarea } from "@/components/ui/textarea"
@@ -949,6 +950,7 @@ function ReserveAssetPageContent() {
                 size="icon"
                 onClick={() => setQrDialogOpen(true)}
                 title="QR Code"
+                className="bg-transparent dark:bg-input/30"
               >
                 <QrCode className="h-4 w-4" />
               </Button>
@@ -1127,20 +1129,17 @@ function ReserveAssetPageContent() {
                   name="reservationDate"
                   control={form.control}
                   render={({ field, fieldState }) => (
-                    <>
-                      <Input
-                        id="reservationDate"
-                        type="date"
-                        {...field}
-                        className="w-full"
-                        disabled={!canViewAssets || !canReserve || !selectedAsset}
-                        aria-invalid={fieldState.error ? 'true' : 'false'}
-                        aria-required="true"
-                      />
-                      {fieldState.error && (
-                        <FieldError>{fieldState.error.message}</FieldError>
-                      )}
-                    </>
+                    <DatePicker
+                      id="reservationDate"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      disabled={!canViewAssets || !canReserve || !selectedAsset}
+                      placeholder="Select reservation date"
+                      error={fieldState.error?.message}
+                      className="gap-2"
+                      labelClassName="hidden"
+                    />
                   )}
                 />
               </FieldContent>

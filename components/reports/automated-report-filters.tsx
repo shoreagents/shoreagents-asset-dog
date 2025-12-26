@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Filter, X, Info } from 'lucide-react'
 import {
@@ -227,26 +228,28 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="start-date-filter">Start Date</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="start-date-filter"
-                  type="date"
                   value={(localFilters.startDate as string) || ''}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('startDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select start date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
             <div className="space-y-2 min-w-0">
               <Label htmlFor="end-date-filter">End Date</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="end-date-filter"
-                  type="date"
                   value={(localFilters.endDate as string) || ''}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('endDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select end date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
@@ -279,13 +282,14 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="due-date-filter">Due Date</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="due-date-filter"
-                  type="date"
                   value={(localFilters.dueDate as string) || ''}
-                  onChange={(e) => handleFilterChange('dueDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('dueDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select due date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
@@ -365,26 +369,28 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="start-date-filter">Checkout From</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="start-date-filter"
-                  type="date"
                   value={(localFilters.startDate as string) || ''}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('startDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select start date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
             <div className="space-y-2 min-w-0">
               <Label htmlFor="end-date-filter">Checkout To</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="end-date-filter"
-                  type="date"
                   value={(localFilters.endDate as string) || ''}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('endDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select end date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
@@ -517,26 +523,28 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="start-date-filter">Start Date</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="start-date-filter"
-                  type="date"
                   value={(localFilters.startDate as string) || ''}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('startDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select start date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
             <div className="space-y-2 min-w-0">
               <Label htmlFor="end-date-filter">End Date</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="end-date-filter"
-                  type="date"
                   value={(localFilters.endDate as string) || ''}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('endDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select end date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
@@ -675,26 +683,28 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="start-date-filter">Due Date From</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="start-date-filter"
-                  type="date"
                   value={(localFilters.startDate as string) || ''}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('startDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select start date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
             <div className="space-y-2 min-w-0">
               <Label htmlFor="end-date-filter">Due Date To</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="end-date-filter"
-                  type="date"
                   value={(localFilters.endDate as string) || ''}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('endDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select end date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
@@ -787,26 +797,28 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="start-date-filter">Start Date</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="start-date-filter"
-                  type="date"
                   value={(localFilters.startDate as string) || ''}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('startDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select start date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
             <div className="space-y-2 min-w-0">
               <Label htmlFor="end-date-filter">End Date</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="end-date-filter"
-                  type="date"
                   value={(localFilters.endDate as string) || ''}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('endDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select end date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
@@ -909,26 +921,28 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="start-date-filter">Date Acquired From</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="start-date-filter"
-                  type="date"
                   value={(localFilters.startDate as string) || ''}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('startDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select start date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
             <div className="space-y-2 min-w-0">
               <Label htmlFor="end-date-filter">Date Acquired To</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="end-date-filter"
-                  type="date"
                   value={(localFilters.endDate as string) || ''}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('endDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select end date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
@@ -1029,26 +1043,28 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="start-date-filter">Lease Start From</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="start-date-filter"
-                  type="date"
                   value={(localFilters.startDate as string) || ''}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('startDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select start date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
             <div className="space-y-2 min-w-0">
               <Label htmlFor="end-date-filter">Lease Start To</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="end-date-filter"
-                  type="date"
                   value={(localFilters.endDate as string) || ''}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('endDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select end date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
@@ -1168,26 +1184,28 @@ export function AutomatedReportFilters({
             <div className="space-y-2 min-w-0">
               <Label htmlFor="start-date-filter">Reservation Date From</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="start-date-filter"
-                  type="date"
                   value={(localFilters.startDate as string) || ''}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('startDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select start date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>
             <div className="space-y-2 min-w-0">
               <Label htmlFor="end-date-filter">Reservation Date To</Label>
               <div className="w-full overflow-hidden">
-                <Input
+                <DatePicker
                   id="end-date-filter"
-                  type="date"
                   value={(localFilters.endDate as string) || ''}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value || undefined)}
+                  onChange={(value) => handleFilterChange('endDate', value || undefined)}
                   disabled={disabled}
-                  className="w-full"
+                  placeholder="Select end date"
+                  className="gap-2 w-full"
+                  labelClassName="hidden"
                 />
               </div>
             </div>

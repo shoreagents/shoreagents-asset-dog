@@ -792,7 +792,7 @@ export default function ImportPage() {
                   onClick={() => setIsTemplateDialogOpen(true)}
                   size="sm"
                   disabled={permissionsLoading}
-                  className="shrink-0 gap-2 border-primary/20 hover:bg-primary/5 hover:text-primary"
+                  className="shrink-0 gap-2 border-primary/20 hover:bg-primary/5 hover:text-primary bg-transparent dark:bg-input/30"
                 >
                   <Download className="h-4 w-4" />
                   Download Template

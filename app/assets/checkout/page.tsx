@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { useForm, useWatch, type Control } from "react-hook-form"
+import { useForm, useWatch, Controller, type Control } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { XIcon, Package, CheckCircle2, Users, History, QrCode } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
@@ -35,6 +35,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldLabel, FieldContent, FieldError } from "@/components/ui/field"
+import { DatePicker } from "@/components/ui/date-picker"
 import { EmployeeSelectField } from "@/components/fields/employee-select-field"
 import { LocationSelectField } from "@/components/fields/location-select-field"
 import { SiteSelectField } from "@/components/fields/site-select-field"
@@ -1055,6 +1056,7 @@ function CheckoutPageContent() {
                   size="icon"
                   onClick={() => setQrDialogOpen(true)}
                   title="QR Code"
+                  className="bg-transparent dark:bg-input/30"
                 >
                   <QrCode className="h-4 w-4" />
                 </Button>
@@ -1178,16 +1180,23 @@ function CheckoutPageContent() {
                   Checkout Date <span className="text-destructive">*</span>
                 </FieldLabel>
                 <FieldContent>
-                  <Input
-                    id="checkoutDate"
-                    type="date"
-                      {...form.register("checkoutDate")}
-                      aria-invalid={form.formState.errors.checkoutDate ? "true" : "false"}
-                    disabled={!canViewAssets || !canCheckout || selectedAssets.length === 0}
-                  />
-                    {form.formState.errors.checkoutDate && (
-                      <FieldError>{form.formState.errors.checkoutDate.message}</FieldError>
+                  <Controller
+                    name="checkoutDate"
+                    control={form.control}
+                    render={({ field, fieldState }) => (
+                      <DatePicker
+                        id="checkoutDate"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        disabled={!canViewAssets || !canCheckout || selectedAssets.length === 0}
+                        placeholder="Select checkout date"
+                        error={fieldState.error?.message}
+                        className="gap-2"
+                        labelClassName="hidden"
+                      />
                     )}
+                  />
                 </FieldContent>
               </Field>
 
@@ -1196,17 +1205,23 @@ function CheckoutPageContent() {
                   Expected Return Date
                 </FieldLabel>
                 <FieldContent>
-                  <Input
-                    id="expectedReturnDate"
-                    type="date"
-                      {...form.register("expectedReturnDate")}
-                    min={checkoutDate}
-                      aria-invalid={form.formState.errors.expectedReturnDate ? "true" : "false"}
-                    disabled={!canViewAssets || !canCheckout || selectedAssets.length === 0}
-                  />
-                    {form.formState.errors.expectedReturnDate && (
-                      <FieldError>{form.formState.errors.expectedReturnDate.message}</FieldError>
+                  <Controller
+                    name="expectedReturnDate"
+                    control={form.control}
+                    render={({ field, fieldState }) => (
+                      <DatePicker
+                        id="expectedReturnDate"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        disabled={!canViewAssets || !canCheckout || selectedAssets.length === 0}
+                        placeholder="Select expected return date"
+                        error={fieldState.error?.message}
+                        className="gap-2"
+                        labelClassName="hidden"
+                      />
                     )}
+                  />
                 </FieldContent>
               </Field>
               </div>

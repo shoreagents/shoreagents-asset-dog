@@ -33,6 +33,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldLabel, FieldContent, FieldError } from "@/components/ui/field"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -928,6 +929,7 @@ function LeaseAssetPageContent() {
                   size="icon"
                   onClick={() => setQrDialogOpen(true)}
                   title="QR Code"
+                  className="bg-transparent dark:bg-input/30"
                 >
                   <QrCode className="h-4 w-4" />
                 </Button>
@@ -1034,20 +1036,17 @@ function LeaseAssetPageContent() {
                   name="leaseStartDate"
                   control={form.control}
                   render={({ field, fieldState }) => (
-                    <>
-                    <Input
+                    <DatePicker
                       id="leaseStartDate"
-                      type="date"
-                        {...field}
-                      className="w-full"
-                        disabled={!canViewAssets || !canLease || !selectedAsset}
-                        aria-invalid={fieldState.error ? 'true' : 'false'}
-                        aria-required="true"
-                      />
-                      {fieldState.error && (
-                        <FieldError>{fieldState.error.message}</FieldError>
-                      )}
-                    </>
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      disabled={!canViewAssets || !canLease || !selectedAsset}
+                      placeholder="Select lease start date"
+                      error={fieldState.error?.message}
+                      className="gap-2"
+                      labelClassName="hidden"
+                    />
                   )}
                     />
                   </FieldContent>
@@ -1062,19 +1061,17 @@ function LeaseAssetPageContent() {
                   name="leaseEndDate"
                   control={form.control}
                   render={({ field, fieldState }) => (
-                    <>
-                    <Input
+                    <DatePicker
                       id="leaseEndDate"
-                      type="date"
-                        {...field}
-                      className="w-full"
-                        disabled={!canViewAssets || !canLease || !selectedAsset}
-                        aria-invalid={fieldState.error ? 'true' : 'false'}
-                      />
-                      {fieldState.error && (
-                        <FieldError>{fieldState.error.message}</FieldError>
-                      )}
-                    </>
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      disabled={!canViewAssets || !canLease || !selectedAsset}
+                      placeholder="Select lease end date"
+                      error={fieldState.error?.message}
+                      className="gap-2"
+                      labelClassName="hidden"
+                    />
                   )}
                     />
                   </FieldContent>

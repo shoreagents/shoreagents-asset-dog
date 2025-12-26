@@ -2099,7 +2099,7 @@ function InventoryPageContent() {
                   variant={lowStockFilter ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => updateURL({ lowStock: !lowStockFilter, page: 1 })}
-                  className="h-8 flex-1 sm:flex-initial"
+                  className="h-8 flex-1 sm:flex-initial bg-transparent dark:bg-input/30"
                 >
                   <AlertTriangle className="mr-2 h-4 w-4" />
                   Low Stock
@@ -2159,7 +2159,7 @@ function InventoryPageContent() {
                     setIsManualRefresh(true)
                     queryClient.invalidateQueries({ queryKey: ['inventory'] })
                   }}
-                  className="h-8 w-8 shrink-0"
+                  className="h-8 w-8 shrink-0 bg-transparent dark:bg-input/30"
                   title="Refresh table"
                 >
                   <RefreshCw className="h-4 w-4" />

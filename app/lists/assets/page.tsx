@@ -2168,7 +2168,7 @@ function ListOfAssetsPageContent() {
               </div>
             ) : (
               <div className="min-w-full">
-                <ScrollArea className={cn('h-132 relative', isMobile && "h-128")}>
+                <ScrollArea className={cn('h-132 relative', isMobile && "h-130")}>
                 <div className="sticky top-0 z-30 h-px bg-border w-full"></div>
                 <div className="pr-2.5 relative after:content-[''] after:absolute after:right-[10px] after:top-0 after:bottom-0 after:w-px after:bg-border after:z-50 after:h-full">
                 <Table>

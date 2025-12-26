@@ -41,6 +41,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldLabel, FieldContent, FieldError } from "@/components/ui/field"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -962,6 +963,7 @@ function MaintenancePageContent() {
                 size="icon"
                 onClick={() => setQrDialogOpen(true)}
                 title="QR Code"
+                className="bg-transparent dark:bg-input/30"
               >
                 <QrCode className="h-4 w-4" />
               </Button>
@@ -1134,18 +1136,17 @@ function MaintenancePageContent() {
                     name="dueDate"
                     control={form.control}
                     render={({ field, fieldState }) => (
-                      <>
-                        <Input
-                          id="dueDate"
-                          type="date"
-                          {...field}
-                          disabled={!canManageMaintenance || !canViewAssets || !selectedAsset}
-                          aria-invalid={fieldState.error ? 'true' : 'false'}
-                        />
-                        {fieldState.error && (
-                          <FieldError>{fieldState.error.message}</FieldError>
-                        )}
-                      </>
+                      <DatePicker
+                        id="dueDate"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        disabled={!canManageMaintenance || !canViewAssets || !selectedAsset}
+                        placeholder="Select maintenance date"
+                        error={fieldState.error?.message}
+                        className="gap-2"
+                        labelClassName="hidden"
+                      />
                     )}
                   />
                 </FieldContent>

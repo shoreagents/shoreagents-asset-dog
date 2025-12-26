@@ -1174,22 +1174,34 @@ export default function AddAssetPage() {
                           )}
 
                             {/* Supported formats info */}
-                            <Tooltip open={tooltipOpen || undefined} onOpenChange={(open) => {
-                              // Allow manual control when no validation error, or when closing after error
-                              if (!validationError || !open) {
-                                setTooltipOpen(open ?? false)
-                              }
-                            }}>
+                            <Tooltip 
+                              open={tooltipOpen || undefined} 
+                              onOpenChange={(open) => {
+                                // Allow manual control when no validation error, or when closing after error
+                                if (!validationError || !open) {
+                                  setTooltipOpen(open ?? false)
+                                }
+                              }}
+                            >
                               <TooltipTrigger asChild>
                                 <button
                                   type="button"
-                                  className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                                  className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors touch-manipulation"
                                   aria-label="Image format requirements"
+                                  onClick={(e) => {
+                                    // Toggle tooltip on click (works for both mobile and desktop)
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    setTooltipOpen(prev => !prev)
+                                  }}
                                 >
                                   <Info className="h-4 w-4" />
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent side="top" >
+                              <TooltipContent 
+                                side="top"
+                                onEscapeKeyDown={() => setTooltipOpen(false)}
+                              >
                                 {validationError ? (
                                   <>
                                     <p className="text-xs text-red-500">{validationError}</p>
@@ -1323,22 +1335,34 @@ export default function AddAssetPage() {
                             )}
 
                         {/* Supported formats info */}
-                            <Tooltip open={documentTooltipOpen || undefined} onOpenChange={(open) => {
-                              // Allow manual control when no validation error, or when closing after error
-                              if (!documentValidationError || !open) {
-                                setDocumentTooltipOpen(open ?? false)
-                              }
-                            }}>
+                            <Tooltip 
+                              open={documentTooltipOpen || undefined} 
+                              onOpenChange={(open) => {
+                                // Allow manual control when no validation error, or when closing after error
+                                if (!documentValidationError || !open) {
+                                  setDocumentTooltipOpen(open ?? false)
+                                }
+                              }}
+                            >
                               <TooltipTrigger asChild>
                                 <button
                                   type="button"
-                                  className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                                  className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors touch-manipulation"
                                   aria-label="Document format requirements"
+                                  onClick={(e) => {
+                                    // Toggle tooltip on click (works for both mobile and desktop)
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    setDocumentTooltipOpen(prev => !prev)
+                                  }}
                                 >
                                   <Info className="h-4 w-4" />
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent side="top">
+                              <TooltipContent 
+                                side="top"
+                                onEscapeKeyDown={() => setDocumentTooltipOpen(false)}
+                              >
                                 {documentValidationError ? (
                                   <>
                                     <p className="text-xs text-red-500">{documentValidationError}</p>

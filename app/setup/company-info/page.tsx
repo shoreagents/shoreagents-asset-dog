@@ -126,7 +126,7 @@ export default function CompanyInfoPage() {
   const primaryLogoInputRef = useRef<HTMLInputElement>(null)
   const secondaryLogoInputRef = useRef<HTMLInputElement>(null)
 
-  const { data: companyInfo, isLoading, error } = useCompanyInfo(canManageSetup)
+  const { data: companyInfo, isLoading, error } = useCompanyInfo(true) // Always fetch - users can view even without permission
 
   const form = useForm<CompanyInfoFormData>({
     resolver: zodResolver(companyInfoSchema),
@@ -551,8 +551,7 @@ export default function CompanyInfoPage() {
 
   const onSubmit = async (data: CompanyInfoFormData) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage company info')
-      return
+      return // Silent return - form is disabled, but keep as safety net
     }
 
     let finalPrimaryLogoUrl = primaryLogoUrl
@@ -741,35 +740,6 @@ export default function CompanyInfoPage() {
     )
   }
 
-  if (!canManageSetup) {
-    return (
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="space-y-4"
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle>Company Info</CardTitle>
-            <CardDescription>Manage company information and logos</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="p-4 rounded-full bg-muted/50 mb-4">
-                <Building2 className="h-12 w-12 text-muted-foreground/50" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
-              <p className="text-sm text-muted-foreground">
-                You do not have permission to manage company info. Please contact an administrator.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-    )
-  }
-
   if (error) {
     return (
       <motion.div 
@@ -855,6 +825,7 @@ export default function CompanyInfoPage() {
                         placeholder="Enter company name"
                         aria-invalid={fieldState.error ? 'true' : 'false'}
                         aria-required="true"
+                        disabled={!canManageSetup}
                       />
                       {fieldState.error && (
                         <FieldError>{fieldState.error.message}</FieldError>
@@ -880,6 +851,7 @@ export default function CompanyInfoPage() {
                         placeholder="contact@company.com"
                         aria-invalid={fieldState.error ? 'true' : 'false'}
                         aria-required="true"
+                        disabled={!canManageSetup}
                       />
                       {fieldState.error && (
                         <FieldError>{fieldState.error.message}</FieldError>
@@ -913,6 +885,7 @@ export default function CompanyInfoPage() {
                           className={selectedCountry ? "rounded-l-none" : ""}
                           aria-invalid={fieldState.error ? 'true' : 'false'}
                           aria-required="true"
+                          disabled={!canManageSetup}
                         />
                       </div>
                       {fieldState.error && (
@@ -938,6 +911,7 @@ export default function CompanyInfoPage() {
                         placeholder="Street address"
                         aria-invalid={fieldState.error ? 'true' : 'false'}
                         aria-required="true"
+                        disabled={!canManageSetup}
                       />
                       {fieldState.error && (
                         <FieldError>{fieldState.error.message}</FieldError>
@@ -963,6 +937,7 @@ export default function CompanyInfoPage() {
                           placeholder="12345"
                           aria-invalid={fieldState.error ? 'true' : 'false'}
                           aria-required="true"
+                          disabled={!canManageSetup}
                         />
                         {fieldState.error && (
                           <FieldError>{fieldState.error.message}</FieldError>
@@ -988,6 +963,7 @@ export default function CompanyInfoPage() {
                             handleCountryChange(value, countries.find((c: Country) => c.name === value))
                           }}
                           placeholder="Select country..."
+                          disabled={!canManageSetup}
                         />
                         {fieldState.error && (
                           <FieldError>{fieldState.error.message}</FieldError>
@@ -1014,6 +990,7 @@ export default function CompanyInfoPage() {
                         placeholder="https://www.company.com"
                         aria-invalid={fieldState.error ? 'true' : 'false'}
                         aria-required="true"
+                        disabled={!canManageSetup}
                       />
                       {fieldState.error && (
                         <FieldError>{fieldState.error.message}</FieldError>
@@ -1082,7 +1059,7 @@ export default function CompanyInfoPage() {
                         size="icon"
                         className="absolute top-2 right-2 h-7 w-7 z-20"
                         onClick={() => handleRemoveLogo('primary')}
-                        disabled={saveMutation.isPending || uploadingPrimaryLogo}
+                        disabled={saveMutation.isPending || uploadingPrimaryLogo || !canManageSetup}
                       >
                         <X className="h-3.5 w-3.5" />
                       </Button>
@@ -1112,14 +1089,14 @@ export default function CompanyInfoPage() {
                     accept="image/*"
                     className="hidden"
                     onChange={(e) => handleLogoChange(e, 'primary')}
-                    disabled={saveMutation.isPending}
+                    disabled={saveMutation.isPending || !canManageSetup}
                   />
                   <Button
                     type="button"
                     variant="outline"
                     className="w-full bg-card!"
                     onClick={() => primaryLogoInputRef.current?.click()}
-                    disabled={saveMutation.isPending}
+                    disabled={saveMutation.isPending || !canManageSetup}
                   >
                     <Upload className="h-4 w-4 mr-2" />
                     {(primaryLogoPreview || primaryLogoUrl) ? 'Replace Primary Logo' : 'Upload Primary Logo'}
@@ -1165,7 +1142,7 @@ export default function CompanyInfoPage() {
                         size="icon"
                         className="absolute top-2 right-2 h-7 w-7 z-20"
                         onClick={() => handleRemoveLogo('secondary')}
-                        disabled={saveMutation.isPending || uploadingSecondaryLogo}
+                        disabled={saveMutation.isPending || uploadingSecondaryLogo || !canManageSetup}
                       >
                         <X className="h-3.5 w-3.5" />
                       </Button>
@@ -1195,14 +1172,14 @@ export default function CompanyInfoPage() {
                     accept="image/*"
                     className="hidden"
                     onChange={(e) => handleLogoChange(e, 'secondary')}
-                    disabled={saveMutation.isPending}
+                    disabled={saveMutation.isPending || !canManageSetup}
                   />
                   <Button
                     type="button"
                     variant="outline"
                     className="w-full bg-card!"
                     onClick={() => secondaryLogoInputRef.current?.click()}
-                    disabled={saveMutation.isPending}
+                    disabled={saveMutation.isPending || !canManageSetup}
                   >
                     <Upload className="h-4 w-4 mr-2" />
                     {(secondaryLogoPreview || secondaryLogoUrl) ? 'Replace Secondary Logo' : 'Upload Secondary Logo'}
@@ -1253,7 +1230,7 @@ export default function CompanyInfoPage() {
                 formElement.requestSubmit()
               }
             }}
-            disabled={saveMutation.isPending || uploadingPrimaryLogo || uploadingSecondaryLogo}
+            disabled={saveMutation.isPending || uploadingPrimaryLogo || uploadingSecondaryLogo || !canManageSetup}
             className="min-w-[120px]"
           >
             {saveMutation.isPending || uploadingPrimaryLogo || uploadingSecondaryLogo ? (

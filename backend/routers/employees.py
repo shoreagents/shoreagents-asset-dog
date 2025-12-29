@@ -22,6 +22,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/employees", tags=["employees"])
 
+async def check_permission(user_id: str, permission: str) -> bool:
+    """Check if user has a specific permission. Admins have all permissions."""
+    try:
+        asset_user = await prisma.assetuser.find_unique(
+            where={"userId": user_id}
+        )
+        if not asset_user or not asset_user.isActive:
+            return False
+        
+        # Admins have all permissions
+        if asset_user.role == "admin":
+            return True
+        
+        return getattr(asset_user, permission, False)
+    except Exception:
+        return False
+
 @router.get("", response_model=EmployeesResponse)
 async def get_employees(
     search: Optional[str] = Query(None),
@@ -258,6 +275,17 @@ async def create_employee(
 ):
     """Create a new employee"""
     try:
+        user_id = auth.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageEmployees to create employees
+        has_permission = await check_permission(user_id, "canManageEmployees")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to create employees"
+            )
         # Check if employee with same email exists
         existing = await prisma.employeeuser.find_first(
             where={
@@ -308,6 +336,17 @@ async def update_employee(
 ):
     """Update an existing employee"""
     try:
+        user_id = auth.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageEmployees to update employees
+        has_permission = await check_permission(user_id, "canManageEmployees")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to update employees"
+            )
         # Check if employee exists
         existing = await prisma.employeeuser.find_unique(
             where={"id": employee_id}
@@ -369,6 +408,17 @@ async def delete_employee(
 ):
     """Delete an employee"""
     try:
+        user_id = auth.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageEmployees to delete employees
+        has_permission = await check_permission(user_id, "canManageEmployees")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to delete employees"
+            )
         # Check if employee exists
         employee = await prisma.employeeuser.find_unique(
             where={"id": employee_id}

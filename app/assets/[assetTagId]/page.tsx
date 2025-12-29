@@ -349,7 +349,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
   // React Query hooks - lazy load categories and subcategories only when dropdowns are opened
   // Fetch categories when dropdown is open OR when asset has a categoryId (to display selected value)
   const shouldFetchCategories = isCategoryDropdownOpen || !!asset?.categoryId
-  const { data: categories = [], isLoading: categoriesLoading } = useCategories(shouldFetchCategories)
+  const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useCategories(shouldFetchCategories)
   const createCategoryMutation = useCreateCategory()
   const createSubCategoryMutation = useCreateSubCategory()
   
@@ -756,7 +756,7 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
   const selectedCategory = categoryId || ""
   // Fetch subcategories if: dropdown is open OR category is selected (to show selected subcategory name)
   const shouldFetchSubCategories = (isSubCategoryDropdownOpen || (selectedCategory && subCategoryId)) && selectedCategory
-  const { data: subCategories = [], isLoading: subCategoriesLoading } = useSubCategories(
+  const { data: subCategories = [], isLoading: subCategoriesLoading, error: subCategoriesError } = useSubCategories(
     shouldFetchSubCategories ? selectedCategory : null
   )
 
@@ -2137,18 +2137,18 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
                         </SelectTrigger>
                         <SelectContent>
                           {categories?.map((category: Category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                          {isCategoryDropdownOpen && categoriesLoading && !categories.length && (
-                            <SelectItem value="loading" disabled>
-                              <div className="flex items-center gap-2">
-                                <Spinner className="h-4 w-4" />
-                                <span>Loading categories...</span>
-                              </div>
-                            </SelectItem>
-                          )}
+                                <SelectItem key={category.id} value={category.id}>
+                                  {category.name}
+                                </SelectItem>
+                              ))}
+                              {isCategoryDropdownOpen && categoriesLoading && !categories.length && (
+                                <SelectItem value="loading" disabled>
+                                  <div className="flex items-center gap-2">
+                                    <Spinner className="h-4 w-4" />
+                                    <span>Loading categories...</span>
+                                  </div>
+                                </SelectItem>
+                              )}
                         </SelectContent>
                       </Select>
                         )}
@@ -2203,23 +2203,23 @@ export default function EditAssetPage({ params }: { params: Promise<{ assetTagId
                         </SelectTrigger>
                         <SelectContent>
                           {subCategories?.map((subCat: SubCategory) => (
-                            <SelectItem key={subCat.id} value={subCat.id}>
-                              {subCat.name}
-                            </SelectItem>
-                          ))}
-                          {isSubCategoryDropdownOpen && selectedCategory && subCategoriesLoading && !subCategories.length && (
-                            <SelectItem value="loading" disabled>
-                              <div className="flex items-center gap-2">
-                                <Spinner className="h-4 w-4" />
-                                <span>Loading sub categories...</span>
-                              </div>
-                            </SelectItem>
-                          )}
-                          {isSubCategoryDropdownOpen && selectedCategory && !subCategoriesLoading && subCategories.length === 0 && (
-                            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                              No subcategories available for this category
-                            </div>
-                          )}
+                                <SelectItem key={subCat.id} value={subCat.id}>
+                                  {subCat.name}
+                                </SelectItem>
+                              ))}
+                              {isSubCategoryDropdownOpen && selectedCategory && subCategoriesLoading && !subCategories.length && (
+                                <SelectItem value="loading" disabled>
+                                  <div className="flex items-center gap-2">
+                                    <Spinner className="h-4 w-4" />
+                                    <span>Loading sub categories...</span>
+                                  </div>
+                                </SelectItem>
+                              )}
+                              {isSubCategoryDropdownOpen && selectedCategory && !subCategoriesLoading && subCategories.length === 0 && (
+                                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                  No subcategories available for this category
+                                </div>
+                              )}
                         </SelectContent>
                       </Select>
                         )}

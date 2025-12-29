@@ -81,8 +81,7 @@ export default function DepartmentsPage() {
   // Department handlers
   const handleCreateDepartment = async (data: { name: string; description?: string }) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage departments')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
 
     // Client-side validation: check for duplicate department names
@@ -105,8 +104,7 @@ export default function DepartmentsPage() {
 
   const handleEditDepartment = (department: Department) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage departments')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedDepartment(department)
     setIsEditDepartmentDialogOpen(true)
@@ -139,8 +137,7 @@ export default function DepartmentsPage() {
 
   const handleDeleteDepartment = (department: Department) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage departments')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     
     setSelectedDepartment(department)
@@ -218,8 +215,7 @@ export default function DepartmentsPage() {
   // Bulk delete handler
   const handleBulkDelete = async () => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage departments')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     if (selectedDepartments.size === 0) return
     
@@ -451,28 +447,6 @@ export default function DepartmentsPage() {
     )
   }
 
-  if (!canManageSetup) {
-    return (
-      <div className="space-y-4">
-        <Card className='border-none! shadow-none! bg-transparent!'>
-          <CardHeader>
-            <CardTitle>Departments</CardTitle>
-            <CardDescription>Manage asset departments</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
-              <p className="text-sm text-muted-foreground">
-                You do not have permission to manage departments. Please contact an administrator.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -497,7 +471,7 @@ export default function DepartmentsPage() {
                     id="select-all-departments"
                     checked={selectedDepartments.size === departments.length && departments.length > 0}
                     onCheckedChange={handleToggleSelectAll}
-                    disabled={departments.length === 0}
+                    disabled={departments.length === 0 || !canManageSetup}
                     title={selectedDepartments.size === departments.length && departments.length > 0
                       ? 'Deselect All'
                       : 'Select All'}
@@ -546,6 +520,7 @@ export default function DepartmentsPage() {
                 size="sm"
                 onClick={handleToggleSelectionMode}
                 className="h-9"
+                disabled={!canManageSetup}
               >
                 {isSelectionMode ? "Cancel" : "Select"}
               </Button>
@@ -555,12 +530,18 @@ export default function DepartmentsPage() {
                   size="sm"
                   onClick={() => setIsBulkDeleteDialogOpen(true)}
                   className="h-9"
+                  disabled={!canManageSetup}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete ({selectedDepartments.size})
                 </Button>
               )}
-              <Button onClick={() => setIsCreateDepartmentDialogOpen(true)} size='sm' className="shadow-sm hover:shadow-md transition-all h-9">
+              <Button 
+                onClick={() => setIsCreateDepartmentDialogOpen(true)} 
+                size='sm' 
+                className="shadow-sm hover:shadow-md transition-all h-9"
+                disabled={!canManageSetup}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Department
               </Button>

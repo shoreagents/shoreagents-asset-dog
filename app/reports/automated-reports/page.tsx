@@ -212,7 +212,7 @@ function AutomatedReportsPageContent() {
       }
       return response.json()
     },
-    enabled: canManageReports, // Only fetch if user has permission
+    // Always fetch - users can view reports even without permission to manage them
   })
 
   const form = useForm<AutomatedReportScheduleFormData>({
@@ -392,6 +392,9 @@ function AutomatedReportsPageContent() {
   })
 
   const handleOpenDialog = useCallback((schedule?: AutomatedReportSchedule) => {
+    if (!canManageReports) {
+      return // Silent return - button is disabled, but keep as safety net
+    }
     if (schedule) {
       setEditingSchedule(schedule)
       reset({
@@ -412,7 +415,7 @@ function AutomatedReportsPageContent() {
       setReportFilters({})
     }
     setIsDialogOpen(true)
-  }, [reset])
+  }, [canManageReports, reset])
 
   const handleCloseDialog = useCallback(() => {
     setIsDialogOpen(false)
@@ -580,23 +583,6 @@ function AutomatedReportsPageContent() {
                 </CardContent>
               </Card>
             </motion.div>
-          ) : !canManageReports ? (
-            // Access denied state - only show when permissions are done loading
-            <motion.div
-              key="access-denied"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-            >
-              <Card className="bg-white/10 dark:bg-white/5 backdrop-blur-2xl border border-white/30 dark:border-white/10 shadow-sm backdrop-saturate-150">
-                <CardContent className="pt-6">
-                  <div className="text-center">
-                    <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
-                    <p className="text-muted-foreground">You do not have permission to manage automated reports</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
           ) : error ? (
             // Error state
             <motion.div
@@ -721,7 +707,7 @@ function AutomatedReportsPageContent() {
                                     <Switch
                                       checked={schedule.isActive}
                                       onCheckedChange={(checked) => toggleActiveMutation.mutate({ id: schedule.id, isActive: checked })}
-                                      disabled={toggleActiveMutation.isPending}
+                                      disabled={toggleActiveMutation.isPending || !canManageReports}
                                       loading={toggleActiveMutation.isPending}
                                     />
                                     <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
@@ -729,6 +715,7 @@ function AutomatedReportsPageContent() {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => handleOpenDialog(schedule)}
+                                        disabled={!canManageReports}
                                       >
                                         <Edit className="h-4 w-4" />
                                       </Button>
@@ -738,6 +725,7 @@ function AutomatedReportsPageContent() {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => setDeleteScheduleId(schedule.id)}
+                                        disabled={!canManageReports}
                                       >
                                         <Trash2 className="h-4 w-4 text-destructive" />
                                       </Button>
@@ -763,7 +751,7 @@ function AutomatedReportsPageContent() {
                                 <Switch
                                   checked={schedule.isActive}
                                   onCheckedChange={(checked) => toggleActiveMutation.mutate({ id: schedule.id, isActive: checked })}
-                                  disabled={toggleActiveMutation.isPending}
+                                  disabled={toggleActiveMutation.isPending || !canManageReports}
                                   loading={toggleActiveMutation.isPending}
                                 />
                               </div>
@@ -853,6 +841,7 @@ function AutomatedReportsPageContent() {
                                   size="sm"
                                   onClick={() => handleOpenDialog(schedule)}
                                   className="h-8 px-2"
+                                  disabled={!canManageReports}
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
@@ -861,6 +850,7 @@ function AutomatedReportsPageContent() {
                                   size="sm"
                                   onClick={() => setDeleteScheduleId(schedule.id)}
                                   className="h-8 px-2"
+                                  disabled={!canManageReports}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>

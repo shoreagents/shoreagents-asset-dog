@@ -47,13 +47,7 @@ async def get_categories(
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
         
-        # Check permission - user must have canManageSetup to view categories
-        has_permission = await check_permission(user_id, "canManageSetup")
-        if not has_permission:
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to view categories"
-            )
+        # GET endpoint is open - all authenticated users can view categories (needed for dropdowns)
         
         if search:
             categories_data = await prisma.category.find_many(

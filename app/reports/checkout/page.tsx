@@ -279,8 +279,7 @@ function CheckoutReportsPageContent() {
   // Export handlers
   const handleExportClick = useCallback((format: 'csv' | 'excel' | 'pdf') => {
     if (!canManageReports) {
-      toast.error('You do not have permission to export reports. Please contact your administrator.')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setPendingExportFormat(format)
     // Reset includeCheckoutList when opening dialog
@@ -657,15 +656,15 @@ function CheckoutReportsPageContent() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => handleExportClick('csv')} disabled={isExporting}>
+                <DropdownMenuItem onClick={() => handleExportClick('csv')} disabled={isExporting || !canManageReports}>
                   <FileText className="h-4 w-4 mr-2" />
                   CSV
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportClick('excel')} disabled={isExporting}>
+                <DropdownMenuItem onClick={() => handleExportClick('excel')} disabled={isExporting || !canManageReports}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Excel
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportClick('pdf')} disabled={isExporting}>
+                <DropdownMenuItem onClick={() => handleExportClick('pdf')} disabled={isExporting || !canManageReports}>
                   <FileText className="h-4 w-4 mr-2" />
                   PDF
                 </DropdownMenuItem>
@@ -842,15 +841,15 @@ function CheckoutReportsPageContent() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExportClick('csv')} disabled={isExporting}>
+                <DropdownMenuItem onClick={() => handleExportClick('csv')} disabled={isExporting || !canManageReports}>
                   <FileText className="h-4 w-4 mr-2" />
                   Export as CSV
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportClick('excel')} disabled={isExporting}>
+                <DropdownMenuItem onClick={() => handleExportClick('excel')} disabled={isExporting || !canManageReports}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Export as Excel
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportClick('pdf')} disabled={isExporting}>
+                <DropdownMenuItem onClick={() => handleExportClick('pdf')} disabled={isExporting || !canManageReports}>
                   <FileText className="h-4 w-4 mr-2" />
                   Export as PDF
                 </DropdownMenuItem>

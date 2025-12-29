@@ -62,7 +62,7 @@ export function SiteSelectField({
   const [pendingSiteName, setPendingSiteName] = useState<string>('')
   const onChangeCallbackRef = useRef<((value: string) => void) | null>(null)
   
-  const { data: sites = [], isLoading: isLoadingSites } = useSites(true, searchQuery)
+  const { data: sites = [], isLoading: isLoadingSites, error: sitesError } = useSites(true, searchQuery)
   const createSiteMutation = useCreateSite()
 
   // Store the onChange callback in a ref (only for regular state management)
@@ -139,32 +139,32 @@ export function SiteSelectField({
             />
             <CommandList className="max-h-none">
               <CommandEmpty>
-                {isLoadingSites ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Spinner className="h-4 w-4" />
-                  </div>
-                ) : canCreate && searchQuery.trim() ? (
-                  <div className="p-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        setPendingSiteName(searchQuery)
-                        setIsCreateDialogOpen(true)
-                        setOpen(false)
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create &quot;{searchQuery}&quot;
-                    </Button>
-                  </div>
-                ) : (
-                  'No sites found.'
-                )}
-              </CommandEmpty>
-              <ScrollArea className="h-[300px]">
-                <CommandGroup>
+                    {isLoadingSites ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Spinner className="h-4 w-4" />
+                      </div>
+                    ) : canCreate && searchQuery.trim() ? (
+                      <div className="p-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            setPendingSiteName(searchQuery)
+                            setIsCreateDialogOpen(true)
+                            setOpen(false)
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create &quot;{searchQuery}&quot;
+                        </Button>
+                      </div>
+                    ) : (
+                      'No sites found.'
+                    )}
+                  </CommandEmpty>
+                  <ScrollArea className="h-[300px]">
+                    <CommandGroup>
                   {sites.map((site: Site) => {
                     const isSelected = currentValue === site.name
 
@@ -209,8 +209,8 @@ export function SiteSelectField({
                       Create &quot;{searchQuery}&quot;
                     </CommandItem>
                   )}
-                </CommandGroup>
-              </ScrollArea>
+                    </CommandGroup>
+                  </ScrollArea>
             </CommandList>
           </Command>
         </PopoverContent>

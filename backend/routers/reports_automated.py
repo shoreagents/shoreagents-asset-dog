@@ -24,6 +24,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/reports/automated", tags=["reports"])
 
+async def check_permission(user_id: str, permission: str) -> bool:
+    """Check if user has a specific permission. Admins have all permissions."""
+    try:
+        asset_user = await prisma.assetuser.find_unique(
+            where={"userId": user_id}
+        )
+        if not asset_user or not asset_user.isActive:
+            return False
+        
+        # Admins have all permissions
+        if asset_user.role == "admin":
+            return True
+        
+        return getattr(asset_user, permission, False)
+    except Exception:
+        return False
+
 @router.get("", response_model=AutomatedReportScheduleListResponse)
 async def get_automated_reports(
     auth: dict = Depends(verify_auth)
@@ -79,6 +96,14 @@ async def create_automated_report(
         user_id = auth.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageReports to create automated reports
+        has_permission = await check_permission(user_id, "canManageReports")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to create automated reports"
+            )
 
         # Validate required fields
         if not data.reportName or not data.reportType or not data.frequency or not data.emailRecipients or len(data.emailRecipients) == 0:
@@ -231,6 +256,14 @@ async def update_automated_report(
         user_id = auth.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageReports to update automated reports
+        has_permission = await check_permission(user_id, "canManageReports")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to update automated reports"
+            )
 
         # Check if schedule exists
         current_schedule = await prisma.automatedreportschedule.find_unique(
@@ -342,6 +375,14 @@ async def delete_automated_report(
         user_id = auth.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageReports to delete automated reports
+        has_permission = await check_permission(user_id, "canManageReports")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to delete automated reports"
+            )
 
         # Check if schedule exists
         schedule = await prisma.automatedreportschedule.find_unique(

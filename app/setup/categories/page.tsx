@@ -139,8 +139,7 @@ export default function CategoriesPage() {
   // Category handlers
   const handleCreateCategory = async (data: { name: string; description?: string }) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage categories')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
 
     // Client-side validation: check for duplicate category names
@@ -163,8 +162,7 @@ export default function CategoriesPage() {
 
   const handleEditCategory = (category: Category) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage categories')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedCategory(category)
     setIsEditCategoryDialogOpen(true)
@@ -197,8 +195,7 @@ export default function CategoriesPage() {
 
   const handleDeleteCategory = (category: Category) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage categories')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     
     setSelectedCategory(category)
@@ -221,8 +218,7 @@ export default function CategoriesPage() {
   // Subcategory handlers
   const handleCreateSubCategory = (category: Category) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage categories')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedCategory(category)
     setIsCreateSubCategoryDialogOpen(true)
@@ -255,8 +251,7 @@ export default function CategoriesPage() {
 
   const handleEditSubCategory = (subCategory: SubCategory, categoryId: string) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage categories')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedSubCategory({ ...subCategory, categoryId })
     setIsEditSubCategoryDialogOpen(true)
@@ -292,8 +287,7 @@ export default function CategoriesPage() {
 
   const handleDeleteSubCategory = (subCategory: SubCategory) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage categories')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedSubCategory({ ...subCategory, categoryId: '' })
     setIsDeleteSubCategoryDialogOpen(true)
@@ -349,28 +343,6 @@ export default function CategoriesPage() {
     )
   }
 
-  if (!canManageSetup) {
-    return (
-      <div className="space-y-4">
-        <Card className='border-none! shadow-none! bg-transparent!'>
-          <CardHeader>
-            <CardTitle>Categories</CardTitle>
-            <CardDescription>Manage asset categories and subcategories</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <FolderTree className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
-              <p className="text-sm text-muted-foreground">
-                You do not have permission to manage categories. Please contact an administrator.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -415,7 +387,12 @@ export default function CategoriesPage() {
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button onClick={() => setIsCreateCategoryDialogOpen(true)} size='sm' className="shadow-sm hover:shadow-md transition-all h-9">
+          <Button 
+            onClick={() => setIsCreateCategoryDialogOpen(true)} 
+            size='sm' 
+            className="shadow-sm hover:shadow-md transition-all h-9"
+            disabled={!canManageSetup}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Category
           </Button>
@@ -436,7 +413,10 @@ export default function CategoriesPage() {
               <p className="text-sm text-muted-foreground mb-6 max-w-sm text-center">
                 Get started by creating your first category to organize your assets efficiently.
               </p>
-              <Button onClick={() => setIsCreateCategoryDialogOpen(true)}>
+              <Button 
+                onClick={() => setIsCreateCategoryDialogOpen(true)}
+                disabled={!canManageSetup}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Create Category
               </Button>

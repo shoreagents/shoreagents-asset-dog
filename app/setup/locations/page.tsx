@@ -81,8 +81,7 @@ export default function LocationsPage() {
   // Location handlers
   const handleCreateLocation = async (data: { name: string; description?: string }) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage locations')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
 
     // Check if location name already exists (case-insensitive)
@@ -107,8 +106,7 @@ export default function LocationsPage() {
 
   const handleEditLocation = (location: Location) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage locations')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedLocation(location)
     setIsEditLocationDialogOpen(true)
@@ -143,8 +141,7 @@ export default function LocationsPage() {
 
   const handleDeleteLocation = (location: Location) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage locations')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     
     setSelectedLocation(location)
@@ -222,8 +219,7 @@ export default function LocationsPage() {
   // Bulk delete handler
   const handleBulkDelete = async () => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage locations')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     if (selectedLocations.size === 0) return
     
@@ -459,28 +455,6 @@ export default function LocationsPage() {
     )
   }
 
-  if (!canManageSetup) {
-    return (
-      <div className="space-y-4">
-        <Card className='border-none! shadow-none! bg-transparent!'>
-          <CardHeader>
-            <CardTitle>Locations</CardTitle>
-            <CardDescription>Manage asset locations</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <MapPin className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
-              <p className="text-sm text-muted-foreground">
-                You do not have permission to manage locations. Please contact an administrator.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -505,7 +479,7 @@ export default function LocationsPage() {
                     id="select-all-locations"
                     checked={selectedLocations.size === locations.length && locations.length > 0}
                     onCheckedChange={handleToggleSelectAll}
-                    disabled={locations.length === 0}
+                    disabled={locations.length === 0 || !canManageSetup}
                     title={selectedLocations.size === locations.length && locations.length > 0
                       ? 'Deselect All'
                       : 'Select All'}
@@ -554,6 +528,7 @@ export default function LocationsPage() {
                 size="sm"
                 onClick={handleToggleSelectionMode}
                 className="h-9"
+                disabled={!canManageSetup}
               >
                 {isSelectionMode ? "Cancel" : "Select"}
               </Button>
@@ -563,12 +538,18 @@ export default function LocationsPage() {
                   size="sm"
                   onClick={() => setIsBulkDeleteDialogOpen(true)}
                   className="h-9"
+                  disabled={!canManageSetup}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete ({selectedLocations.size})
                 </Button>
               )}
-              <Button onClick={() => setIsCreateLocationDialogOpen(true)} size='sm' className="shadow-sm hover:shadow-md transition-all h-9">
+              <Button 
+                onClick={() => setIsCreateLocationDialogOpen(true)} 
+                size='sm' 
+                className="shadow-sm hover:shadow-md transition-all h-9"
+                disabled={!canManageSetup}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Location
               </Button>

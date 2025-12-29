@@ -65,16 +65,12 @@ export const useSites = (enabled: boolean = true, search?: string) => {
         headers,
       })
       if (!response.ok) {
-        // Handle 403 Forbidden silently - user doesn't have permission
-        if (response.status === 403) {
-          return []
-        }
         const errorText = await response.text()
         console.error(`Failed to fetch sites: ${response.status} ${response.statusText}`, errorText)
         if (response.status === 401) {
           throw new Error('Unauthorized - please login again')
         }
-        return []
+        throw new Error('Failed to fetch sites')
       }
       const data = await response.json()
       return (data.sites || []) as Site[]

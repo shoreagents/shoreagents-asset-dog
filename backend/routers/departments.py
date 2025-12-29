@@ -51,13 +51,7 @@ async def get_departments(
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
         
-        # Check permission - user must have canManageSetup to view departments
-        has_permission = await check_permission(user_id, "canManageSetup")
-        if not has_permission:
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to view departments"
-            )
+        # GET endpoint is open - all authenticated users can view departments (needed for dropdowns)
         
         if search:
             departments_data = await prisma.assetsdepartment.find_many(

@@ -18,6 +18,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/reports/depreciation", tags=["reports"])
 
+async def check_permission(user_id: str, permission: str) -> bool:
+    """Check if user has a specific permission. Admins have all permissions."""
+    try:
+        asset_user = await prisma.assetuser.find_unique(
+            where={"userId": user_id}
+        )
+        if not asset_user or not asset_user.isActive:
+            return False
+        
+        # Admins have all permissions
+        if asset_user.role == "admin":
+            return True
+        
+        return getattr(asset_user, permission, False)
+    except Exception:
+        return False
+
 def format_number(value: Optional[float]) -> str:
     """Format number with commas and 2 decimal places"""
     if value is None or value == 0:
@@ -239,6 +256,14 @@ async def export_depreciation_reports(
         user_id = auth.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageReports to export reports
+        has_permission = await check_permission(user_id, "canManageReports")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to export reports"
+            )
 
         if format not in ["csv", "excel", "pdf"]:
             raise HTTPException(status_code=400, detail="Invalid format. Use csv, excel, or pdf.")

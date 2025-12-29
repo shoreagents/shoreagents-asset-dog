@@ -51,13 +51,7 @@ async def get_sites(
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
         
-        # Check permission - user must have canManageSetup to view sites
-        has_permission = await check_permission(user_id, "canManageSetup")
-        if not has_permission:
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to view sites"
-            )
+        # GET endpoint is open - all authenticated users can view sites (needed for dropdowns)
         
         if search:
             sites_data = await prisma.assetssite.find_many(

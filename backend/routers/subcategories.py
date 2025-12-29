@@ -47,13 +47,7 @@ async def get_subcategories(
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
         
-        # Check permission - user must have canManageSetup to view subcategories
-        has_permission = await check_permission(user_id, "canManageSetup")
-        if not has_permission:
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to view subcategories"
-            )
+        # GET endpoint is open - all authenticated users can view subcategories (needed for dropdowns)
         
         where_clause = {}
         if categoryId:

@@ -62,7 +62,7 @@ export function DepartmentSelectField({
   const [pendingDepartmentName, setPendingDepartmentName] = useState<string>('')
   const onChangeCallbackRef = useRef<((value: string) => void) | null>(null)
   
-  const { data: departments = [], isLoading: isLoadingDepartments } = useDepartments(true, searchQuery)
+  const { data: departments = [], isLoading: isLoadingDepartments, error: departmentsError } = useDepartments(true, searchQuery)
   const createDepartmentMutation = useCreateDepartment()
 
   // Store the onChange callback in a ref (only for regular state management)
@@ -143,32 +143,32 @@ export function DepartmentSelectField({
             />
             <CommandList className="max-h-none">
               <CommandEmpty>
-                {isLoadingDepartments ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Spinner className="h-4 w-4" />
-                  </div>
-                ) : canCreate && searchQuery.trim() ? (
-                  <div className="p-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        setPendingDepartmentName(searchQuery)
-                        setIsCreateDialogOpen(true)
-                        setOpen(false)
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create &quot;{searchQuery}&quot;
-                    </Button>
-                  </div>
-                ) : (
-                  'No departments found.'
-                )}
-              </CommandEmpty>
-              <ScrollArea className="h-[300px]">
-                <CommandGroup>
+                    {isLoadingDepartments ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Spinner className="h-4 w-4" />
+                      </div>
+                    ) : canCreate && searchQuery.trim() ? (
+                      <div className="p-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            setPendingDepartmentName(searchQuery)
+                            setIsCreateDialogOpen(true)
+                            setOpen(false)
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create &quot;{searchQuery}&quot;
+                        </Button>
+                      </div>
+                    ) : (
+                      'No departments found.'
+                    )}
+                  </CommandEmpty>
+                  <ScrollArea className="h-[300px]">
+                    <CommandGroup>
                   {departments.map((department: Department) => {
                     const isSelected = department.name.trim().toLowerCase() === normalizedCurrentValue
 
@@ -213,8 +213,9 @@ export function DepartmentSelectField({
                       Create &quot;{searchQuery}&quot;
                     </CommandItem>
                   )}
-                </CommandGroup>
-              </ScrollArea>
+                    </CommandGroup>
+                  </ScrollArea>
+                
             </CommandList>
           </Command>
         </PopoverContent>

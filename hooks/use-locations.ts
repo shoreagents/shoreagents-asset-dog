@@ -65,16 +65,12 @@ export const useLocations = (enabled: boolean = true, search?: string) => {
         headers,
       })
       if (!response.ok) {
-        // Handle 403 Forbidden silently - user doesn't have permission
-        if (response.status === 403) {
-          return []
-        }
         const errorText = await response.text()
         console.error(`Failed to fetch locations: ${response.status} ${response.statusText}`, errorText)
         if (response.status === 401) {
           throw new Error('Unauthorized - please login again')
         }
-        return []
+        throw new Error('Failed to fetch locations')
       }
       const data = await response.json()
       return (data.locations || []) as Location[]

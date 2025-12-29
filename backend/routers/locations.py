@@ -51,13 +51,7 @@ async def get_locations(
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
         
-        # Check permission - user must have canManageSetup to view locations
-        has_permission = await check_permission(user_id, "canManageSetup")
-        if not has_permission:
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to view locations"
-            )
+        # GET endpoint is open - all authenticated users can view locations (needed for dropdowns)
         
         if search:
             locations_data = await prisma.assetslocation.find_many(

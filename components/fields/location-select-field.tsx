@@ -62,7 +62,7 @@ export function LocationSelectField({
   const [pendingLocationName, setPendingLocationName] = useState<string>('')
   const onChangeCallbackRef = useRef<((value: string) => void) | null>(null)
   
-  const { data: locations = [], isLoading: isLoadingLocations } = useLocations(true, searchQuery)
+  const { data: locations = [], isLoading: isLoadingLocations, error: locationsError } = useLocations(true, searchQuery)
   const createLocationMutation = useCreateLocation()
 
   // Store the onChange callback in a ref (only for regular state management)
@@ -139,32 +139,32 @@ export function LocationSelectField({
             />
             <CommandList className="max-h-none">
               <CommandEmpty>
-                {isLoadingLocations ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Spinner className="h-4 w-4" />
-                  </div>
-                ) : canCreate && searchQuery.trim() ? (
-                  <div className="p-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        setPendingLocationName(searchQuery)
-                        setIsCreateDialogOpen(true)
-                        setOpen(false)
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create &quot;{searchQuery}&quot;
-                    </Button>
-                  </div>
-                ) : (
-                  'No locations found.'
-                )}
-              </CommandEmpty>
-              <ScrollArea className="h-[300px]">
-                <CommandGroup>
+                    {isLoadingLocations ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Spinner className="h-4 w-4" />
+                      </div>
+                    ) : canCreate && searchQuery.trim() ? (
+                      <div className="p-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            setPendingLocationName(searchQuery)
+                            setIsCreateDialogOpen(true)
+                            setOpen(false)
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create &quot;{searchQuery}&quot;
+                        </Button>
+                      </div>
+                    ) : (
+                      'No locations found.'
+                    )}
+                  </CommandEmpty>
+                  <ScrollArea className="h-[300px]">
+                    <CommandGroup>
                   {locations.map((location: Location) => {
                     const isSelected = currentValue === location.name
 
@@ -209,8 +209,8 @@ export function LocationSelectField({
                       Create &quot;{searchQuery}&quot;
                     </CommandItem>
                   )}
-                </CommandGroup>
-              </ScrollArea>
+                    </CommandGroup>
+                  </ScrollArea>
             </CommandList>
           </Command>
         </PopoverContent>

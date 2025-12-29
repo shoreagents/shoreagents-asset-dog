@@ -81,8 +81,7 @@ export default function SitesPage() {
   // Site handlers
   const handleCreateSite = async (data: { name: string; description?: string }) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage sites')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
 
     // Check if site name already exists (case-insensitive)
@@ -107,8 +106,7 @@ export default function SitesPage() {
 
   const handleEditSite = (site: Site) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage sites')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedSite(site)
     setIsEditSiteDialogOpen(true)
@@ -143,8 +141,7 @@ export default function SitesPage() {
 
   const handleDeleteSite = (site: Site) => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage sites')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     
     setSelectedSite(site)
@@ -222,8 +219,7 @@ export default function SitesPage() {
   // Bulk delete handler
   const handleBulkDelete = async () => {
     if (!canManageSetup) {
-      toast.error('You do not have permission to manage sites')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     if (selectedSites.size === 0) return
     
@@ -459,28 +455,6 @@ export default function SitesPage() {
     )
   }
 
-  if (!canManageSetup) {
-    return (
-      <div className="space-y-4">
-        <Card className='border-none! shadow-none! bg-transparent!'>
-          <CardHeader>
-            <CardTitle>Sites</CardTitle>
-            <CardDescription>Manage company sites/branches</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
-              <p className="text-sm text-muted-foreground">
-                You do not have permission to manage sites. Please contact an administrator.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -505,7 +479,7 @@ export default function SitesPage() {
                     id="select-all-sites"
                     checked={selectedSites.size === sites.length && sites.length > 0}
                     onCheckedChange={handleToggleSelectAll}
-                    disabled={sites.length === 0}
+                    disabled={sites.length === 0 || !canManageSetup}
                     title={selectedSites.size === sites.length && sites.length > 0
                       ? 'Deselect All'
                       : 'Select All'}
@@ -554,6 +528,7 @@ export default function SitesPage() {
                 size="sm"
                 onClick={handleToggleSelectionMode}
                 className="h-9"
+                disabled={!canManageSetup}
               >
                 {isSelectionMode ? "Cancel" : "Select"}
               </Button>
@@ -563,12 +538,18 @@ export default function SitesPage() {
                   size="sm"
                   onClick={() => setIsBulkDeleteDialogOpen(true)}
                   className="h-9"
+                  disabled={!canManageSetup}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete ({selectedSites.size})
                 </Button>
               )}
-              <Button onClick={() => setIsCreateSiteDialogOpen(true)} size='sm' className="shadow-sm hover:shadow-md transition-all h-9">
+              <Button 
+                onClick={() => setIsCreateSiteDialogOpen(true)} 
+                size='sm' 
+                className="shadow-sm hover:shadow-md transition-all h-9"
+                disabled={!canManageSetup}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Site
               </Button>
@@ -583,7 +564,7 @@ export default function SitesPage() {
                 id="select-all-sites-mobile"
                 checked={selectedSites.size === sites.length && sites.length > 0}
                 onCheckedChange={handleToggleSelectAll}
-                disabled={sites.length === 0}
+                disabled={sites.length === 0 || !canManageSetup}
                 title={selectedSites.size === sites.length && sites.length > 0
                   ? 'Deselect All'
                   : 'Select All'}
@@ -605,6 +586,7 @@ export default function SitesPage() {
                 variant="destructive"
                 size="sm"
                 onClick={() => setIsBulkDeleteDialogOpen(true)}
+                disabled={!canManageSetup}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete ({selectedSites.size})
@@ -650,11 +632,17 @@ export default function SitesPage() {
               size="sm"
               onClick={handleToggleSelectionMode}
                 className="h-9 flex-1"
+                disabled={!canManageSetup}
             >
               Select
             </Button>
             </div>
-            <Button onClick={() => setIsCreateSiteDialogOpen(true)} size='sm' className="w-full h-9 shadow-sm">
+            <Button 
+              onClick={() => setIsCreateSiteDialogOpen(true)} 
+              size='sm' 
+              className="w-full h-9 shadow-sm"
+              disabled={!canManageSetup}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Site
             </Button>

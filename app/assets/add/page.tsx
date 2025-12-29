@@ -77,7 +77,7 @@ export default function AddAssetPage() {
   const canManageSetup = hasPermission('canManageSetup')
   
   // React Query hooks - will be set up after form initialization
-  const { data: categories = [], isLoading: isCategoriesLoading } = useCategories()
+  const { data: categories = [], isLoading: isCategoriesLoading, error: categoriesError } = useCategories()
   const createCategoryMutation = useCreateCategory()
   const createSubCategoryMutation = useCreateSubCategory()
   const createAssetMutation = useCreateAsset()
@@ -151,7 +151,7 @@ export default function AddAssetPage() {
   // Watch categoryId to sync with selectedCategory state
   const categoryId = form.watch("categoryId")
   const selectedCategory = categoryId || ""
-  const { data: subCategories = [], isLoading: isSubCategoriesLoading } = useSubCategories(selectedCategory || null)
+  const { data: subCategories = [], isLoading: isSubCategoriesLoading, error: subCategoriesError } = useSubCategories(selectedCategory || null)
 
   // Reset subcategory when category changes
   const handleCategoryChange = (value: string) => {
@@ -919,18 +919,18 @@ export default function AddAssetPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {categories?.map((category: Category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                          {isCategoryDropdownOpen && isCategoriesLoading && (
-                            <SelectItem value="loading" disabled>
-                              <div className="flex items-center gap-2">
-                                <Spinner className="h-4 w-4" />
-                                <span>Loading categories...</span>
-                              </div>
-                            </SelectItem>
-                          )}
+                                <SelectItem key={category.id} value={category.id}>
+                                  {category.name}
+                                </SelectItem>
+                              ))}
+                              {isCategoryDropdownOpen && isCategoriesLoading && (
+                                <SelectItem value="loading" disabled>
+                                  <div className="flex items-center gap-2">
+                                    <Spinner className="h-4 w-4" />
+                                    <span>Loading categories...</span>
+                                  </div>
+                                </SelectItem>
+                              )}
                         </SelectContent>
                       </Select>
                         )}
@@ -992,18 +992,23 @@ export default function AddAssetPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {subCategories?.map((subCat: SubCategory) => (
-                            <SelectItem key={subCat.id} value={subCat.id}>
-                              {subCat.name}
-                            </SelectItem>
-                          ))}
-                          {isSubCategoryDropdownOpen && isSubCategoriesLoading && (
-                            <SelectItem value="loading" disabled>
-                              <div className="flex items-center gap-2">
-                                <Spinner className="h-4 w-4" />
-                                <span>Loading subcategories...</span>
-                              </div>
-                            </SelectItem>
-                          )}
+                                <SelectItem key={subCat.id} value={subCat.id}>
+                                  {subCat.name}
+                                </SelectItem>
+                              ))}
+                              {isSubCategoryDropdownOpen && isSubCategoriesLoading && (
+                                <SelectItem value="loading" disabled>
+                                  <div className="flex items-center gap-2">
+                                    <Spinner className="h-4 w-4" />
+                                    <span>Loading subcategories...</span>
+                                  </div>
+                                </SelectItem>
+                              )}
+                              {isSubCategoryDropdownOpen && selectedCategory && !isSubCategoriesLoading && subCategories.length === 0 && (
+                                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                  No subcategories available for this category
+                                </div>
+                              )}
                         </SelectContent>
                       </Select>
                         )}

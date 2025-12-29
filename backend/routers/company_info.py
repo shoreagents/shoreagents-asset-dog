@@ -32,13 +32,18 @@ def get_supabase_admin_client() -> Client:
     return create_client(SUPABASE_URL, supabase_service_key)
 
 async def check_permission(user_id: str, permission: str) -> bool:
-    """Check if user has a specific permission"""
+    """Check if user has a specific permission. Admins have all permissions."""
     try:
         asset_user = await prisma.assetuser.find_unique(
             where={"userId": user_id}
         )
         if not asset_user or not asset_user.isActive:
             return False
+        
+        # Admins have all permissions
+        if asset_user.role == "admin":
+            return True
+        
         return getattr(asset_user, permission, False)
     except Exception:
         return False
@@ -85,6 +90,18 @@ async def create_or_update_company_info(
 ):
     """Create or update company information (upsert - singleton behavior)"""
     try:
+        user_id = auth.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageSetup to create/update company info
+        has_permission = await check_permission(user_id, "canManageSetup")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to manage company info"
+            )
+        
         if not company_info_data.companyName or not company_info_data.companyName.strip():
             raise HTTPException(
                 status_code=400,
@@ -186,6 +203,14 @@ async def upload_logo(
         user_id = auth.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageSetup to upload logos
+        has_permission = await check_permission(user_id, "canManageSetup")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to upload company logos"
+            )
         
         if not logoType or logoType not in ['primary', 'secondary']:
             raise HTTPException(
@@ -310,6 +335,14 @@ async def delete_logo(
         user_id = auth.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Check permission - user must have canManageSetup to delete logos
+        has_permission = await check_permission(user_id, "canManageSetup")
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to delete company logos"
+            )
         
         if not logoUrl:
             raise HTTPException(status_code=400, detail="Logo URL is required")

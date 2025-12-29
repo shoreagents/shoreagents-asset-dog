@@ -110,7 +110,8 @@ const formatDate = (dateString: string | null) => {
 const createColumns = (
   onEdit: (employee: Employee) => void,
   onDelete: (employee: Employee) => void,
-  onViewCheckouts: (employee: Employee) => void
+  onViewCheckouts: (employee: Employee) => void,
+  canManageEmployees: boolean
 ): ColumnDef<Employee>[] => [
   {
     accessorKey: 'name',
@@ -262,7 +263,10 @@ const createColumns = (
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit(employee)}>
+              <DropdownMenuItem 
+                onClick={() => onEdit(employee)}
+                disabled={!canManageEmployees}
+              >
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
@@ -270,6 +274,7 @@ const createColumns = (
               <DropdownMenuItem
                 onClick={() => onDelete(employee)}
                 className="text-red-600"
+                disabled={!canManageEmployees}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
@@ -512,8 +517,7 @@ function EmployeesPageContent() {
 
   const handleCreate = createForm.handleSubmit(async (data) => {
     if (!canManageEmployees) {
-      toast.error('You do not have permission to create employees')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     createMutation.mutate({
       name: data.name,
@@ -524,8 +528,7 @@ function EmployeesPageContent() {
 
   const handleEdit = useCallback((employee: Employee) => {
     if (!canManageEmployees) {
-      toast.error('You do not have permission to edit employees')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedEmployee(employee)
     editForm.reset({
@@ -538,8 +541,7 @@ function EmployeesPageContent() {
 
   const handleUpdate = editForm.handleSubmit(async (data) => {
     if (!canManageEmployees) {
-      toast.error('You do not have permission to update employees')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     if (!selectedEmployee) {
       toast.error('No employee selected')
@@ -555,8 +557,7 @@ function EmployeesPageContent() {
 
   const handleDelete = useCallback((employee: Employee) => {
     if (!canManageEmployees) {
-      toast.error('You do not have permission to delete employees')
-      return
+      return // Silent return - button is disabled, but keep as safety net
     }
     setSelectedEmployee(employee)
     setIsDeleteDialogOpen(true)
@@ -574,7 +575,7 @@ function EmployeesPageContent() {
   }
 
   // Create columns with handlers
-  const columns = useMemo(() => createColumns(handleEdit, handleDelete, handleViewCheckouts), [handleEdit, handleDelete, handleViewCheckouts])
+  const columns = useMemo(() => createColumns(handleEdit, handleDelete, handleViewCheckouts, canManageEmployees), [handleEdit, handleDelete, handleViewCheckouts, canManageEmployees])
 
   // Memoize employees data
   const employees = useMemo(() => data?.employees || [], [data?.employees])
@@ -603,16 +604,11 @@ function EmployeesPageContent() {
       setDockContent(
         <>
           <Button 
-            onClick={() => {
-              if (!canManageEmployees) {
-                toast.error('You do not have permission to add employees')
-                return
-              }
-              setIsCreateDialogOpen(true)
-            }} 
+            onClick={() => setIsCreateDialogOpen(true)} 
             variant="outline"
             size="lg"
             className="rounded-full btn-glass-elevated"
+            disabled={!canManageEmployees}
           >
             Add Employee
           </Button>
@@ -789,15 +785,10 @@ function EmployeesPageContent() {
             </div>
             <div className="flex items-center gap-2">
               <Button 
-                onClick={() => {
-                  if (!canManageEmployees) {
-                    toast.error('You do not have permission to add employees')
-                    return
-                  }
-                  setIsCreateDialogOpen(true)
-                }}
+                onClick={() => setIsCreateDialogOpen(true)}
                 size='sm'
                 className="flex-1 hidden md:flex"
+                disabled={!canManageEmployees}
               >
                 <UserPlus className="mr-2 h-4 w-4" />
                 Add Employee

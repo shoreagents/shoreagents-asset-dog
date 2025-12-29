@@ -578,20 +578,20 @@ function LeaseReturnPageContent() {
             }}
             className="h-10 w-10 rounded-full btn-glass-elevated"
             title="Search"
+            disabled={!canViewAssets || !canLease}
           >
             <Search className="h-4 w-4" />
           </Button>
-          {canViewAssets && canLease && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setQrDialogOpen(true)}
-              className="h-10 w-10 rounded-full btn-glass-elevated"
-              title="QR Code"
-            >
-              <QrCode className="h-4 w-4" />
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setQrDialogOpen(true)}
+            className="h-10 w-10 rounded-full btn-glass-elevated"
+            title="QR Code"
+            disabled={!canViewAssets || !canLease}
+          >
+            <QrCode className="h-4 w-4" />
+          </Button>
         </>
       )
     } else {

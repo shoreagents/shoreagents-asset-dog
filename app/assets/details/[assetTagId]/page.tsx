@@ -783,24 +783,24 @@ export default function AssetDetailsPage({ params }: { params: Promise<{ assetTa
                 </DropdownMenuItem>
               )}
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger disabled={isGeneratingPDF}>
+                <DropdownMenuSubTrigger disabled={isGeneratingPDF || !canDispose}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Dispose
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Sold`)}>
+                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Sold`)} disabled={!canDispose}>
                     Sold
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Donated`)}>
+                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Donated`)} disabled={!canDispose}>
                     Donated
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Scrapped`)}>
+                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Scrapped`)} disabled={!canDispose}>
                     Scrapped
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Lost/Missing`)}>
+                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Lost/Missing`)} disabled={!canDispose}>
                     Lost/Missing
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Destroyed`)}>
+                  <DropdownMenuItem onSelect={() => router.push(`/assets/dispose?assetId=${asset.assetTagId}&method=Destroyed`)} disabled={!canDispose}>
                     Destroyed
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>

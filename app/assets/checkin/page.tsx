@@ -494,20 +494,20 @@ function CheckinPageContent() {
             }}
             className="h-10 w-10 rounded-full btn-glass-elevated"
             title="Search"
+            disabled={!canViewAssets || !canCheckin}
           >
             <Search className="h-4 w-4" />
           </Button>
-          {canViewAssets && canCheckin && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setQrDialogOpen(true)}
-              className="h-10 w-10 rounded-full btn-glass-elevated"
-              title="QR Code"
-            >
-              <QrCode className="h-4 w-4" />
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setQrDialogOpen(true)}
+            className="h-10 w-10 rounded-full btn-glass-elevated"
+            title="QR Code"
+            disabled={!canViewAssets || !canCheckin}
+          >
+            <QrCode className="h-4 w-4" />
+          </Button>
         </>
       )
     } else {
